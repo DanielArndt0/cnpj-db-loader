@@ -30,7 +30,7 @@ cnpj-db-loader import ./downloads/extracted --batch-size 500 --verbose-progress
 - it reads files in streaming mode
 - it commits per batch instead of holding one giant transaction
 - it stores progress in `import_checkpoints`
-- rows are first retried with known sanitization rules (for example, removing NUL bytes). Only rows that still fail are written to `import_quarantine` and skipped
+- rows that still fail validation or database constraints are written to `import_quarantine` and skipped
 - if a batch fails, rerunning the same command resumes from the last committed byte offset
 - it stays idempotent for the current schema, so rerunning the same files does not create duplicate rows
 
@@ -64,18 +64,4 @@ These are starting points, not absolute rules. The safest optimization is still 
 
 Use `--verbose-progress` when you want a fixed multi-line status block with dataset, file, committed rows, total batches, and file progress while the import is running.
 
-The exact preparatory scan runs again on resume. The importer then reuses the checkpoint table to continue from the last committed byte offset instead of restarting the data load itself. Rows first go through a small sanitization pipeline for known recoverable problems. Only rows that still fail after retry are written to `import_quarantine`, so a few bad rows do not stop the entire dataset.
-
-## Quarantine behavior
-
-The quarantine flow is now designed to be reusable for future recovery commands.
-
-Rows sent to `import_quarantine` keep extra metadata such as:
-
-- `error_category`
-- `error_stage`
-- `sanitizations_applied`
-- `retry_count`
-- `can_retry_later`
-
-This allows future commands to replay only recoverable rows after new rules are added.
+The exact preparatory scan runs again on resume. The importer then reuses the checkpoint table to continue from the last committed byte offset instead of restarting the data load itself. Rows that fail after retries are written to `import_quarantine`, so a few bad rows do not stop the entire dataset.

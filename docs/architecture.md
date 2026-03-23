@@ -23,7 +23,7 @@ The import pipeline now uses:
 - streaming file reads to avoid loading the full dataset into RAM
 - conflict-safe inserts and upserts to avoid duplication
 - `import_checkpoints` to resume a failed load without clearing the whole database
-- `import_quarantine` to store only rows that still fail after known sanitization and retry steps
+- `import_quarantine` to store invalid rows and continue long-running imports
 - conservative batch commits to reduce memory pressure and prevent giant rollbacks
 - compatibility with both generated and regular `partner_dedupe_key` schemas during partner imports
 
@@ -32,8 +32,3 @@ The import pipeline now uses:
 ```text
 inspect -> extract -> validate -> db/schema -> import
 ```
-
-
-## Recovery direction
-
-The quarantine schema now stores enough metadata for a future replay/recovery command. The current version does not ship that command yet, but the importer already records recoverable vs. non-recoverable context for later reprocessing.
