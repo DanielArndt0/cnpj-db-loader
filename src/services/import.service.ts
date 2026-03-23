@@ -532,7 +532,7 @@ function sanitizeStringValue(value: string): {
   let sanitized = value;
 
   if (sanitized.includes("\u0000")) {
-    sanitized = sanitized.replace(/\u0000/g, "");
+    sanitized = sanitized.replaceAll("\u0000", "");
     actions.push("remove_nul_bytes");
   }
 
@@ -1716,8 +1716,10 @@ async function importDatasetFile(
           await client.query("commit");
           counters.committedRows += 1;
           counters.secondaryCnaesRows += row.secondaryRows.length;
-        } catch (rowError) {
+        } catch (error) {
           await client.query("rollback");
+          let rowError: unknown = error;
+
           const classifiedError = classifyImportError(rowError);
           const recoveredRow = classifiedError.recoverable
             ? rebuildRecoveredBatchRow(dataset, row, columns)
@@ -1777,7 +1779,8 @@ async function importDatasetFile(
               parsedPayload: buildParsedPayload(columns, row.values),
               stage: recoveredRow ? "row_retry" : "row_insert",
               retryCount: recoveredRow ? 1 : 0,
-              sanitizationsApplied: recoveredRow?.sanitizationsApplied ?? row.sanitizationsApplied,
+              sanitizationsApplied:
+                recoveredRow?.sanitizationsApplied ?? row.sanitizationsApplied,
             });
             checkpoint = {
               ...checkpoint,
