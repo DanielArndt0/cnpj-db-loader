@@ -13,6 +13,9 @@ cnpj-db-loader db show
 cnpj-db-loader db test [--db-url <url>]
 cnpj-db-loader db reset [--yes]
 cnpj-db-loader doctor [--input <path>] [--db-url <url>]
+cnpj-db-loader quarantine stats [--dataset <name>] [--category <name>] [--stage <name>] [--retryable] [--terminal]
+cnpj-db-loader quarantine list [--dataset <name>] [--category <name>] [--stage <name>] [--retryable] [--terminal] [--limit <number>] [--after-id <id>]
+cnpj-db-loader quarantine show <id> [--db-url <url>]
 ```
 
 ## Design notes

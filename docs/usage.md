@@ -65,3 +65,19 @@ These are starting points, not absolute rules. The safest optimization is still 
 Use `--verbose-progress` when you want a fixed multi-line status block with dataset, file, committed rows, total batches, and file progress while the import is running.
 
 The exact preparatory scan runs again on resume. The importer then reuses the checkpoint table to continue from the last committed byte offset instead of restarting the data load itself. Rows that fail after retries are written to `import_quarantine`, so a few bad rows do not stop the entire dataset.
+
+## Quarantine analysis
+
+Use the `quarantine` service after a long-running import when you want to inspect the rows that could not be inserted.
+
+```bash
+cnpj-db-loader quarantine stats
+cnpj-db-loader quarantine list --dataset establishments --limit 20
+cnpj-db-loader quarantine show 42
+```
+
+`quarantine stats` is useful for understanding the scale of a problem by dataset, error category, or error stage.
+
+`quarantine list` is useful for paging through rows with filters such as `--retryable`, `--terminal`, `--category`, and `--stage`.
+
+`quarantine show` loads one quarantined row in detail, including the raw line and parsed payload when available.

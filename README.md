@@ -17,6 +17,7 @@ This version focuses on the real loading workflow:
   - checkpoint-based resume by file and byte offset
 - row quarantine for invalid or constraint-breaking records without stopping the import
   - exact preparatory scanning for total rows and total batches before import starts
+- quarantine inspection commands for analyzing rows stored in `import_quarantine`
 
 ## Installation
 
@@ -55,6 +56,9 @@ cnpj-db-loader db test [--db-url <url>]
 cnpj-db-loader db reset [--yes]
 cnpj-db-loader import <input> [--db-url <url>] [--dataset <name>] [--batch-size <size>] [--verbose-progress] [-f]
 cnpj-db-loader doctor [--input <path>] [--db-url <url>]
+cnpj-db-loader quarantine stats [--dataset <name>] [--category <name>] [--stage <name>] [--retryable] [--terminal]
+cnpj-db-loader quarantine list [--dataset <name>] [--category <name>] [--stage <name>] [--retryable] [--terminal] [--limit <number>] [--after-id <id>]
+cnpj-db-loader quarantine show <id> [--db-url <url>]
 ```
 
 ## Logs
@@ -70,3 +74,4 @@ For `import`, the CLI now also writes an incremental JSONL progress log with one
 - [Usage](./docs/usage.md)
 - [Architecture](./docs/architecture.md)
 - [Commands](./docs/commands.md)
+- [Quarantine](./docs/quarantine.md)

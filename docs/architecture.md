@@ -24,6 +24,7 @@ The import pipeline now uses:
 - conflict-safe inserts and upserts to avoid duplication
 - `import_checkpoints` to resume a failed load without clearing the whole database
 - `import_quarantine` to store invalid rows and continue long-running imports
+- a dedicated `quarantine` service to inspect quarantine rows without touching the import pipeline
 - conservative batch commits to reduce memory pressure and prevent giant rollbacks
 - compatibility with both generated and regular `partner_dedupe_key` schemas during partner imports
 

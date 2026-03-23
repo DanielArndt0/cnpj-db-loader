@@ -12,3 +12,8 @@ export {
   createExtractionProgressReporter,
   createImportProgressReporter,
 } from "./output/progress.js";
+export {
+  printQuarantineListSummary,
+  printQuarantineRecord,
+  printQuarantineStatsSummary,
+} from "./output/quarantine.js";
