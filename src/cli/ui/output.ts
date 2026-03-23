@@ -404,6 +404,9 @@ export function printImportSummary(
   console.log(
     formatKeyValue("Quarantined rows", formatCount(summary.quarantinedRows)),
   );
+  console.log(
+    formatKeyValue("Sanitized rows", formatCount(summary.sanitizedRows)),
+  );
   console.log(formatKeyValue("Resumed files", summary.resumedFiles));
   console.log(
     formatKeyValue("Checkpoint-complete files", summary.skippedCompletedFiles),
@@ -637,6 +640,9 @@ export function createImportProgressReporter(): (
     );
     console.log(
       formatKeyValue("Quarantined rows", formatCount(event.quarantinedRows)),
+    );
+    console.log(
+      formatKeyValue("Sanitized rows", formatCount(event.sanitizedRows)),
     );
   };
 }

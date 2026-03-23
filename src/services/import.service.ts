@@ -55,12 +55,40 @@ type ImportFilePlan = {
   checkpoint?: ImportCheckpointRecord;
 };
 
+type SanitizationAction = "remove_nul_bytes";
+
+type ImportErrorCategory =
+  | "invalid_utf8_sequence"
+  | "not_null_violation"
+  | "foreign_key_violation"
+  | "invalid_field_count"
+  | "parse_error"
+  | "transform_error"
+  | "database_error"
+  | "unknown";
+
+type QuarantineStage =
+  | "parse"
+  | "transform"
+  | "row_insert"
+  | "row_retry"
+  | "batch_insert";
+
+type ClassifiedImportError = {
+  code: string;
+  message: string;
+  category: ImportErrorCategory;
+  recoverable: boolean;
+  canRetryLater: boolean;
+};
+
 type BatchRow = {
   values: unknown[];
   rawLine: string;
   nextOffset: number;
   sourceRowNumber: number;
   secondaryRows: Array<[string, string, number]>;
+  sanitizationsApplied: SanitizationAction[];
 };
 
 type ImportDatasetPlan = {
@@ -145,6 +173,7 @@ export type ImportProgressEvent =
       totalBatches: number;
       secondaryCnaesRows: number;
       quarantinedRows: number;
+      sanitizedRows: number;
     };
 
 export type ImportProgressListener = (event: ImportProgressEvent) => void;
@@ -169,6 +198,7 @@ export type ImportSummary = {
   plannedBatches: number;
   secondaryCnaesRows: number;
   quarantinedRows: number;
+  sanitizedRows: number;
   resumedFiles: number;
   skippedCompletedFiles: number;
   datasetSummaries: Array<{
@@ -492,6 +522,166 @@ function normalizeCode(value: unknown, fallback: string): string {
   }
 
   return fallback;
+}
+
+function sanitizeStringValue(value: string): {
+  value: string;
+  actions: SanitizationAction[];
+} {
+  const actions: SanitizationAction[] = [];
+  let sanitized = value;
+
+  if (sanitized.includes("\u0000")) {
+    sanitized = sanitized.replace(/\u0000/g, "");
+    actions.push("remove_nul_bytes");
+  }
+
+  return {
+    value: sanitized,
+    actions,
+  };
+}
+
+function sanitizeRawLine(line: string): {
+  line: string;
+  actions: SanitizationAction[];
+} {
+  const sanitized = sanitizeStringValue(line);
+  return {
+    line: sanitized.value,
+    actions: sanitized.actions,
+  };
+}
+
+function sanitizeRowValues(values: unknown[]): {
+  values: unknown[];
+  actions: SanitizationAction[];
+} {
+  const actions = new Set<SanitizationAction>();
+  const sanitizedValues = values.map((value) => {
+    if (typeof value !== "string") {
+      return value;
+    }
+
+    const sanitized = sanitizeStringValue(value);
+    for (const action of sanitized.actions) {
+      actions.add(action);
+    }
+
+    return sanitized.value;
+  });
+
+  return {
+    values: sanitizedValues,
+    actions: [...actions],
+  };
+}
+
+function mergeSanitizationActions(
+  ...actionGroups: SanitizationAction[][]
+): SanitizationAction[] {
+  return [...new Set(actionGroups.flat())];
+}
+
+function classifyImportError(error: unknown): ClassifiedImportError {
+  const message = error instanceof Error ? error.message : String(error);
+  const code =
+    typeof error === "object" && error && "code" in error
+      ? String((error as { code?: string }).code ?? "UNKNOWN")
+      : "UNKNOWN";
+  const normalizedMessage = message.toLowerCase();
+
+  if (
+    normalizedMessage.includes('invalid byte sequence for encoding "utf8"') ||
+    normalizedMessage.includes("0x00") ||
+    normalizedMessage.includes("null character")
+  ) {
+    return {
+      code,
+      message,
+      category: "invalid_utf8_sequence",
+      recoverable: true,
+      canRetryLater: true,
+    };
+  }
+
+  if (code === "23502" || normalizedMessage.includes("violates not-null constraint")) {
+    return {
+      code,
+      message,
+      category: "not_null_violation",
+      recoverable: false,
+      canRetryLater: false,
+    };
+  }
+
+  if (code === "23503" || normalizedMessage.includes("violates foreign key constraint")) {
+    return {
+      code,
+      message,
+      category: "foreign_key_violation",
+      recoverable: false,
+      canRetryLater: true,
+    };
+  }
+
+  if (error instanceof ValidationError && normalizedMessage.includes("unexpected field count")) {
+    return {
+      code,
+      message,
+      category: "invalid_field_count",
+      recoverable: false,
+      canRetryLater: false,
+    };
+  }
+
+  if (error instanceof ValidationError) {
+    return {
+      code,
+      message,
+      category: "transform_error",
+      recoverable: false,
+      canRetryLater: true,
+    };
+  }
+
+  return {
+    code,
+    message,
+    category: code === "UNKNOWN" ? "unknown" : "database_error",
+    recoverable: false,
+    canRetryLater: true,
+  };
+}
+
+function rebuildRecoveredBatchRow(
+  dataset: ImportDatasetType,
+  row: BatchRow,
+  columns: string[],
+): BatchRow | null {
+  const sanitizedRawLine = sanitizeRawLine(row.rawLine);
+  const sanitizedValues = sanitizeRowValues(row.values);
+  const actions = mergeSanitizationActions(
+    row.sanitizationsApplied,
+    sanitizedRawLine.actions,
+    sanitizedValues.actions,
+  );
+
+  if (actions.length === row.sanitizationsApplied.length) {
+    return null;
+  }
+
+  const values = sanitizedValues.values;
+  return {
+    ...row,
+    rawLine: sanitizedRawLine.line,
+    values,
+    secondaryRows:
+      dataset === "establishments"
+        ? extractSecondaryCnaes(values, columns)
+        : row.secondaryRows,
+    sanitizationsApplied: actions,
+  };
 }
 
 function buildPartnerDedupeKey(
@@ -982,17 +1172,43 @@ async function ensureQuarantineTable(client: Client): Promise<void> {
       row_number bigint,
       checkpoint_offset bigint,
       error_code text,
+      error_category text,
+      error_stage text,
       error_message text not null,
       raw_line text not null,
       parsed_payload jsonb,
+      sanitizations_applied jsonb,
+      retry_count integer not null default 0,
+      can_retry_later boolean not null default false,
       created_at timestamptz not null default now()
     )
   `);
+  await client.query(
+    `alter table import_quarantine add column if not exists error_category text`,
+  );
+  await client.query(
+    `alter table import_quarantine add column if not exists error_stage text`,
+  );
+  await client.query(
+    `alter table import_quarantine add column if not exists sanitizations_applied jsonb`,
+  );
+  await client.query(
+    `alter table import_quarantine add column if not exists retry_count integer not null default 0`,
+  );
+  await client.query(
+    `alter table import_quarantine add column if not exists can_retry_later boolean not null default false`,
+  );
   await client.query(
     `create index if not exists idx_import_quarantine_dataset on import_quarantine (dataset)`,
   );
   await client.query(
     `create index if not exists idx_import_quarantine_file_path on import_quarantine (file_path)`,
+  );
+  await client.query(
+    `create index if not exists idx_import_quarantine_error_category on import_quarantine (error_category)`,
+  );
+  await client.query(
+    `create index if not exists idx_import_quarantine_can_retry_later on import_quarantine (can_retry_later)`,
   );
 }
 
@@ -1004,18 +1220,16 @@ type QuarantineInput = {
   rawLine: string;
   error: unknown;
   parsedPayload?: Record<string, unknown> | null;
+  stage: QuarantineStage;
+  retryCount?: number;
+  sanitizationsApplied?: SanitizationAction[];
 };
 
 async function writeQuarantineRow(
   client: Client,
   input: QuarantineInput,
 ): Promise<void> {
-  const errorCode =
-    typeof input.error === "object" && input.error && "code" in input.error
-      ? String((input.error as { code?: string }).code ?? "QUARANTINED_ROW")
-      : "QUARANTINED_ROW";
-  const errorMessage =
-    input.error instanceof Error ? input.error.message : String(input.error);
+  const classifiedError = classifyImportError(input.error);
 
   await client.query(
     `insert into import_quarantine (
@@ -1024,20 +1238,30 @@ async function writeQuarantineRow(
        row_number,
        checkpoint_offset,
        error_code,
+       error_category,
+       error_stage,
        error_message,
        raw_line,
        parsed_payload,
+       sanitizations_applied,
+       retry_count,
+       can_retry_later,
        created_at
-     ) values ($1, $2, $3, $4, $5, $6, $7, $8::jsonb, now())`,
+     ) values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10::jsonb, $11::jsonb, $12, $13, now())`,
     [
       input.dataset,
       input.filePath,
       input.rowNumber,
       input.checkpointOffset,
-      errorCode,
-      errorMessage,
+      classifiedError.code,
+      classifiedError.category,
+      input.stage,
+      classifiedError.message,
       input.rawLine,
       input.parsedPayload ? JSON.stringify(input.parsedPayload) : null,
+      JSON.stringify(input.sanitizationsApplied ?? []),
+      input.retryCount ?? 0,
+      classifiedError.canRetryLater,
     ],
   );
 }
@@ -1297,6 +1521,7 @@ async function importDatasetFile(
     completedFiles: number;
     secondaryCnaesRows: number;
     quarantinedRows: number;
+    sanitizedRows: number;
   },
   progress: {
     datasetIndex: number;
@@ -1450,6 +1675,22 @@ async function importDatasetFile(
         secondaryCnaesRows: secondaryRows.length,
         timestamp: new Date().toISOString(),
       });
+
+      for (const row of batchRows.filter((item) => item.sanitizationsApplied.length > 0)) {
+        counters.sanitizedRows += 1;
+        await appendJsonLinesLog(progress.progressLogPath, {
+          kind: "row_sanitized",
+          dataset,
+          datasetIndex: progress.datasetIndex,
+          filePath,
+          fileDisplayPath: filePlan.displayPath,
+          fileIndex: progress.fileIndex,
+          rowNumber: row.sourceRowNumber,
+          checkpointOffset: row.nextOffset,
+          sanitizationsApplied: row.sanitizationsApplied,
+          timestamp: new Date().toISOString(),
+        });
+      }
     } catch {
       await client.query("rollback");
 
@@ -1477,6 +1718,53 @@ async function importDatasetFile(
           counters.secondaryCnaesRows += row.secondaryRows.length;
         } catch (rowError) {
           await client.query("rollback");
+          const classifiedError = classifyImportError(rowError);
+          const recoveredRow = classifiedError.recoverable
+            ? rebuildRecoveredBatchRow(dataset, row, columns)
+            : null;
+
+          if (recoveredRow) {
+            try {
+              await client.query("begin");
+              await flushRows(
+                client,
+                lookupCache,
+                dataset,
+                [recoveredRow.values],
+                schemaCapabilities,
+              );
+              await flushSecondaryCnaes(client, recoveredRow.secondaryRows);
+              checkpoint = {
+                ...checkpoint,
+                byteOffset: recoveredRow.nextOffset,
+                rowsCommitted: recoveredRow.sourceRowNumber,
+                status: "in_progress",
+                lastError: null,
+              };
+              await writeCheckpoint(client, checkpoint);
+              await client.query("commit");
+              counters.committedRows += 1;
+              counters.secondaryCnaesRows += recoveredRow.secondaryRows.length;
+              counters.sanitizedRows += 1;
+              await appendJsonLinesLog(progress.progressLogPath, {
+                kind: "row_sanitized",
+                dataset,
+                datasetIndex: progress.datasetIndex,
+                filePath,
+                fileDisplayPath: filePlan.displayPath,
+                fileIndex: progress.fileIndex,
+                rowNumber: recoveredRow.sourceRowNumber,
+                checkpointOffset: recoveredRow.nextOffset,
+                sanitizationsApplied: recoveredRow.sanitizationsApplied,
+                timestamp: new Date().toISOString(),
+              });
+              continue;
+            } catch (retryError) {
+              await client.query("rollback");
+              rowError = retryError;
+            }
+          }
+
           await client.query("begin");
           try {
             await writeQuarantineRow(client, {
@@ -1487,6 +1775,9 @@ async function importDatasetFile(
               rawLine: row.rawLine,
               error: rowError,
               parsedPayload: buildParsedPayload(columns, row.values),
+              stage: recoveredRow ? "row_retry" : "row_insert",
+              retryCount: recoveredRow ? 1 : 0,
+              sanitizationsApplied: recoveredRow?.sanitizationsApplied ?? row.sanitizationsApplied,
             });
             checkpoint = {
               ...checkpoint,
@@ -1507,8 +1798,9 @@ async function importDatasetFile(
               fileIndex: progress.fileIndex,
               rowNumber: row.sourceRowNumber,
               checkpointOffset: row.nextOffset,
-              error:
-                rowError instanceof Error ? rowError.message : String(rowError),
+              error: classifyImportError(rowError).message,
+              errorCategory: classifyImportError(rowError).category,
+              canRetryLater: classifyImportError(rowError).canRetryLater,
               timestamp: new Date().toISOString(),
             });
           } catch (quarantineError) {
@@ -1541,8 +1833,9 @@ async function importDatasetFile(
       }
 
       try {
+        const sanitizedLine = sanitizeRawLine(item.line);
         const parsedFields = normalizeFieldCount(
-          parseDelimitedLine(item.line),
+          parseDelimitedLine(sanitizedLine.line),
           layout.fields.length,
           filePath,
           lineNumber,
@@ -1563,6 +1856,7 @@ async function importDatasetFile(
             dataset === "establishments"
               ? extractSecondaryCnaes(record, columns)
               : [],
+          sanitizationsApplied: sanitizedLine.actions,
         });
         fileRowsCommitted = nextSourceRowNumber;
         batchLastOffset = item.nextOffset;
@@ -1573,6 +1867,7 @@ async function importDatasetFile(
       } catch (rowError) {
         fileRowsCommitted += 1;
         batchLastOffset = item.nextOffset;
+        const sanitizedLine = sanitizeRawLine(item.line);
         await client.query("begin");
         try {
           await writeQuarantineRow(client, {
@@ -1583,6 +1878,9 @@ async function importDatasetFile(
             rawLine: item.line,
             error: rowError,
             parsedPayload: null,
+            stage: "parse",
+            retryCount: 0,
+            sanitizationsApplied: sanitizedLine.actions,
           });
           checkpoint = {
             ...checkpoint,
@@ -1603,8 +1901,9 @@ async function importDatasetFile(
             fileIndex: progress.fileIndex,
             rowNumber: fileRowsCommitted,
             checkpointOffset: item.nextOffset,
-            error:
-              rowError instanceof Error ? rowError.message : String(rowError),
+            error: classifyImportError(rowError).message,
+            errorCategory: classifyImportError(rowError).category,
+            canRetryLater: classifyImportError(rowError).canRetryLater,
             timestamp: new Date().toISOString(),
           });
           emitProgress();
@@ -1720,6 +2019,7 @@ export async function importDataToDatabase(
     completedFiles: 0,
     secondaryCnaesRows: 0,
     quarantinedRows: 0,
+    sanitizedRows: 0,
     resumedFiles: 0,
     skippedCompletedFiles: 0,
   };
@@ -1818,6 +2118,7 @@ export async function importDataToDatabase(
     totalBatches: plan.totalBatches,
     secondaryCnaesRows: counters.secondaryCnaesRows,
     quarantinedRows: counters.quarantinedRows,
+    sanitizedRows: counters.sanitizedRows,
   });
 
   await appendJsonLinesLog(progressLogPath, {
@@ -1831,6 +2132,7 @@ export async function importDataToDatabase(
     totalBatches: plan.totalBatches,
     secondaryCnaesRows: counters.secondaryCnaesRows,
     quarantinedRows: counters.quarantinedRows,
+    sanitizedRows: counters.sanitizedRows,
     resumedFiles: counters.resumedFiles,
     skippedCompletedFiles: counters.skippedCompletedFiles,
     timestamp: new Date().toISOString(),
@@ -1848,13 +2150,14 @@ export async function importDataToDatabase(
     plannedBatches: plan.totalBatches,
     secondaryCnaesRows: counters.secondaryCnaesRows,
     quarantinedRows: counters.quarantinedRows,
+    sanitizedRows: counters.sanitizedRows,
     resumedFiles: counters.resumedFiles,
     skippedCompletedFiles: counters.skippedCompletedFiles,
     datasetSummaries,
     warnings: [
       "The importer uses exact file planning, checkpointed batch commits, and byte-offset resume. If a batch fails, rerunning the same command resumes from the last committed checkpoint instead of restarting the full load.",
       "The importer remains idempotent for the current schema: rerunning the same validated files updates existing rows instead of duplicating them.",
-      "Rows that fail validation or database constraints are moved to import_quarantine and the import continues from the next row.",
+      "Rows that fail validation or database constraints are retried with known sanitization rules first. Only rows that still fail are moved to import_quarantine.",
       "The default batch size is conservative to reduce RAM pressure during long PostgreSQL imports. Increase --batch-size only after validating RAM usage and PostgreSQL stability in your environment.",
     ],
     progressLogPath,

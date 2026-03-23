@@ -221,6 +221,8 @@ function createIndexesSql(): string {
     "create index if not exists idx_import_checkpoints_dataset on import_checkpoints (dataset);",
     "create index if not exists idx_import_quarantine_dataset on import_quarantine (dataset);",
     "create index if not exists idx_import_quarantine_file_path on import_quarantine (file_path);",
+    "create index if not exists idx_import_quarantine_error_category on import_quarantine (error_category);",
+    "create index if not exists idx_import_quarantine_can_retry_later on import_quarantine (can_retry_later);",
   ].join("\n");
 }
 
