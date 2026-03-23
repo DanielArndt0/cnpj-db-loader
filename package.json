@@ -34,11 +34,11 @@
     "dev": "tsup --watch",
     "cli": "tsx src/cli.ts",
     "test": "vitest run",
-    "lint": "eslint .",
+    "lint": "eslint src",
     "format": "prettier . --write",
     "format:check": "prettier . --check",
     "typecheck": "tsc --noEmit",
-    "prepublishOnly": "npm run lint && npm run typecheck && npm run build"
+    "prepublishOnly": "npm run lint && npm run typecheck && npm run build" 
   },
   "dependencies": {
     "commander": "^12.1.0",
