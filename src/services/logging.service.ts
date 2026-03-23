@@ -37,7 +37,6 @@ export async function writeCommandLog(
   return filePath;
 }
 
-
 export async function createJsonLinesLog(
   commandName: string,
   baseDirectory = process.cwd(),
@@ -55,6 +54,10 @@ export async function appendJsonLinesLog(
   filePath: string,
   payload: unknown,
 ): Promise<void> {
-  await appendFile(filePath, `${JSON.stringify(payload)}
-`, "utf8");
+  await appendFile(
+    filePath,
+    `${JSON.stringify(payload)}
+`,
+    "utf8",
+  );
 }

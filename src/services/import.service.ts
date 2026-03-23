@@ -26,7 +26,11 @@ import { appendJsonLinesLog, createJsonLinesLog } from "./logging.service.js";
 
 type ImportDatasetType = Exclude<DatasetType, "zip-archive" | "unknown">;
 
-type ImportCheckpointStatus = "pending" | "in_progress" | "completed" | "failed";
+type ImportCheckpointStatus =
+  | "pending"
+  | "in_progress"
+  | "completed"
+  | "failed";
 
 type ImportCheckpointRecord = {
   dataset: ImportDatasetType;
@@ -263,9 +267,14 @@ function getInsertColumns(
   dataset: ImportDatasetType,
   schemaCapabilities: ImportSchemaCapabilities,
 ): string[] {
-  const columns = DATASET_LAYOUTS[dataset].fields.map((field) => field.columnName);
+  const columns = DATASET_LAYOUTS[dataset].fields.map(
+    (field) => field.columnName,
+  );
 
-  if (dataset === "partners" && schemaCapabilities.includePartnerDedupeKeyInInsert) {
+  if (
+    dataset === "partners" &&
+    schemaCapabilities.includePartnerDedupeKeyInInsert
+  ) {
     return [...columns, "partner_dedupe_key"];
   }
 
@@ -485,7 +494,9 @@ function normalizeCode(value: unknown, fallback: string): string {
   return fallback;
 }
 
-function buildPartnerDedupeKey(recordByColumn: Record<string, unknown>): string {
+function buildPartnerDedupeKey(
+  recordByColumn: Record<string, unknown>,
+): string {
   return [
     recordByColumn.cnpj_root,
     recordByColumn.partner_type_code,
@@ -535,7 +546,10 @@ function transformRecord(
     );
   }
 
-  if (dataset === "partners" && schemaCapabilities.includePartnerDedupeKeyInInsert) {
+  if (
+    dataset === "partners" &&
+    schemaCapabilities.includePartnerDedupeKeyInInsert
+  ) {
     return [...values, buildPartnerDedupeKey(recordByColumn)];
   }
 
@@ -546,7 +560,9 @@ function buildParsedPayload(
   columns: string[],
   values: unknown[],
 ): Record<string, unknown> {
-  return Object.fromEntries(columns.map((column, index) => [column, values[index] ?? null]));
+  return Object.fromEntries(
+    columns.map((column, index) => [column, values[index] ?? null]),
+  );
 }
 
 function extractSecondaryCnaes(
@@ -788,7 +804,10 @@ async function countFileRowsExact(filePath: string): Promise<number> {
 async function buildImportPlan(
   inputPath: string,
   validatedPath: string,
-  datasetEntries: Array<{ dataset: ImportDatasetType; files: FileInspection[] }>,
+  datasetEntries: Array<{
+    dataset: ImportDatasetType;
+    files: FileInspection[];
+  }>,
   batchSize: number,
   onProgress: ImportProgressListener | undefined,
   targetDatabase: string,
@@ -798,7 +817,10 @@ async function buildImportPlan(
   totalRows: number;
   totalBatches: number;
 }> {
-  const totalFiles = datasetEntries.reduce((sum, item) => sum + item.files.length, 0);
+  const totalFiles = datasetEntries.reduce(
+    (sum, item) => sum + item.files.length,
+    0,
+  );
   let scannedFiles = 0;
   let countedRows = 0;
 
@@ -823,7 +845,8 @@ async function buildImportPlan(
       const absolutePath = resolveAbsolutePath(validatedPath, entry);
       const fileStats = await stat(absolutePath);
       const totalRows = await countFileRowsExact(absolutePath);
-      const totalBatches = totalRows === 0 ? 0 : Math.ceil(totalRows / batchSize);
+      const totalBatches =
+        totalRows === 0 ? 0 : Math.ceil(totalRows / batchSize);
 
       files.push({
         dataset: item.dataset,
@@ -859,7 +882,10 @@ async function buildImportPlan(
   }
 
   const totalRows = datasets.reduce((sum, item) => sum + item.totalRows, 0);
-  const totalBatches = datasets.reduce((sum, item) => sum + item.totalBatches, 0);
+  const totalBatches = datasets.reduce(
+    (sum, item) => sum + item.totalBatches,
+    0,
+  );
 
   onProgress?.({
     kind: "plan_ready",
@@ -902,7 +928,12 @@ async function flushRows(
   const columns = getInsertColumns(dataset, schemaCapabilities);
   await ensureBatchForeignKeys(client, lookupCache, dataset, rows, columns);
   const conflictClause = getConflictClause(dataset, columns);
-  const query = buildInsertQuery(layout.tableName, columns, rows, conflictClause);
+  const query = buildInsertQuery(
+    layout.tableName,
+    columns,
+    rows,
+    conflictClause,
+  );
   await client.query(query);
 }
 
@@ -983,7 +1014,8 @@ async function writeQuarantineRow(
     typeof input.error === "object" && input.error && "code" in input.error
       ? String((input.error as { code?: string }).code ?? "QUARANTINED_ROW")
       : "QUARANTINED_ROW";
-  const errorMessage = input.error instanceof Error ? input.error.message : String(input.error);
+  const errorMessage =
+    input.error instanceof Error ? input.error.message : String(input.error);
 
   await client.query(
     `insert into import_quarantine (
@@ -1021,7 +1053,7 @@ async function detectImportSchemaCapabilities(
         and column_name = 'partner_dedupe_key'`,
   );
 
-  const generated = result.rows[0]?.is_generated?.toUpperCase() === 'ALWAYS';
+  const generated = result.rows[0]?.is_generated?.toUpperCase() === "ALWAYS";
 
   return {
     includePartnerDedupeKeyInInsert: !generated,
@@ -1168,7 +1200,10 @@ async function* iterateFileLines(
         let lineBuffer = buffered.subarray(0, newlineIndex);
         const consumed = newlineIndex + 1;
 
-        if (lineBuffer.length > 0 && lineBuffer[lineBuffer.length - 1] === 0x0d) {
+        if (
+          lineBuffer.length > 0 &&
+          lineBuffer[lineBuffer.length - 1] === 0x0d
+        ) {
           lineBuffer = lineBuffer.subarray(0, lineBuffer.length - 1);
         }
 
@@ -1310,7 +1345,12 @@ async function importDatasetFile(
           ? 0
           : Math.min(
               filePlan.totalBatches,
-              Math.max(1, Math.ceil(Math.max(checkpoint.rowsCommitted, 1) / progress.batchSize)),
+              Math.max(
+                1,
+                Math.ceil(
+                  Math.max(checkpoint.rowsCommitted, 1) / progress.batchSize,
+                ),
+              ),
             ),
       batchSize: progress.batchSize,
       checkpointOffset: checkpoint.byteOffset,
@@ -1335,7 +1375,9 @@ async function importDatasetFile(
   emitProgress();
 
   const commitBatch = async (markCompleted: boolean): Promise<void> => {
-    const finalizeCheckpoint = async (status: ImportCheckpointStatus): Promise<void> => {
+    const finalizeCheckpoint = async (
+      status: ImportCheckpointStatus,
+    ): Promise<void> => {
       await client.query("begin");
       try {
         checkpoint = {
@@ -1465,7 +1507,8 @@ async function importDatasetFile(
               fileIndex: progress.fileIndex,
               rowNumber: row.sourceRowNumber,
               checkpointOffset: row.nextOffset,
-              error: rowError instanceof Error ? rowError.message : String(rowError),
+              error:
+                rowError instanceof Error ? rowError.message : String(rowError),
               timestamp: new Date().toISOString(),
             });
           } catch (quarantineError) {
@@ -1486,7 +1529,10 @@ async function importDatasetFile(
   };
 
   try {
-    for await (const item of iterateFileLines(filePath, checkpoint.byteOffset)) {
+    for await (const item of iterateFileLines(
+      filePath,
+      checkpoint.byteOffset,
+    )) {
       lineNumber += 1;
 
       if (item.line.trim() === "") {
@@ -1557,7 +1603,8 @@ async function importDatasetFile(
             fileIndex: progress.fileIndex,
             rowNumber: fileRowsCommitted,
             checkpointOffset: item.nextOffset,
-            error: rowError instanceof Error ? rowError.message : String(rowError),
+            error:
+              rowError instanceof Error ? rowError.message : String(rowError),
             timestamp: new Date().toISOString(),
           });
           emitProgress();

@@ -388,9 +388,7 @@ export function printImportSummary(
   console.log(
     formatKeyValue("Rows committed", formatCount(summary.processedRows)),
   );
-  console.log(
-    formatKeyValue("Rows planned", formatCount(summary.plannedRows)),
-  );
+  console.log(formatKeyValue("Rows planned", formatCount(summary.plannedRows)));
   console.log(
     formatKeyValue(
       "Batches committed",
@@ -398,7 +396,10 @@ export function printImportSummary(
     ),
   );
   console.log(
-    formatKeyValue("Secondary CNAE rows", formatCount(summary.secondaryCnaesRows)),
+    formatKeyValue(
+      "Secondary CNAE rows",
+      formatCount(summary.secondaryCnaesRows),
+    ),
   );
   console.log(
     formatKeyValue("Quarantined rows", formatCount(summary.quarantinedRows)),
@@ -419,7 +420,9 @@ export function printImportSummary(
 
   printWarnings(summary.warnings);
   console.log(`${theme.muted("Log file:")} ${path.resolve(logFilePath)}`);
-  console.log(`${theme.muted("Progress log:")} ${path.resolve(summary.progressLogPath)}`);
+  console.log(
+    `${theme.muted("Progress log:")} ${path.resolve(summary.progressLogPath)}`,
+  );
 }
 
 export function createImportProgressReporter(): (
@@ -542,7 +545,10 @@ export function createImportProgressReporter(): (
         `Current: ${shortPath(event.currentFileDisplayPath)}`,
       ];
       renderBlock([
-        currentLines[0]!.replace("__SPINNER__", theme.blue(frames[frameIndex % frames.length] ?? "⠋")),
+        currentLines[0]!.replace(
+          "__SPINNER__",
+          theme.blue(frames[frameIndex % frames.length] ?? "⠋"),
+        ),
         ...currentLines.slice(1),
       ]);
       return;
@@ -624,7 +630,10 @@ export function createImportProgressReporter(): (
       ),
     );
     console.log(
-      formatKeyValue("Secondary CNAE rows", formatCount(event.secondaryCnaesRows)),
+      formatKeyValue(
+        "Secondary CNAE rows",
+        formatCount(event.secondaryCnaesRows),
+      ),
     );
     console.log(
       formatKeyValue("Quarantined rows", formatCount(event.quarantinedRows)),

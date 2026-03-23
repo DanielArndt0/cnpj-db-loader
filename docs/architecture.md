@@ -6,13 +6,13 @@ The current CLI is centered on one practical job: move Receita Federal CNPJ data
 
 ## Main layers
 
-| Folder | Purpose |
-| ------ | ------- |
-| `src/cli` | Command registration and terminal output |
-| `src/services` | Real application behavior used by the CLI |
+| Folder           | Purpose                                                        |
+| ---------------- | -------------------------------------------------------------- |
+| `src/cli`        | Command registration and terminal output                       |
+| `src/services`   | Real application behavior used by the CLI                      |
 | `src/dictionary` | Dataset layout definitions derived from the Receita dictionary |
-| `src/core` | Shared errors, prompts, and utilities |
-| `src/config` | Local configuration helpers and paths |
+| `src/core`       | Shared errors, prompts, and utilities                          |
+| `src/config`     | Local configuration helpers and paths                          |
 
 ## Import design
 

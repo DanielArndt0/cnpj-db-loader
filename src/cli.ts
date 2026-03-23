@@ -1,3 +1,4 @@
+#!/usr/bin/env node
 import { buildProgram } from "./cli/create-program.js";
 import { handleCliError } from "./cli/ui/output.js";
 

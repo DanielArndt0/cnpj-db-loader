@@ -13,14 +13,14 @@ cnpj-db-loader import ./downloads/extracted --batch-size 500 --verbose-progress
 
 ## What each step does
 
-| Step | Command                    | Purpose |
-| ---- | -------------------------- | ------- |
-| 1 | `inspect <input>` | Detect whether the folder contains ZIP archives, extracted content, or both |
-| 2 | `extract <input>` | Extract every Receita ZIP archive into `./extracted` by default |
-| 3 | `validate <input>` | Validate the extracted dataset tree and confirm that the required dataset blocks are present |
-| 4 | `db show` / `db set <url>` | Review or configure the PostgreSQL connection |
-| 5 | `schema generate` | Generate the SQL schema, including `import_checkpoints` and `import_quarantine` |
-| 6 | `import <input>` | Import validated files with streaming batches, conflict-safe upserts, checkpoint resume, and quarantine fallback |
+| Step | Command                    | Purpose                                                                                                          |
+| ---- | -------------------------- | ---------------------------------------------------------------------------------------------------------------- |
+| 1    | `inspect <input>`          | Detect whether the folder contains ZIP archives, extracted content, or both                                      |
+| 2    | `extract <input>`          | Extract every Receita ZIP archive into `./extracted` by default                                                  |
+| 3    | `validate <input>`         | Validate the extracted dataset tree and confirm that the required dataset blocks are present                     |
+| 4    | `db show` / `db set <url>` | Review or configure the PostgreSQL connection                                                                    |
+| 5    | `schema generate`          | Generate the SQL schema, including `import_checkpoints` and `import_quarantine`                                  |
+| 6    | `import <input>`           | Import validated files with streaming batches, conflict-safe upserts, checkpoint resume, and quarantine fallback |
 
 ## Important behavior of import
 
@@ -54,7 +54,6 @@ For a machine with 32 GB RAM, start conservatively:
 - make sure Docker Desktop is not over-allocating memory to the container
 
 These are starting points, not absolute rules. The safest optimization is still keeping `--batch-size` modest.
-
 
 ## Import progress visibility
 
