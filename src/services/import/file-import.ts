@@ -25,6 +25,7 @@ import {
   writeCheckpoint,
 } from "./checkpoints.js";
 import { writeQuarantineRow } from "./quarantine.js";
+import { sanitizeRawLine } from "./sanitize.js";
 
 export async function importDatasetFile(
   client: Client,
@@ -275,14 +276,17 @@ export async function importDatasetFile(
     )) {
       lineNumber += 1;
 
-      if (item.line.trim() === "") {
+      const rawLineSanitization = sanitizeRawLine(item.line);
+      const sanitizedLine = rawLineSanitization.value;
+
+      if (sanitizedLine.trim() === "") {
         checkpoint.byteOffset = item.nextOffset;
         continue;
       }
 
       try {
         const parsedFields = normalizeFieldCount(
-          parseDelimitedLine(item.line),
+          parseDelimitedLine(sanitizedLine),
           layout.fields.length,
           filePath,
           lineNumber,
@@ -296,7 +300,7 @@ export async function importDatasetFile(
         const nextSourceRowNumber = fileRowsCommitted + 1;
         batchRows.push({
           values: record,
-          rawLine: item.line,
+          rawLine: sanitizedLine,
           nextOffset: item.nextOffset,
           sourceRowNumber: nextSourceRowNumber,
           secondaryRows:
@@ -320,7 +324,7 @@ export async function importDatasetFile(
             filePath,
             rowNumber: fileRowsCommitted,
             checkpointOffset: item.nextOffset,
-            rawLine: item.line,
+            rawLine: sanitizedLine,
             error: rowError,
             parsedPayload: null,
           });

@@ -90,7 +90,7 @@ export function createExtractionProgressReporter(): (
       frameIndex += 1;
       const spinner = frames[frameIndex % frames.length] ?? "⠋";
       renderLine(lastStableLine.replace("__SPINNER__", theme.blue(spinner)));
-    }, 220);
+    }, 110);
   };
 
   const stopSpinner = (): void => {
@@ -248,7 +248,7 @@ export function createImportProgressReporter(): (
       const nextLines = [...currentLines];
       nextLines[0] = nextLines[0]!.replace("__SPINNER__", theme.blue(spinner));
       renderBlock(nextLines);
-    }, 220);
+    }, 110);
   };
 
   return (event: ImportProgressEvent): void => {

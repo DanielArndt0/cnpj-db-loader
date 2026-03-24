@@ -17,7 +17,6 @@ This version focuses on the real loading workflow:
   - checkpoint-based resume by file and byte offset
 - row quarantine for invalid or constraint-breaking records without stopping the import
   - exact preparatory scanning for total rows and total batches before import starts
-- quarantine inspection commands for analyzing rows stored in `import_quarantine`
 
 ## Installation
 
@@ -40,6 +39,7 @@ cnpj-db-loader validate ./downloads/extracted
 cnpj-db-loader db set "postgresql://user:password@localhost:5432/cnpj"
 cnpj-db-loader schema generate
 cnpj-db-loader import ./downloads/extracted --batch-size 500 --verbose-progress
+cnpj-db-loader update check
 ```
 
 ## Stable commands
@@ -56,10 +56,18 @@ cnpj-db-loader db test [--db-url <url>]
 cnpj-db-loader db reset [--yes]
 cnpj-db-loader import <input> [--db-url <url>] [--dataset <name>] [--batch-size <size>] [--verbose-progress] [-f]
 cnpj-db-loader doctor [--input <path>] [--db-url <url>]
-cnpj-db-loader quarantine stats [--dataset <name>] [--category <name>] [--stage <name>] [--retryable] [--terminal]
-cnpj-db-loader quarantine list [--dataset <name>] [--category <name>] [--stage <name>] [--retryable] [--terminal] [--limit <number>] [--after-id <id>]
-cnpj-db-loader quarantine show <id> [--db-url <url>]
+cnpj-db-loader update check [--force-refresh]
+cnpj-db-loader update auto-check [--enable|--disable]
 ```
+
+## Automatic update notification
+
+The CLI checks for a newer GitHub release by default whenever you run a command or `--help`.
+
+- disable it for one execution with `--no-update-check`
+- disable it persistently with `cnpj-db-loader update auto-check --disable`
+- check manually with `cnpj-db-loader update check`
+- bypass the cache with `cnpj-db-loader update check --force-refresh`
 
 ## Logs
 
@@ -74,4 +82,3 @@ For `import`, the CLI now also writes an incremental JSONL progress log with one
 - [Usage](./docs/usage.md)
 - [Architecture](./docs/architecture.md)
 - [Commands](./docs/commands.md)
-- [Quarantine](./docs/quarantine.md)
