@@ -13,9 +13,19 @@ import {
 } from "./import/checkpoints.js";
 import { importDatasetFile } from "./import/file-import.js";
 import { loadLookupCaches } from "./import/lookups.js";
-import { buildImportPlan } from "./import/planning.js";
+import {
+  buildImportPlan,
+  buildImportPlanFingerprint,
+  collectImportSourceFiles,
+} from "./import/planning.js";
 import { ensureQuarantineTable } from "./import/quarantine.js";
 import { detectImportSchemaCapabilities } from "./import/schema-capabilities.js";
+import {
+  ensureImportPlanTables,
+  readSavedImportPlan,
+  saveImportPlan,
+  updateImportPlanStatus,
+} from "./import/plan-store.js";
 import {
   IMPORT_ORDER,
   isImportDatasetType,
@@ -23,6 +33,7 @@ import {
   type ImportDatasetType,
   type ImportOptions,
   type ImportSummary,
+  type ImportDatasetPlan,
 } from "./import/types.js";
 
 export type {
@@ -77,31 +88,27 @@ export async function importDataToDatabase(
   const targetDatabase = maskDatabaseLabel(dbUrl);
   const batchSize = Math.max(1, options.batchSize ?? 500);
   const progressLogPath = await createJsonLinesLog("import-progress");
+  let planId: number | null = null;
+  let planReused = false;
+  let plan: {
+    datasets: ImportDatasetPlan[];
+    totalFiles: number;
+    totalRows: number;
+    totalBatches: number;
+  } | null = null;
 
-  const plan = await buildImportPlan(
-    inputPath,
+  const sourceFiles = await collectImportSourceFiles(
     validation.validatedPath,
     plannedEntries,
+  );
+  const sourceFingerprint = buildImportPlanFingerprint(
+    validation.validatedPath,
     batchSize,
-    options.onProgress,
-    targetDatabase,
+    sourceFiles,
   );
 
-  await appendJsonLinesLog(progressLogPath, {
-    kind: "import_plan_ready",
-    inputPath: path.resolve(inputPath),
-    validatedPath: validation.validatedPath,
-    targetDatabase,
-    totalDatasets: plan.datasets.length,
-    totalFiles: plan.totalFiles,
-    totalRows: plan.totalRows,
-    totalBatches: plan.totalBatches,
-    batchSize,
-    executionOrder: plan.datasets.map((item) => item.dataset),
-    timestamp: new Date().toISOString(),
-  });
-
   const client = new Client({ connectionString: dbUrl });
+  let clientConnected = false;
   const datasetSummaries: Array<{
     dataset: ImportDatasetType;
     files: number;
@@ -120,8 +127,109 @@ export async function importDataToDatabase(
 
   try {
     await client.connect();
+    clientConnected = true;
     await ensureCheckpointTable(client);
     await ensureQuarantineTable(client);
+    await ensureImportPlanTables(client);
+
+    const savedPlan = await readSavedImportPlan(client, sourceFingerprint);
+
+    if (savedPlan) {
+      planReused = true;
+      planId = savedPlan.plan.id;
+      plan = {
+        datasets: savedPlan.datasets,
+        totalFiles: savedPlan.plan.totalFiles,
+        totalRows: savedPlan.plan.totalRows,
+        totalBatches: savedPlan.plan.totalBatches,
+      };
+
+      if (!plan) {
+        throw new ValidationError(
+          "Import plan was not available after import execution.",
+        );
+      }
+
+      options.onProgress?.({
+        kind: "plan_ready",
+        totalDatasets: plan.datasets.length,
+        totalFiles: plan.totalFiles,
+        batchSize,
+        totalRows: plan.totalRows,
+        totalBatches: plan.totalBatches,
+        targetDatabase,
+        executionOrder: plan.datasets.map((item) => item.dataset),
+        reused: true,
+        planId,
+      });
+
+      await appendJsonLinesLog(progressLogPath, {
+        kind: "import_plan_reused",
+        planId,
+        sourceFingerprint,
+        inputPath: path.resolve(inputPath),
+        validatedPath: validation.validatedPath,
+        targetDatabase,
+        totalDatasets: plan.datasets.length,
+        totalFiles: plan.totalFiles,
+        totalRows: plan.totalRows,
+        totalBatches: plan.totalBatches,
+        batchSize,
+        executionOrder: plan.datasets.map((item) => item.dataset),
+        timestamp: new Date().toISOString(),
+      });
+    } else {
+      plan = await buildImportPlan(
+        inputPath,
+        validation.validatedPath,
+        sourceFiles,
+        batchSize,
+        options.onProgress,
+        targetDatabase,
+      );
+      const persistedPlan = await saveImportPlan(client, {
+        sourceFingerprint,
+        inputPath: path.resolve(inputPath),
+        validatedPath: validation.validatedPath,
+        batchSize,
+        targetDatabase,
+        datasets: plan.datasets,
+        totalFiles: plan.totalFiles,
+        totalRows: plan.totalRows,
+        totalBatches: plan.totalBatches,
+      });
+      planId = persistedPlan.id;
+
+      options.onProgress?.({
+        kind: "plan_ready",
+        totalDatasets: plan.datasets.length,
+        totalFiles: plan.totalFiles,
+        batchSize,
+        totalRows: plan.totalRows,
+        totalBatches: plan.totalBatches,
+        targetDatabase,
+        executionOrder: plan.datasets.map((item) => item.dataset),
+        reused: false,
+        planId,
+      });
+
+      await appendJsonLinesLog(progressLogPath, {
+        kind: "import_plan_ready",
+        planId,
+        sourceFingerprint,
+        inputPath: path.resolve(inputPath),
+        validatedPath: validation.validatedPath,
+        targetDatabase,
+        totalDatasets: plan.datasets.length,
+        totalFiles: plan.totalFiles,
+        totalRows: plan.totalRows,
+        totalBatches: plan.totalBatches,
+        batchSize,
+        executionOrder: plan.datasets.map((item) => item.dataset),
+        timestamp: new Date().toISOString(),
+      });
+    }
+
     const schemaCapabilities = await detectImportSchemaCapabilities(client);
     const checkpointTotals = await hydratePlanWithCheckpoints(
       client,
@@ -134,6 +242,10 @@ export async function importDataToDatabase(
     counters.completedFiles = checkpointTotals.completedFiles;
     counters.resumedFiles = checkpointTotals.resumedFiles;
     counters.skippedCompletedFiles = checkpointTotals.skippedCompletedFiles;
+
+    if (planId !== null) {
+      await updateImportPlanStatus(client, planId, "in_progress");
+    }
 
     options.onProgress?.({
       kind: "start",
@@ -150,6 +262,8 @@ export async function importDataToDatabase(
 
     await appendJsonLinesLog(progressLogPath, {
       kind: "import_started",
+      planId,
+      sourceFingerprint,
       inputPath: path.resolve(inputPath),
       validatedPath: validation.validatedPath,
       targetDatabase,
@@ -197,6 +311,17 @@ export async function importDataToDatabase(
         rows: datasetPlan.totalRows,
       });
     }
+
+    if (planId !== null) {
+      await updateImportPlanStatus(client, planId, "completed");
+    }
+  } catch (error) {
+    if (clientConnected && planId !== null) {
+      await updateImportPlanStatus(client, planId, "failed").catch(
+        () => undefined,
+      );
+    }
+    throw error;
   } finally {
     await client.end().catch(() => undefined);
   }
@@ -234,6 +359,8 @@ export async function importDataToDatabase(
     inputPath: path.resolve(inputPath),
     validatedPath: validation.validatedPath,
     targetDatabase,
+    importPlanId: planId,
+    reusedImportPlan: planReused,
     importedDatasets: datasetSummaries.map((item) => item.dataset),
     importedFiles: counters.completedFiles,
     processedRows: counters.committedRows,
@@ -247,6 +374,7 @@ export async function importDataToDatabase(
     datasetSummaries,
     warnings: [
       "The importer uses exact file planning, checkpointed batch commits, and byte-offset resume. If a batch fails, rerunning the same command resumes from the last committed checkpoint instead of restarting the full load.",
+      "Import plans are persisted in the database and reused for the same validated input, source files, and batch size so resumed imports do not recount rows unnecessarily.",
       "The importer remains idempotent for the current schema: rerunning the same validated files updates existing rows instead of duplicating them.",
       "Rows that fail validation or database constraints are moved to import_quarantine and the import continues from the next row.",
       "The default batch size is conservative to reduce RAM pressure during long PostgreSQL imports. Increase --batch-size only after validating RAM usage and PostgreSQL stability in your environment.",

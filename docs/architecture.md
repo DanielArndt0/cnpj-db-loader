@@ -22,6 +22,7 @@ The import pipeline now uses:
 - an exact preparatory scan that counts total source rows and planned batches before the first write
 - streaming file reads to avoid loading the full dataset into RAM
 - conflict-safe inserts and upserts to avoid duplication
+- `import_plans` and `import_plan_files` to persist exact import plans and avoid recounting the same source files on resume
 - `import_checkpoints` to resume a failed load without clearing the whole database
 - `import_quarantine` to store invalid rows and continue long-running imports
 - a dedicated `quarantine` service to inspect quarantine rows without touching the import pipeline

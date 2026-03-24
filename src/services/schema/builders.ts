@@ -112,6 +112,46 @@ export function createSimplesSql(): string {
     ");",
   ].join("\n");
 }
+export function createImportPlansSql(): string {
+  return [
+    "create table if not exists import_plans (",
+    "  id bigserial primary key,",
+    "  source_fingerprint text not null unique,",
+    "  input_path text not null,",
+    "  validated_path text not null,",
+    "  batch_size integer not null,",
+    "  target_database text not null,",
+    "  total_datasets integer not null,",
+    "  total_files integer not null,",
+    "  total_rows bigint not null,",
+    "  total_batches bigint not null,",
+    "  execution_order jsonb not null,",
+    "  status text not null default 'planned',",
+    "  created_at timestamp with time zone not null default now(),",
+    "  updated_at timestamp with time zone not null default now(),",
+    "  last_used_at timestamp with time zone not null default now()",
+    ");",
+  ].join("\n");
+}
+export function createImportPlanFilesSql(): string {
+  return [
+    "create table if not exists import_plan_files (",
+    "  id bigserial primary key,",
+    "  plan_id bigint not null references import_plans (id) on delete cascade,",
+    "  dataset text not null,",
+    "  dataset_index integer not null,",
+    "  file_index integer not null,",
+    "  file_path text not null,",
+    "  file_display_path text not null,",
+    "  file_size bigint not null,",
+    "  file_mtime timestamp with time zone not null,",
+    "  total_rows bigint not null,",
+    "  total_batches bigint not null,",
+    "  unique (plan_id, file_path)",
+    ");",
+  ].join("\n");
+}
+
 export function createImportCheckpointsSql(): string {
   return [
     "create table if not exists import_checkpoints (",
@@ -161,6 +201,9 @@ export function createIndexesSql(): string {
     "create index if not exists idx_secondary_cnaes_cnae_code on establishment_secondary_cnaes (cnae_code);",
     "create index if not exists idx_simples_flag on simples_options (simples_option_flag);",
     "create index if not exists idx_simples_mei_flag on simples_options (mei_option_flag);",
+    "create index if not exists idx_import_plans_status on import_plans (status);",
+    "create index if not exists idx_import_plan_files_plan_id on import_plan_files (plan_id);",
+    "create index if not exists idx_import_plan_files_dataset on import_plan_files (dataset);",
     "create index if not exists idx_import_checkpoints_status on import_checkpoints (status);",
     "create index if not exists idx_import_checkpoints_dataset on import_checkpoints (dataset);",
     "create index if not exists idx_import_quarantine_dataset on import_quarantine (dataset);",
@@ -194,6 +237,8 @@ export function generateSchemaParts(): string[] {
     createEstablishmentSecondaryCnaesSql(),
     createPartnersSql(),
     createSimplesSql(),
+    createImportPlansSql(),
+    createImportPlanFilesSql(),
     createImportCheckpointsSql(),
     createImportQuarantineSql(),
     createLookupSeedSql("company_sizes", [

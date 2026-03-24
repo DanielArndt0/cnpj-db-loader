@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { createReadStream } from "node:fs";
 import { stat } from "node:fs/promises";
 import path from "node:path";
@@ -5,8 +6,8 @@ import path from "node:path";
 import type { FileInspection } from "../inspect.service.js";
 import type {
   ImportDatasetPlan,
-  ImportFilePlan,
   ImportProgressListener,
+  ImportSourceFile,
 } from "./types.js";
 import type { ImportDatasetType } from "./types.js";
 
@@ -101,12 +102,80 @@ export function sortEntries(
   });
 }
 
+export async function collectImportSourceFiles(
+  validatedPath: string,
+  datasetEntries: Array<{
+    dataset: ImportDatasetType;
+    files: FileInspection[];
+  }>,
+): Promise<
+  Array<{
+    dataset: ImportDatasetType;
+    files: ImportSourceFile[];
+  }>
+> {
+  const collected: Array<{
+    dataset: ImportDatasetType;
+    files: ImportSourceFile[];
+  }> = [];
+
+  for (const item of datasetEntries) {
+    const files: ImportSourceFile[] = [];
+
+    for (const entry of item.files.sort(sortEntries)) {
+      const absolutePath = resolveAbsolutePath(validatedPath, entry);
+      const fileStats = await stat(absolutePath);
+      files.push({
+        dataset: item.dataset,
+        absolutePath,
+        relativePath: entry.relativePath,
+        displayPath: buildDisplayPath(absolutePath),
+        fileSize: fileStats.size,
+        fileMtime: fileStats.mtime,
+      });
+    }
+
+    collected.push({
+      dataset: item.dataset,
+      files,
+    });
+  }
+
+  return collected;
+}
+
+export function buildImportPlanFingerprint(
+  validatedPath: string,
+  batchSize: number,
+  datasetEntries: Array<{
+    dataset: ImportDatasetType;
+    files: ImportSourceFile[];
+  }>,
+): string {
+  const hash = createHash("sha256");
+  hash.update(
+    JSON.stringify({
+      validatedPath: path.resolve(validatedPath),
+      batchSize,
+      datasets: datasetEntries.map((item) => ({
+        dataset: item.dataset,
+        files: item.files.map((file) => ({
+          relativePath: file.relativePath,
+          fileSize: file.fileSize,
+          fileMtime: file.fileMtime.toISOString(),
+        })),
+      })),
+    }),
+  );
+  return hash.digest("hex");
+}
+
 export async function buildImportPlan(
   inputPath: string,
   validatedPath: string,
   datasetEntries: Array<{
     dataset: ImportDatasetType;
-    files: FileInspection[];
+    files: ImportSourceFile[];
   }>,
   batchSize: number,
   onProgress: ImportProgressListener | undefined,
@@ -137,24 +206,21 @@ export async function buildImportPlan(
   const datasets: ImportDatasetPlan[] = [];
 
   for (const item of datasetEntries) {
-    const files: ImportFilePlan[] = [];
+    const files = [];
     let datasetRows = 0;
     let datasetBatches = 0;
 
-    for (const entry of item.files.sort(sortEntries)) {
-      const absolutePath = resolveAbsolutePath(validatedPath, entry);
-      const fileStats = await stat(absolutePath);
-      const totalRows = await countFileRowsExact(absolutePath);
+    for (const sourceFile of item.files) {
+      const totalRows = await countFileRowsExact(sourceFile.absolutePath);
       const totalBatches =
         totalRows === 0 ? 0 : Math.ceil(totalRows / batchSize);
 
       files.push({
         dataset: item.dataset,
-        entry,
-        absolutePath,
-        displayPath: buildDisplayPath(absolutePath),
-        fileSize: fileStats.size,
-        fileMtime: fileStats.mtime,
+        absolutePath: sourceFile.absolutePath,
+        displayPath: sourceFile.displayPath,
+        fileSize: sourceFile.fileSize,
+        fileMtime: sourceFile.fileMtime,
         totalRows,
         totalBatches,
       });
@@ -169,7 +235,7 @@ export async function buildImportPlan(
         scannedFiles,
         totalFiles,
         countedRows,
-        currentFileDisplayPath: buildDisplayPath(absolutePath),
+        currentFileDisplayPath: sourceFile.displayPath,
       });
     }
 
@@ -186,17 +252,6 @@ export async function buildImportPlan(
     (sum, item) => sum + item.totalBatches,
     0,
   );
-
-  onProgress?.({
-    kind: "plan_ready",
-    totalDatasets: datasets.length,
-    totalFiles,
-    batchSize,
-    totalRows,
-    totalBatches,
-    targetDatabase,
-    executionOrder: datasets.map((item) => item.dataset),
-  });
 
   return { datasets, totalFiles, totalRows, totalBatches };
 }

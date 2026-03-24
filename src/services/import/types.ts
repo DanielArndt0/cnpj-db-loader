@@ -11,7 +11,7 @@ import {
   reasonsLayout,
   simplesLayout,
 } from "../../dictionary/layouts/index.js";
-import type { DatasetType, FileInspection } from "../inspect.service.js";
+import type { DatasetType } from "../inspect.service.js";
 
 export type ImportDatasetType = Exclude<DatasetType, "zip-archive" | "unknown">;
 
@@ -34,7 +34,6 @@ export type ImportCheckpointRecord = {
 
 export type ImportFilePlan = {
   dataset: ImportDatasetType;
-  entry: FileInspection;
   absolutePath: string;
   displayPath: string;
   fileSize: number;
@@ -42,6 +41,15 @@ export type ImportFilePlan = {
   totalRows: number;
   totalBatches: number;
   checkpoint?: ImportCheckpointRecord;
+};
+
+export type ImportSourceFile = {
+  dataset: ImportDatasetType;
+  absolutePath: string;
+  relativePath: string;
+  displayPath: string;
+  fileSize: number;
+  fileMtime: Date;
 };
 
 export type BatchRow = {
@@ -57,6 +65,31 @@ export type ImportDatasetPlan = {
   files: ImportFilePlan[];
   totalRows: number;
   totalBatches: number;
+};
+
+export type ImportPlanStatus =
+  | "planned"
+  | "in_progress"
+  | "completed"
+  | "failed"
+  | "cancelled";
+
+export type ImportPlanRecord = {
+  id: number;
+  sourceFingerprint: string;
+  inputPath: string;
+  validatedPath: string;
+  batchSize: number;
+  targetDatabase: string;
+  totalDatasets: number;
+  totalFiles: number;
+  totalRows: number;
+  totalBatches: number;
+  executionOrder: ImportDatasetType[];
+  status: ImportPlanStatus;
+  createdAt: Date;
+  updatedAt: Date;
+  lastUsedAt: Date;
 };
 
 export type ImportSchemaCapabilities = {
@@ -89,6 +122,8 @@ export type ImportProgressEvent =
       totalBatches: number;
       targetDatabase: string;
       executionOrder: ImportDatasetType[];
+      reused: boolean;
+      planId: number | null;
     }
   | {
       kind: "start";
@@ -150,6 +185,8 @@ export type ImportSummary = {
   inputPath: string;
   validatedPath: string;
   targetDatabase: string;
+  importPlanId: number | null;
+  reusedImportPlan: boolean;
   importedDatasets: ImportDatasetType[];
   importedFiles: number;
   processedRows: number;

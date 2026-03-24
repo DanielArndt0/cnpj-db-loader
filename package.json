@@ -1,6 +1,6 @@
 {
   "name": "@danielarndt0/cnpj-db-loader",
-  "version": "1.1.1",
+  "version": "1.2.0",
   "publishConfig": {
     "access": "public"
   },
@@ -11,7 +11,8 @@
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "bin": {
-    "cnpj-db-loader": "./dist/cli.js"
+    "cnpj-db-loader": "./dist/cli.js",
+    "cdl": "./dist/cli.js"
   },
   "exports": {
     ".": {

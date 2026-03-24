@@ -90,7 +90,7 @@ export function createExtractionProgressReporter(): (
       frameIndex += 1;
       const spinner = frames[frameIndex % frames.length] ?? "⠋";
       renderLine(lastStableLine.replace("__SPINNER__", theme.blue(spinner)));
-    }, 110);
+    }, 220);
   };
 
   const stopSpinner = (): void => {
@@ -248,7 +248,7 @@ export function createImportProgressReporter(): (
       const nextLines = [...currentLines];
       nextLines[0] = nextLines[0]!.replace("__SPINNER__", theme.blue(spinner));
       renderBlock(nextLines);
-    }, 110);
+    }, 220);
   };
 
   return (event: ImportProgressEvent): void => {
@@ -295,8 +295,8 @@ export function createImportProgressReporter(): (
     if (event.kind === "plan_ready") {
       stopSpinner();
       renderBlock([
-        `${theme.successLabel("PREPARING")} Import plan ready.`,
-        `Target: ${event.targetDatabase}`,
+        `${theme.successLabel("PREPARING")} ${event.reused ? "Saved import plan reused." : "Import plan ready."}`,
+        `Target: ${event.targetDatabase}${event.planId === null ? "" : ` | Plan #${formatCount(event.planId)}`}`,
         `Datasets: ${formatCount(event.totalDatasets)} | Files: ${formatCount(event.totalFiles)} | Batch size: ${formatCount(event.batchSize)}`,
         `Rows counted exactly: ${formatCount(event.totalRows)}`,
         `Batches planned exactly: ${formatCount(event.totalBatches)}`,
