@@ -21,6 +21,7 @@ The import pipeline now uses:
 - deterministic dataset order to respect foreign keys
 - an exact preparatory scan that counts total source rows and planned batches before the first write
 - streaming file reads to avoid loading the full dataset into RAM
+- an optional sanitize step that removes known low-level byte issues before import starts
 - conflict-safe inserts and upserts to avoid duplication
 - `import_plans` and `import_plan_files` to persist exact import plans and avoid recounting the same source files on resume
 - `import_checkpoints` to resume a failed load without clearing the whole database
@@ -32,5 +33,5 @@ The import pipeline now uses:
 ## Current execution flow
 
 ```text
-inspect -> extract -> validate -> db/schema -> import
+inspect -> extract -> validate -> sanitize -> db/schema -> import
 ```

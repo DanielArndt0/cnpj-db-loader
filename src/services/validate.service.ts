@@ -137,7 +137,18 @@ function inferNextStep(summary: {
   }
 
   if (summary.ok) {
-    return `cnpj-db-loader db show`;
+    const normalizedValidatedPath = summary.validatedPath.replace(/\\/g, "/");
+    const validatedBaseName = path
+      .basename(summary.validatedPath)
+      .toLowerCase();
+    if (
+      validatedBaseName === "sanitized" ||
+      validatedBaseName.endsWith("-sanitized")
+    ) {
+      return `cnpj-db-loader db show`;
+    }
+
+    return `cnpj-db-loader sanitize ${normalizedValidatedPath}`;
   }
 
   return undefined;

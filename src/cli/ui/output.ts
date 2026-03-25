@@ -4,6 +4,7 @@ export {
   printDbConfigSummary,
   printExtractionSummary,
   printImportSummary,
+  printSanitizeSummary,
   printInfoWithLog,
   printInspectSummary,
   printValidationSummary,
@@ -11,6 +12,7 @@ export {
 export {
   createExtractionProgressReporter,
   createImportProgressReporter,
+  createSanitizeProgressReporter,
 } from "./output/progress.js";
 export {
   printQuarantineListSummary,

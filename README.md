@@ -9,6 +9,7 @@ This version focuses on the real loading workflow:
 - inspect a downloaded directory
 - extract Receita Federal ZIP archives
 - validate an extracted tree
+- sanitize validated files before import to remove known low-level byte issues
 - print or generate the SQL schema
 - configure and test the default PostgreSQL URL
 - import validated dataset files into PostgreSQL with:
@@ -38,9 +39,10 @@ npm run cli -- --help
 cnpj-db-loader inspect ./downloads
 cnpj-db-loader extract ./downloads
 cnpj-db-loader validate ./downloads/extracted
+cnpj-db-loader sanitize ./downloads/extracted
 cnpj-db-loader db set "postgresql://user:password@localhost:5432/cnpj"
 cnpj-db-loader schema generate
-cnpj-db-loader import ./downloads/extracted --batch-size 500 --verbose-progress
+cnpj-db-loader import ./downloads/sanitized --batch-size 500 --verbose-progress
 ```
 
 ## Stable commands
@@ -49,6 +51,7 @@ cnpj-db-loader import ./downloads/extracted --batch-size 500 --verbose-progress
 cnpj-db-loader inspect <input>
 cnpj-db-loader extract <input> [--output <path>]
 cnpj-db-loader validate <input>
+cnpj-db-loader sanitize <input> [--output <path>] [--dataset <name>] [-f]
 cnpj-db-loader schema print
 cnpj-db-loader schema generate [--name <name>] [--output <path>]
 cnpj-db-loader db set <url>
@@ -76,3 +79,4 @@ For `import`, the CLI now also writes an incremental JSONL progress log with one
 - [Architecture](./docs/architecture.md)
 - [Commands](./docs/commands.md)
 - [Quarantine](./docs/quarantine.md)
+- [Sanitize](./docs/sanitize.md)

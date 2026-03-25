@@ -6,6 +6,7 @@
 cnpj-db-loader inspect <input>
 cnpj-db-loader extract <input> [--output <path>]
 cnpj-db-loader validate <input>
+cnpj-db-loader sanitize <input> [--output <path>] [--dataset <name>] [-f]
 cnpj-db-loader schema print
 cnpj-db-loader schema generate [--name <name>] [--output <path>]
 cnpj-db-loader db set <url>

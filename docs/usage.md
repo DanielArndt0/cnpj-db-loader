@@ -6,9 +6,10 @@
 cnpj-db-loader inspect ./downloads
 cnpj-db-loader extract ./downloads
 cnpj-db-loader validate ./downloads/extracted
+cnpj-db-loader sanitize ./downloads/extracted
 cnpj-db-loader db set "postgresql://user:password@localhost:5432/cnpj"
 cnpj-db-loader schema generate
-cnpj-db-loader import ./downloads/extracted --batch-size 500 --verbose-progress
+cnpj-db-loader import ./downloads/sanitized --batch-size 500 --verbose-progress
 ```
 
 ## What each step does
@@ -18,9 +19,10 @@ cnpj-db-loader import ./downloads/extracted --batch-size 500 --verbose-progress
 | 1    | `inspect <input>`          | Detect whether the folder contains ZIP archives, extracted content, or both                                           |
 | 2    | `extract <input>`          | Extract every Receita ZIP archive into `./extracted` by default                                                       |
 | 3    | `validate <input>`         | Validate the extracted dataset tree and confirm that the required dataset blocks are present                          |
-| 4    | `db show` / `db set <url>` | Review or configure the PostgreSQL connection                                                                         |
-| 5    | `schema generate`          | Generate the SQL schema, including `import_plans`, `import_plan_files`, `import_checkpoints`, and `import_quarantine` |
-| 6    | `import <input>`           | Import validated files with streaming batches, conflict-safe upserts, checkpoint resume, and quarantine fallback      |
+| 4    | `sanitize <input>`         | Prepare a sanitized dataset tree by removing known low-level byte issues before import                                |
+| 5    | `db show` / `db set <url>` | Review or configure the PostgreSQL connection                                                                         |
+| 6    | `schema generate`          | Generate the SQL schema, including `import_plans`, `import_plan_files`, `import_checkpoints`, and `import_quarantine` |
+| 7    | `import <input>`           | Import sanitized files with streaming batches, conflict-safe upserts, checkpoint resume, and quarantine fallback      |
 
 ## Important behavior of import
 
@@ -37,10 +39,11 @@ cnpj-db-loader import ./downloads/extracted --batch-size 500 --verbose-progress
 
 ## Recommended import settings
 
-For large first loads, start with:
+For large first loads, sanitize first and then start with:
 
 ```bash
-cnpj-db-loader import ./downloads/extracted --batch-size 500 --verbose-progress
+cnpj-db-loader sanitize ./downloads/extracted
+cnpj-db-loader import ./downloads/sanitized --batch-size 500 --verbose-progress
 ```
 
 Increase the batch size only after you confirm that your PostgreSQL instance and Docker memory budget can handle it.
@@ -65,7 +68,7 @@ These are starting points, not absolute rules. The safest optimization is still 
 
 Use `--verbose-progress` when you want a fixed multi-line status block with dataset, file, committed rows, total batches, and file progress while the import is running.
 
-The exact preparatory scan runs only when no saved import plan exists for the same validated source files and batch size. On resume, the importer reuses the saved plan and then reuses the checkpoint table to continue from the last committed byte offset instead of restarting the data load itself. Rows that fail after retries are written to `import_quarantine`, so a few bad rows do not stop the entire dataset.
+The exact preparatory scan runs only when no saved import plan exists for the same validated source files and batch size. On resume, the importer reuses the saved plan and then reuses the checkpoint table to continue from the last committed byte offset instead of restarting the data load itself. Rows that fail after retries are written to `import_quarantine`, so a few bad rows do not stop the entire dataset. Running `sanitize` first reduces how often the importer has to fall back to those slower recovery paths.
 
 ## Quarantine analysis
 

@@ -7,6 +7,7 @@ import { registerInspectCommands } from "./commands/register-inspect.js";
 import { registerImportCommands } from "./commands/register-import.js";
 import { registerQuarantineCommands } from "./commands/register-quarantine.js";
 import { registerSchemaCommands } from "./commands/register-schema.js";
+import { registerSanitizeCommands } from "./commands/register-sanitize.js";
 import { registerValidateCommands } from "./commands/register-validate.js";
 import { APP_CONFIG } from "./shared/app-config.js";
 import { rootFooter } from "./shared/help.js";
@@ -28,6 +29,7 @@ export function buildProgram(): Command {
   registerInspectCommands(program);
   registerExtractCommands(program);
   registerValidateCommands(program);
+  registerSanitizeCommands(program);
   registerSchemaCommands(program);
   registerDbCommands(program);
   registerImportCommands(program);

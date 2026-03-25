@@ -2,6 +2,7 @@ import { theme } from "../theme.js";
 import type { ExtractionSummary } from "../../../services/extract.service.js";
 import type { InspectSummary } from "../../../services/inspect.service.js";
 import type { ImportSummary } from "../../../services/import.service.js";
+import type { SanitizeSummary } from "../../../services/sanitize.service.js";
 import type { ValidationSummary } from "../../../services/validate.service.js";
 import {
   formatBytes,
@@ -137,6 +138,45 @@ export function printInfoWithLog(
   logFilePath: string,
 ): void {
   console.log(theme.successLabel(label), message);
+  console.log(`${theme.muted("Log file:")} ${resolveLogFilePath(logFilePath)}`);
+}
+
+export function printSanitizeSummary(
+  summary: SanitizeSummary,
+  logFilePath: string,
+): void {
+  console.log(
+    theme.successLabel("SANITIZE"),
+    "Dataset sanitization completed.",
+  );
+  console.log(formatKeyValue("Input path", summary.inputPath));
+  console.log(formatKeyValue("Validated path", summary.validatedPath));
+  console.log(formatKeyValue("Output path", summary.outputPath));
+  console.log(formatKeyValue("Processed files", summary.processedFiles));
+  console.log(
+    formatKeyValue("Rows counted", formatCount(summary.processedRows)),
+  );
+  console.log(
+    formatKeyValue("Processed bytes", formatBytes(summary.totalBytes)),
+  );
+  console.log(
+    formatKeyValue("Removed NUL bytes", formatCount(summary.nulBytesRemoved)),
+  );
+  console.log(formatKeyValue("Changed files", summary.changedFiles));
+  console.log(formatKeyValue("Unchanged files", summary.unchangedFiles));
+
+  if (summary.datasets.length > 0) {
+    console.log(theme.infoLabel("DATASETS"));
+    for (const dataset of summary.datasets) {
+      console.log(`  ${theme.blue("•")} ${dataset}`);
+    }
+  }
+
+  printWarnings(summary.warnings);
+  if (summary.nextStep) {
+    console.log(`${theme.infoLabel("NEXT")} ${summary.nextStep}`);
+  }
+
   console.log(`${theme.muted("Log file:")} ${resolveLogFilePath(logFilePath)}`);
 }
 
