@@ -12,3 +12,8 @@ export * from "./import.service.js";
 export * from "./quarantine.service.js";
 
 export * from "./sanitize.service.js";
+
+export type {
+  SchemaGenerationOptions,
+  SchemaProfile,
+} from "./schema.service.js";

@@ -8,21 +8,37 @@ cnpj-db-loader extract ./downloads
 cnpj-db-loader validate ./downloads/extracted
 cnpj-db-loader sanitize ./downloads/extracted
 cnpj-db-loader db set "postgresql://user:password@localhost:5432/cnpj"
-cnpj-db-loader schema generate
+cnpj-db-loader schema generate --profile full
 cnpj-db-loader import ./downloads/sanitized --batch-size 500 --verbose-progress
 ```
 
 ## What each step does
 
-| Step | Command                    | Purpose                                                                                                               |
-| ---- | -------------------------- | --------------------------------------------------------------------------------------------------------------------- |
-| 1    | `inspect <input>`          | Detect whether the folder contains ZIP archives, extracted content, or both                                           |
-| 2    | `extract <input>`          | Extract every Receita ZIP archive into `./extracted` by default                                                       |
-| 3    | `validate <input>`         | Validate the extracted dataset tree and confirm that the required dataset blocks are present                          |
-| 4    | `sanitize <input>`         | Prepare a sanitized dataset tree by removing known low-level byte issues before import                                |
-| 5    | `db show` / `db set <url>` | Review or configure the PostgreSQL connection                                                                         |
-| 6    | `schema generate`          | Generate the SQL schema, including `import_plans`, `import_plan_files`, `import_checkpoints`, and `import_quarantine` |
-| 7    | `import <input>`           | Import sanitized files with streaming batches, conflict-safe upserts, checkpoint resume, and quarantine fallback      |
+| Step | Command                          | Purpose                                                                                                          |
+| ---- | -------------------------------- | ---------------------------------------------------------------------------------------------------------------- |
+| 1    | `inspect <input>`                | Detect whether the folder contains ZIP archives, extracted content, or both                                      |
+| 2    | `extract <input>`                | Extract every Receita ZIP archive into `./extracted` by default                                                  |
+| 3    | `validate <input>`               | Validate the extracted dataset tree and confirm that the required dataset blocks are present                     |
+| 4    | `sanitize <input>`               | Prepare a sanitized dataset tree by removing known low-level byte issues before import                           |
+| 5    | `db show` / `db set <url>`       | Review or configure the PostgreSQL connection                                                                    |
+| 6    | `schema generate --profile full` | Generate the combined SQL schema with final, control, and staging tables                                         |
+| 7    | `import <input>`                 | Import sanitized files with streaming batches, conflict-safe upserts, checkpoint resume, and quarantine fallback |
+
+## Schema profiles
+
+Use the schema command profile that matches the database shape you want to prepare:
+
+- `full`: final tables, import control tables, and staging tables
+- `final`: only the final relational and control tables
+- `staging`: only the lightweight `staging_*` tables for future bulk-load steps
+
+Examples:
+
+```bash
+cnpj-db-loader schema generate --profile full
+cnpj-db-loader schema generate --profile final
+cnpj-db-loader schema generate --profile staging
+```
 
 ## Important behavior of import
 

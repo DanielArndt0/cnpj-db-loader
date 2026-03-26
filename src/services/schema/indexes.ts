@@ -1,0 +1,28 @@
+export function createIndexesSql(): string {
+  return [
+    "-- Operational indexes",
+    "create index if not exists idx_companies_company_name on companies (company_name);",
+    "create index if not exists idx_companies_legal_nature_code on companies (legal_nature_code);",
+    "create index if not exists idx_establishments_cnpj_root on establishments (cnpj_root);",
+    "create index if not exists idx_establishments_city_code on establishments (city_code);",
+    "create index if not exists idx_establishments_state_code on establishments (state_code);",
+    "create index if not exists idx_establishments_main_cnae_code on establishments (main_cnae_code);",
+    "create index if not exists idx_establishments_registration_status_code on establishments (registration_status_code);",
+    "create index if not exists idx_partners_cnpj_root on partners (cnpj_root);",
+    "create index if not exists idx_partners_partner_document on partners (partner_document);",
+    "create index if not exists idx_partners_partner_name on partners (partner_name);",
+    "create index if not exists idx_partners_dedupe_key on partners (partner_dedupe_key);",
+    "create index if not exists idx_secondary_cnaes_cnae_code on establishment_secondary_cnaes (cnae_code);",
+    "create index if not exists idx_simples_flag on simples_options (simples_option_flag);",
+    "create index if not exists idx_simples_mei_flag on simples_options (mei_option_flag);",
+    "create index if not exists idx_import_plans_status on import_plans (status);",
+    "create index if not exists idx_import_plan_files_plan_id on import_plan_files (plan_id);",
+    "create index if not exists idx_import_plan_files_dataset on import_plan_files (dataset);",
+    "create index if not exists idx_import_checkpoints_status on import_checkpoints (status);",
+    "create index if not exists idx_import_checkpoints_dataset on import_checkpoints (dataset);",
+    "create index if not exists idx_import_quarantine_dataset on import_quarantine (dataset);",
+    "create index if not exists idx_import_quarantine_file_path on import_quarantine (file_path);",
+    "create index if not exists idx_import_quarantine_error_category on import_quarantine (error_category);",
+    "create index if not exists idx_import_quarantine_can_retry_later on import_quarantine (can_retry_later);",
+  ].join("\n");
+}

@@ -44,7 +44,18 @@ The importer is now split into focused modules so future performance work can re
 - `quarantine-writer`: stores bad rows without stopping long imports
 - `runner`: orchestrates the current import flow while keeping the service entry point small
 
-This phase changes the internal architecture only. The public CLI flow remains the same while the write path is still the current direct-to-schema importer.
+The project now also generates dedicated staging tables for large datasets. The public CLI flow remains the same while the current write path still targets the final schema directly.
+
+## Staging schema
+
+The generated SQL schema now supports lightweight `staging_*` tables for the large datasets that will move to a staged bulk-load flow in the next phases.
+
+These staging tables are intentionally:
+
+- `UNLOGGED` for faster write-heavy workloads
+- free of foreign keys and secondary indexes
+- free of generated columns and upsert-only constraints
+- shaped to mirror the validated dataset rows with minimal insert overhead
 
 ## Current execution flow
 

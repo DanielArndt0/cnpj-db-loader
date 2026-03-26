@@ -6,8 +6,8 @@
 | `extract <input>`  | Extract every ZIP archive found inside the input directory.                                             |
 | `validate <input>` | Validate an extracted dataset tree.                                                                     |
 | `sanitize <input>` | Prepare a sanitized dataset tree before import.                                                         |
-| `schema print`     | Print the generated PostgreSQL schema to stdout.                                                        |
-| `schema generate`  | Write `schema.sql` to the current working directory by default.                                         |
+| `schema print`     | Print a generated PostgreSQL schema profile (`full`, `final`, or `staging`) to stdout.                  |
+| `schema generate`  | Write a generated schema profile to the current working directory by default.                           |
 | `db set <url>`     | Persist the default PostgreSQL URL.                                                                     |
 | `db show`          | Show the saved PostgreSQL URL.                                                                          |
 | `db test`          | Test the connection using the saved or overridden URL.                                                  |
@@ -25,7 +25,9 @@ cnpj-db-loader inspect ./downloads
 cnpj-db-loader extract ./downloads
 cnpj-db-loader validate ./downloads/extracted
 cnpj-db-loader sanitize ./downloads/extracted
-cnpj-db-loader schema generate --name receita-v2 --output ./artifacts/sql
+cnpj-db-loader schema generate --profile full --name receita-v2 --output ./artifacts/sql
+cnpj-db-loader schema generate --profile staging
+cnpj-db-loader schema print --profile final
 cnpj-db-loader db set "postgresql://user:password@localhost:5432/cnpj"
 cnpj-db-loader db test
 cnpj-db-loader import ./downloads/sanitized

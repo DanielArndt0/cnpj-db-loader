@@ -10,13 +10,13 @@ This version focuses on the real loading workflow:
 - extract Receita Federal ZIP archives
 - validate an extracted tree
 - sanitize validated files before import to remove known low-level byte issues
-- print or generate the SQL schema
+- print or generate final, staging, or combined SQL schemas
 - configure and test the default PostgreSQL URL
 - import validated dataset files into PostgreSQL with:
   - streaming batches
   - conflict-safe deduplication
   - checkpoint-based resume by file and byte offset
-- row quarantine for invalid or constraint-breaking records without stopping the import
+  - row quarantine for invalid or constraint-breaking records without stopping the import
   - exact preparatory scanning for total rows and total batches before import starts
   - persisted import plans reused on resume for the same validated input and batch size
 - quarantine inspection commands for analyzing rows stored in `import_quarantine`
@@ -41,7 +41,7 @@ cnpj-db-loader extract ./downloads
 cnpj-db-loader validate ./downloads/extracted
 cnpj-db-loader sanitize ./downloads/extracted
 cnpj-db-loader db set "postgresql://user:password@localhost:5432/cnpj"
-cnpj-db-loader schema generate
+cnpj-db-loader schema generate --profile full
 cnpj-db-loader import ./downloads/sanitized --batch-size 500 --verbose-progress
 ```
 
@@ -52,8 +52,8 @@ cnpj-db-loader inspect <input>
 cnpj-db-loader extract <input> [--output <path>]
 cnpj-db-loader validate <input>
 cnpj-db-loader sanitize <input> [--output <path>] [--dataset <name>] [-f]
-cnpj-db-loader schema print
-cnpj-db-loader schema generate [--name <name>] [--output <path>]
+cnpj-db-loader schema print [--profile <profile>]
+cnpj-db-loader schema generate [--name <name>] [--output <path>] [--profile <profile>]
 cnpj-db-loader db set <url>
 cnpj-db-loader db show
 cnpj-db-loader db test [--db-url <url>]
@@ -76,6 +76,12 @@ For `import`, the CLI now also writes an incremental JSONL progress log with one
 The final import summary now includes baseline timing and throughput metrics such as preparatory scan duration, execution duration, insert time, retry time, quarantine time, rows per second, and batches per minute.
 
 The import internals are now split into dedicated modules such as planner, source reader, parser, normalizer, checkpoint manager, quarantine writer, staging writer, and finalizer so future performance changes can be implemented without rewriting the whole import command.
+
+The generated database schema now supports three profiles:
+
+- `full`: final relational tables, import control tables, and staging tables
+- `final`: only the final relational and control tables
+- `staging`: only the lightweight staging tables intended for future bulk-load steps
 
 `import --verbose-progress` shows a fixed multi-line status block instead of spamming the terminal with a new line on every progress update.
 
