@@ -69,9 +69,13 @@ cnpj-db-loader quarantine show <id> [--db-url <url>]
 
 JSON execution logs are written inside the user home directory at `~/.cnpjdbloader/logs`.
 
-For `import`, the CLI now also writes an incremental JSONL progress log with one event per committed batch, retry fallback, dataset metrics, file metrics, file failure, and final completion summary.
+Every JSON and JSONL log entry now includes a structured envelope with fields such as `timestamp`, `level`, `severity`, `event`, and `kind`. Command success logs are written with `status: "success"`, command failures are written with `status: "failure"`, and incremental import progress events are classified with levels such as `debug`, `info`, `warning`, and `error`.
+
+For `import`, the CLI now also writes an incremental JSONL progress log with one event per committed batch, retry fallback, dataset metrics, file metrics, file failure, final completion summary, and top-level import failure when execution aborts early.
 
 The final import summary now includes baseline timing and throughput metrics such as preparatory scan duration, execution duration, insert time, retry time, quarantine time, rows per second, and batches per minute.
+
+The import internals are now split into dedicated modules such as planner, source reader, parser, normalizer, checkpoint manager, quarantine writer, staging writer, and finalizer so future performance changes can be implemented without rewriting the whole import command.
 
 `import --verbose-progress` shows a fixed multi-line status block instead of spamming the terminal with a new line on every progress update.
 

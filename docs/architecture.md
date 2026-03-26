@@ -30,8 +30,32 @@ The import pipeline now uses:
 - conservative batch commits to reduce memory pressure and prevent giant rollbacks
 - compatibility with both generated and regular `partner_dedupe_key` schemas during partner imports
 
+## Import modules
+
+The importer is now split into focused modules so future performance work can replace parts of the pipeline without rewriting the whole command:
+
+- `planner`: selects datasets, collects source files, reuses or creates persisted import plans
+- `source-reader`: streams validated files by byte offset for resume-safe reads
+- `parser`: converts raw Receita lines into delimited field arrays
+- `normalizer`: validates field counts and transforms parsed rows into database-ready records
+- `staging-writer`: current write boundary for batched row persistence and future staging-table work
+- `finalizer`: centralizes performance tracking and import summary generation
+- `checkpoint-manager`: owns checkpoint resume, persistence, and failed-file markers
+- `quarantine-writer`: stores bad rows without stopping long imports
+- `runner`: orchestrates the current import flow while keeping the service entry point small
+
+This phase changes the internal architecture only. The public CLI flow remains the same while the write path is still the current direct-to-schema importer.
+
 ## Current execution flow
 
 ```text
 inspect -> extract -> validate -> sanitize -> db/schema -> import
+```
+
+## Internal import flow
+
+```text
+planner -> source-reader -> parser -> normalizer -> staging-writer -> finalizer
+                  |                              |
+                  +-> checkpoint-manager         +-> quarantine-writer
 ```

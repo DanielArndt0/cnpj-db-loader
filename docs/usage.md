@@ -64,7 +64,9 @@ These are starting points, not absolute rules. The safest optimization is still 
 `import` writes two kinds of logs inside `~/.cnpjdbloader/logs`:
 
 - a final JSON summary log
-- an incremental JSONL progress log for every committed batch, retry fallback, file metrics, dataset metrics, and final completion summary
+- an incremental JSONL progress log for every committed batch, retry fallback, file metrics, dataset metrics, final completion summary, and top-level import failure when execution aborts early
+
+Every JSON and JSONL log now carries a structured envelope with `timestamp`, `level`, `severity`, `event`, and `kind`. This makes it easier to filter informational events versus warnings and errors in JSON viewers and JSONL extensions.
 
 Use `--verbose-progress` when you want a fixed multi-line status block with dataset, file, committed rows, total batches, and file progress while the import is running.
 
