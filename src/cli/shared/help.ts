@@ -15,6 +15,6 @@ ${theme.section("Recommended flow")}
 ${theme.section("Notes")}
   ${theme.muted("Use inspect first to understand whether the input is still zipped or already extracted.")}
   ${theme.muted("Generate the schema only when you need to create the database structure. Sanitization is the recommended preparation step before recurring imports.")}
-  ${theme.muted("JSON execution logs are written to ./logs in the current working directory.")}
+  ${theme.muted("JSON execution logs are written inside the user home directory at ~/.cnpjdbloader/logs.")}
 `;
 }

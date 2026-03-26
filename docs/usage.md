@@ -61,12 +61,14 @@ These are starting points, not absolute rules. The safest optimization is still 
 
 ## Import progress visibility
 
-`import` writes two kinds of logs:
+`import` writes two kinds of logs inside `~/.cnpjdbloader/logs`:
 
 - a final JSON summary log
-- an incremental JSONL progress log for every committed batch
+- an incremental JSONL progress log for every committed batch, retry fallback, file metrics, dataset metrics, and final completion summary
 
 Use `--verbose-progress` when you want a fixed multi-line status block with dataset, file, committed rows, total batches, and file progress while the import is running.
+
+The final import summary also includes baseline metrics for preparatory scan time, execution time, insert time, retry time, quarantine time, rows per second, and batches per minute.
 
 The exact preparatory scan runs only when no saved import plan exists for the same validated source files and batch size. On resume, the importer reuses the saved plan and then reuses the checkpoint table to continue from the last committed byte offset instead of restarting the data load itself. Rows that fail after retries are written to `import_quarantine`, so a few bad rows do not stop the entire dataset. Running `sanitize` first reduces how often the importer has to fall back to those slower recovery paths.
 

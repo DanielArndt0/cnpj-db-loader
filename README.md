@@ -67,9 +67,11 @@ cnpj-db-loader quarantine show <id> [--db-url <url>]
 
 ## Logs
 
-JSON execution logs are written to `./logs` in the current working directory.
+JSON execution logs are written inside the user home directory at `~/.cnpjdbloader/logs`.
 
-For `import`, the CLI now also writes an incremental JSONL progress log with one event per committed batch, file failure, and final completion summary.
+For `import`, the CLI now also writes an incremental JSONL progress log with one event per committed batch, retry fallback, dataset metrics, file metrics, file failure, and final completion summary.
+
+The final import summary now includes baseline timing and throughput metrics such as preparatory scan duration, execution duration, insert time, retry time, quarantine time, rows per second, and batches per minute.
 
 `import --verbose-progress` shows a fixed multi-line status block instead of spamming the terminal with a new line on every progress update.
 

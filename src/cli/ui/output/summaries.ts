@@ -7,7 +7,9 @@ import type { ValidationSummary } from "../../../services/validate.service.js";
 import {
   formatBytes,
   formatCount,
+  formatDuration,
   formatKeyValue,
+  formatRate,
   printErrors,
   printWarnings,
   resolveLogFilePath,
@@ -221,6 +223,68 @@ export function printImportSummary(
     for (const datasetSummary of summary.datasetSummaries) {
       console.log(
         `  ${theme.blue("•")} ${datasetSummary.dataset}: ${datasetSummary.files} file(s), ${formatCount(datasetSummary.rows)} row(s)`,
+      );
+    }
+  }
+
+  console.log(theme.infoLabel("PERFORMANCE"));
+  console.log(
+    formatKeyValue(
+      "Total duration",
+      formatDuration(summary.performance.totalDurationMs),
+    ),
+  );
+  console.log(
+    formatKeyValue(
+      "Preparatory scan",
+      formatDuration(summary.performance.scanDurationMs),
+    ),
+  );
+  console.log(
+    formatKeyValue(
+      "Import execution",
+      formatDuration(summary.performance.executionDurationMs),
+    ),
+  );
+  console.log(
+    formatKeyValue(
+      "Lookup loading",
+      formatDuration(summary.performance.lookupLoadDurationMs),
+    ),
+  );
+  console.log(
+    formatKeyValue(
+      "Insert path",
+      formatDuration(summary.performance.insertDurationMs),
+    ),
+  );
+  console.log(
+    formatKeyValue(
+      "Retry path",
+      formatDuration(summary.performance.retryDurationMs),
+    ),
+  );
+  console.log(
+    formatKeyValue(
+      "Quarantine path",
+      formatDuration(summary.performance.quarantineDurationMs),
+    ),
+  );
+  console.log(
+    formatKeyValue(
+      "Throughput",
+      `${formatRate(summary.performance.rowsPerSecond, "rows/s")} | ${formatRate(summary.performance.batchesPerMinute, "batches/min")}`,
+    ),
+  );
+
+  if (summary.performance.datasets.length > 0) {
+    console.log(theme.infoLabel("DATASET PERFORMANCE"));
+    for (const datasetPerformance of summary.performance.datasets) {
+      console.log(
+        `  ${theme.blue("•")} ${datasetPerformance.dataset}: ${formatCount(datasetPerformance.importedRows)} row(s), ${formatCount(datasetPerformance.committedBatches)} batch(es), ${formatDuration(datasetPerformance.importDurationMs)}, ${formatRate(datasetPerformance.rowsPerSecond, "rows/s")}`,
+      );
+      console.log(
+        `    scan ${formatDuration(datasetPerformance.scanDurationMs)} | insert ${formatDuration(datasetPerformance.insertDurationMs)} | retry ${formatDuration(datasetPerformance.retryDurationMs)} | quarantine ${formatDuration(datasetPerformance.quarantineDurationMs)} | resumed ${formatCount(datasetPerformance.resumedFiles)} | skipped ${formatCount(datasetPerformance.skippedCompletedFiles)}`,
       );
     }
   }

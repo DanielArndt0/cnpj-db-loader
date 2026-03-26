@@ -96,6 +96,41 @@ export type ImportSchemaCapabilities = {
   includePartnerDedupeKeyInInsert: boolean;
 };
 
+export type ImportDatasetPerformanceSummary = {
+  dataset: ImportDatasetType;
+  files: number;
+  plannedRows: number;
+  importedRows: number;
+  plannedBatches: number;
+  committedBatches: number;
+  resumedFiles: number;
+  skippedCompletedFiles: number;
+  retriedRows: number;
+  retriedBatches: number;
+  quarantinedRows: number;
+  scanDurationMs: number;
+  importDurationMs: number;
+  insertDurationMs: number;
+  retryDurationMs: number;
+  quarantineDurationMs: number;
+  rowsPerSecond: number;
+  batchesPerMinute: number;
+};
+
+export type ImportPerformanceSummary = {
+  planReused: boolean;
+  totalDurationMs: number;
+  scanDurationMs: number;
+  executionDurationMs: number;
+  lookupLoadDurationMs: number;
+  insertDurationMs: number;
+  retryDurationMs: number;
+  quarantineDurationMs: number;
+  rowsPerSecond: number;
+  batchesPerMinute: number;
+  datasets: ImportDatasetPerformanceSummary[];
+};
+
 export type ImportProgressEvent =
   | {
       kind: "preparing_start";
@@ -202,6 +237,7 @@ export type ImportSummary = {
     files: number;
     rows: number;
   }>;
+  performance: ImportPerformanceSummary;
   warnings: string[];
   progressLogPath: string;
 };

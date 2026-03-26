@@ -1,3 +1,5 @@
+import { performance } from "node:perf_hooks";
+
 import { Client } from "pg";
 
 import { appendJsonLinesLog } from "../logging.service.js";
@@ -48,6 +50,14 @@ export async function importDatasetFile(
     progressLogPath: string;
     batchSize: number;
     verboseProgress: boolean;
+    performance: {
+      insertDurationMs: number;
+      retryDurationMs: number;
+      quarantineDurationMs: number;
+      retriedRows: number;
+      retriedBatches: number;
+      quarantinedRows: number;
+    };
   },
 ): Promise<number> {
   const dataset = filePlan.dataset;
@@ -145,6 +155,7 @@ export async function importDatasetFile(
 
     const batchValues = batchRows.map((row) => row.values);
     const secondaryRows = batchRows.flatMap((row) => row.secondaryRows);
+    const batchStartedAt = performance.now();
 
     await client.query("begin");
     try {
@@ -165,6 +176,8 @@ export async function importDatasetFile(
       };
       await writeCheckpoint(client, checkpoint);
       await client.query("commit");
+      progress.performance.insertDurationMs +=
+        performance.now() - batchStartedAt;
 
       counters.committedRows += batchRows.length;
       counters.committedBatches += 1;
@@ -188,12 +201,31 @@ export async function importDatasetFile(
         checkpointOffset: checkpoint.byteOffset,
         fileSize: filePlan.fileSize,
         secondaryCnaesRows: secondaryRows.length,
+        durationMs: performance.now() - batchStartedAt,
         timestamp: new Date().toISOString(),
       });
-    } catch {
+    } catch (batchError) {
       await client.query("rollback");
+      progress.performance.insertDurationMs +=
+        performance.now() - batchStartedAt;
+      progress.performance.retriedBatches += 1;
+
+      await appendJsonLinesLog(progress.progressLogPath, {
+        kind: "batch_retry_fallback",
+        dataset,
+        datasetIndex: progress.datasetIndex,
+        filePath,
+        fileDisplayPath: filePlan.displayPath,
+        fileIndex: progress.fileIndex,
+        batchRows: batchRows.length,
+        checkpointOffset: checkpoint.byteOffset,
+        error:
+          batchError instanceof Error ? batchError.message : String(batchError),
+        timestamp: new Date().toISOString(),
+      });
 
       for (const row of batchRows) {
+        const retryStartedAt = performance.now();
         try {
           await client.query("begin");
           await flushRows(
@@ -213,11 +245,18 @@ export async function importDatasetFile(
           };
           await writeCheckpoint(client, checkpoint);
           await client.query("commit");
+          progress.performance.retryDurationMs +=
+            performance.now() - retryStartedAt;
+          progress.performance.retriedRows += 1;
           counters.committedRows += 1;
           counters.secondaryCnaesRows += row.secondaryRows.length;
         } catch (rowError) {
           await client.query("rollback");
+          progress.performance.retryDurationMs +=
+            performance.now() - retryStartedAt;
+          progress.performance.retriedRows += 1;
           await client.query("begin");
+          const quarantineStartedAt = performance.now();
           try {
             await writeQuarantineRow(client, {
               dataset,
@@ -237,6 +276,9 @@ export async function importDatasetFile(
             };
             await writeCheckpoint(client, checkpoint);
             await client.query("commit");
+            progress.performance.quarantineDurationMs +=
+              performance.now() - quarantineStartedAt;
+            progress.performance.quarantinedRows += 1;
             counters.quarantinedRows += 1;
             await appendJsonLinesLog(progress.progressLogPath, {
               kind: "row_quarantined",
@@ -249,6 +291,7 @@ export async function importDatasetFile(
               checkpointOffset: row.nextOffset,
               error:
                 rowError instanceof Error ? rowError.message : String(rowError),
+              durationMs: performance.now() - quarantineStartedAt,
               timestamp: new Date().toISOString(),
             });
           } catch (quarantineError) {
@@ -314,6 +357,7 @@ export async function importDatasetFile(
         fileRowsCommitted += 1;
         batchLastOffset = item.nextOffset;
         await client.query("begin");
+        const quarantineStartedAt = performance.now();
         try {
           await writeQuarantineRow(client, {
             dataset,
@@ -333,6 +377,9 @@ export async function importDatasetFile(
           };
           await writeCheckpoint(client, checkpoint);
           await client.query("commit");
+          progress.performance.quarantineDurationMs +=
+            performance.now() - quarantineStartedAt;
+          progress.performance.quarantinedRows += 1;
           counters.quarantinedRows += 1;
           await appendJsonLinesLog(progress.progressLogPath, {
             kind: "row_quarantined",
@@ -345,6 +392,7 @@ export async function importDatasetFile(
             checkpointOffset: item.nextOffset,
             error:
               rowError instanceof Error ? rowError.message : String(rowError),
+            durationMs: performance.now() - quarantineStartedAt,
             timestamp: new Date().toISOString(),
           });
           emitProgress();
