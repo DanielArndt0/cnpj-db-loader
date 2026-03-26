@@ -9,7 +9,6 @@ import {
   type ImportFilePlan,
   type ImportProgressListener,
   type ImportSchemaCapabilities,
-  type LookupCacheMap,
 } from "./types.js";
 import {
   markImportCheckpointFailed,
@@ -23,13 +22,13 @@ import {
   writeImportBatchToTarget,
   writeImportRowToTarget,
 } from "./staging-writer.js";
+import { resolveImportWriteTarget } from "./targets.js";
 import { writeImportQuarantineRow } from "./quarantine-writer.js";
 import { buildParsedPayload } from "./transform.js";
 import { getInsertColumns } from "./sql.js";
 
 export async function importDatasetFile(
   client: Client,
-  lookupCache: LookupCacheMap,
   filePlan: ImportFilePlan,
   schemaCapabilities: ImportSchemaCapabilities,
   counters: {
@@ -62,7 +61,8 @@ export async function importDatasetFile(
   const dataset = filePlan.dataset;
   const filePath = filePlan.absolutePath;
   const layout = DATASET_LAYOUTS[dataset];
-  const columns = getInsertColumns(dataset, schemaCapabilities);
+  const writeTarget = resolveImportWriteTarget(dataset);
+  const columns = getInsertColumns(dataset, schemaCapabilities, writeTarget);
   let checkpoint =
     filePlan.checkpoint ??
     (await readImportCheckpoint(
@@ -223,7 +223,6 @@ export async function importDatasetFile(
         await runInTransaction(async () => {
           result = await writeImportBatchToTarget({
             client,
-            lookupCache,
             dataset,
             rows: batchRows,
             schemaCapabilities,
@@ -262,6 +261,9 @@ export async function importDatasetFile(
         checkpointOffset: checkpoint.byteOffset,
         fileSize: filePlan.fileSize,
         secondaryCnaesRows: batchResult?.writtenSecondaryRows ?? 0,
+        writeTarget: batchResult?.writeTarget ?? writeTarget,
+        writeMode: batchResult?.writeMode ?? "insert",
+        targetTable: batchResult?.targetTable ?? null,
         durationMs: performance.now() - batchStartedAt,
         timestamp: new Date().toISOString(),
       });
@@ -279,6 +281,7 @@ export async function importDatasetFile(
         fileIndex: progress.fileIndex,
         batchRows: batchRows.length,
         checkpointOffset: checkpoint.byteOffset,
+        writeTarget,
         error:
           batchError instanceof Error ? batchError.message : String(batchError),
         timestamp: new Date().toISOString(),
@@ -296,7 +299,6 @@ export async function importDatasetFile(
             await runInTransaction(async () => {
               result = await writeImportRowToTarget({
                 client,
-                lookupCache,
                 dataset,
                 row,
                 schemaCapabilities,

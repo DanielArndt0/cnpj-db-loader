@@ -1,5 +1,6 @@
 import type { TableLayout } from "../../dictionary/layouts/index.js";
 import { getInsertColumns } from "./sql.js";
+import { resolveImportWriteTarget } from "./targets.js";
 import {
   extractSecondaryCnaes,
   normalizeFieldCount,
@@ -29,7 +30,8 @@ export function normalizeImportRow({
   schemaCapabilities,
   sourceRowNumber,
 }: NormalizeImportRowInput): BatchRow {
-  const columns = getInsertColumns(dataset, schemaCapabilities);
+  const writeTarget = resolveImportWriteTarget(dataset);
+  const columns = getInsertColumns(dataset, schemaCapabilities, writeTarget);
   const normalizedFields = normalizeFieldCount(
     parsedLine.fields,
     layout.fields.length,
@@ -41,6 +43,7 @@ export function normalizeImportRow({
     layout,
     normalizedFields,
     schemaCapabilities,
+    writeTarget,
   );
 
   return {

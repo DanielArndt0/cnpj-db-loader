@@ -1,22 +1,22 @@
 # Commands reference
 
-| Command            | Purpose                                                                                                 |
-| ------------------ | ------------------------------------------------------------------------------------------------------- |
-| `inspect <input>`  | Detect whether the input is zipped, extracted, mixed, or empty.                                         |
-| `extract <input>`  | Extract every ZIP archive found inside the input directory.                                             |
-| `validate <input>` | Validate an extracted dataset tree.                                                                     |
-| `sanitize <input>` | Prepare a sanitized dataset tree before import.                                                         |
-| `schema print`     | Print a generated PostgreSQL schema profile (`full`, `final`, or `staging`) to stdout.                  |
-| `schema generate`  | Write a generated schema profile to the current working directory by default.                           |
-| `db set <url>`     | Persist the default PostgreSQL URL.                                                                     |
-| `db show`          | Show the saved PostgreSQL URL.                                                                          |
-| `db test`          | Test the connection using the saved or overridden URL.                                                  |
-| `db reset`         | Remove the saved PostgreSQL URL.                                                                        |
-| `import <input>`   | Import validated dataset files into PostgreSQL using streaming batches and conflict-safe deduplication. |
-| `doctor`           | Run a quick environment diagnosis.                                                                      |
-| `quarantine stats` | Show aggregate counts for the `import_quarantine` table.                                                |
-| `quarantine list`  | List quarantined rows with optional filters.                                                            |
-| `quarantine show`  | Show one quarantined row in detail.                                                                     |
+| Command            | Purpose                                                                                                                                                                         |
+| ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `inspect <input>`  | Detect whether the input is zipped, extracted, mixed, or empty.                                                                                                                 |
+| `extract <input>`  | Extract every ZIP archive found inside the input directory.                                                                                                                     |
+| `validate <input>` | Validate an extracted dataset tree.                                                                                                                                             |
+| `sanitize <input>` | Prepare a sanitized dataset tree before import.                                                                                                                                 |
+| `schema print`     | Print a generated PostgreSQL schema profile (`full`, `final`, or `staging`) to stdout.                                                                                          |
+| `schema generate`  | Write a generated schema profile to the current working directory by default.                                                                                                   |
+| `db set <url>`     | Persist the default PostgreSQL URL.                                                                                                                                             |
+| `db show`          | Show the saved PostgreSQL URL.                                                                                                                                                  |
+| `db test`          | Test the connection using the saved or overridden URL.                                                                                                                          |
+| `db reset`         | Remove the saved PostgreSQL URL.                                                                                                                                                |
+| `import <input>`   | Import validated dataset files into PostgreSQL using COPY-based staging loads for heavy datasets, direct upserts for domain tables, checkpoint resume, and quarantine fallback. |
+| `doctor`           | Run a quick environment diagnosis.                                                                                                                                              |
+| `quarantine stats` | Show aggregate counts for the `import_quarantine` table.                                                                                                                        |
+| `quarantine list`  | List quarantined rows with optional filters.                                                                                                                                    |
+| `quarantine show`  | Show one quarantined row in detail.                                                                                                                                             |
 
 ## Examples
 

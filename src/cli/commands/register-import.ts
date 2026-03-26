@@ -19,7 +19,7 @@ export function registerImportCommands(program: Command): void {
     )
     .option(
       "--batch-size <size>",
-      "Maximum number of source rows to batch per insert query. Defaults to 500.",
+      "Maximum number of source rows per staging load unit. Defaults to 500.",
       (value) => Number.parseInt(value, 10),
     )
     .option(
@@ -28,7 +28,7 @@ export function registerImportCommands(program: Command): void {
     )
     .option("-f, --force", "Skip the confirmation prompt.")
     .description(
-      "Stream validated Receita Federal dataset files into the configured PostgreSQL database.",
+      "Load validated Receita Federal dataset files into PostgreSQL using staged bulk writes and checkpoint resume.",
     )
     .action(
       async (

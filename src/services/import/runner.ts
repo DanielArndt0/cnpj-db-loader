@@ -5,7 +5,6 @@ import { Client } from "pg";
 
 import { ValidationError } from "../../core/errors/index.js";
 import { appendJsonLinesLog, createJsonLinesLog } from "../logging.service.js";
-import { loadLookupCaches } from "./lookups.js";
 import {
   buildImportPerformanceSummary,
   buildImportWarnings,
@@ -26,6 +25,10 @@ import {
   type PreparedImportPlan,
 } from "./planner.js";
 import { ensureImportQuarantineSupport } from "./quarantine-writer.js";
+import {
+  ensureStagingSchemaSupport,
+  resetStagingTablesForFreshPlan,
+} from "./staging-schema.js";
 import { detectImportSchemaCapabilities } from "./schema-capabilities.js";
 import { updateImportPlanStatus } from "./plan-store.js";
 import type { InspectSummary } from "../inspect.service.js";
@@ -62,7 +65,7 @@ export async function runImportPipeline(input: {
   let scanDurationMs = 0;
   let datasetScanDurationsMs: Partial<Record<ImportDatasetType, number>> = {};
   let sourceFingerprint = "";
-  let lookupLoadDurationMs = 0;
+  const lookupLoadDurationMs = 0;
   let checkpointBaselineRows = 0;
   let checkpointBaselineBatches = 0;
 
@@ -117,6 +120,10 @@ export async function runImportPipeline(input: {
     }
 
     const schemaCapabilities = await detectImportSchemaCapabilities(client);
+    await ensureStagingSchemaSupport(
+      client,
+      plan.datasets.map((datasetPlan) => datasetPlan.dataset),
+    );
     const checkpointTotals = await hydrateImportPlanWithCheckpoints(
       client,
       plan.datasets,
@@ -156,6 +163,21 @@ export async function runImportPipeline(input: {
       }
     }
 
+    if (!planReused) {
+      const resetTables = await resetStagingTablesForFreshPlan(
+        client,
+        plan.datasets.map((datasetPlan) => datasetPlan.dataset),
+      );
+
+      if (resetTables.length > 0) {
+        await appendJsonLinesLog(progressLogPath, {
+          kind: "staging_reset",
+          tables: resetTables,
+          timestamp: new Date().toISOString(),
+        });
+      }
+    }
+
     if (planId !== null) {
       await updateImportPlanStatus(client, planId, "in_progress");
     }
@@ -191,10 +213,6 @@ export async function runImportPipeline(input: {
       committedBatches: counters.committedBatches,
       timestamp: new Date().toISOString(),
     });
-
-    const lookupStartedAt = performance.now();
-    const lookupCache = await loadLookupCaches(client);
-    lookupLoadDurationMs = performance.now() - lookupStartedAt;
 
     let globalFileIndex = 0;
     for (const [datasetIndex, datasetPlan] of plan.datasets.entries()) {
@@ -234,7 +252,6 @@ export async function runImportPipeline(input: {
 
         await importDatasetFile(
           client,
-          lookupCache,
           filePlan,
           schemaCapabilities,
           counters,

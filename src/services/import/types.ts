@@ -92,6 +92,8 @@ export type ImportPlanRecord = {
   lastUsedAt: Date;
 };
 
+export type ImportWriteTarget = "final" | "staging";
+
 export type ImportSchemaCapabilities = {
   includePartnerDedupeKeyInInsert: boolean;
 };

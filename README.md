@@ -13,12 +13,12 @@ This version focuses on the real loading workflow:
 - print or generate final, staging, or combined SQL schemas
 - configure and test the default PostgreSQL URL
 - import validated dataset files into PostgreSQL with:
-  - streaming batches
-  - conflict-safe deduplication
-  - checkpoint-based resume by file and byte offset
-  - row quarantine for invalid or constraint-breaking records without stopping the import
   - exact preparatory scanning for total rows and total batches before import starts
   - persisted import plans reused on resume for the same validated input and batch size
+  - staged bulk loads for the large datasets through PostgreSQL COPY
+  - direct final-schema upserts for the smaller domain datasets
+  - checkpoint-based resume by file and byte offset
+  - row quarantine for invalid or constraint-breaking records without stopping the import
 - quarantine inspection commands for analyzing rows stored in `import_quarantine`
 
 ## Installation
@@ -75,13 +75,13 @@ For `import`, the CLI now also writes an incremental JSONL progress log with one
 
 The final import summary now includes baseline timing and throughput metrics such as preparatory scan duration, execution duration, insert time, retry time, quarantine time, rows per second, and batches per minute.
 
-The import internals are now split into dedicated modules such as planner, source reader, parser, normalizer, checkpoint manager, quarantine writer, staging writer, and finalizer so future performance changes can be implemented without rewriting the whole import command.
+The import internals are now split into dedicated modules such as planner, source reader, parser, normalizer, checkpoint manager, quarantine writer, staging writer, and finalizer so staged bulk-load changes can be implemented without rewriting the whole import command.
 
 The generated database schema now supports three profiles:
 
 - `full`: final relational tables, import control tables, and staging tables
 - `final`: only the final relational and control tables
-- `staging`: only the lightweight staging tables intended for future bulk-load steps
+- `staging`: only the lightweight staging tables used by the staged bulk-load flow
 
 `import --verbose-progress` shows a fixed multi-line status block instead of spamming the terminal with a new line on every progress update.
 

@@ -116,12 +116,13 @@ export function buildImportPerformanceSummary(input: {
 
 export function buildImportWarnings(): string[] {
   return [
-    "The importer uses exact file planning, checkpointed batch commits, and byte-offset resume. If a batch fails, rerunning the same command resumes from the last committed checkpoint instead of restarting the full load.",
+    "The importer uses exact file planning, checkpointed batch commits, and byte-offset resume. If a load unit fails, rerunning the same command resumes from the last committed checkpoint instead of restarting the full load.",
     "Import plans are persisted in the database and reused for the same validated input, source files, and batch size so resumed imports do not recount rows unnecessarily.",
-    "The importer remains idempotent for the current schema: rerunning the same validated files updates existing rows instead of duplicating them.",
-    "Rows that fail validation or database constraints are moved to import_quarantine and the import continues from the next row.",
-    "The import summary now includes baseline timing and throughput metrics for scan, execution, retry, and quarantine paths so future performance changes can be measured against a stable reference.",
-    "The default batch size is conservative to reduce RAM pressure during long PostgreSQL imports. Increase --batch-size only after validating RAM usage and PostgreSQL stability in your environment.",
+    "Large datasets now land in lightweight staging tables through PostgreSQL COPY before final materialization. The final schema load is handled in a later phase of the pipeline.",
+    "When a new import plan starts, the selected staging tables are truncated before loading so staged bulk loads stay clean and predictable. Resumed plans keep the staged rows that already match the saved checkpoints.",
+    "Rows that fail parsing, normalization, COPY fallback, or row-level inserts are moved to import_quarantine and the import continues from the next row.",
+    "The import summary includes baseline timing and throughput metrics for scan, execution, retry, and quarantine paths so future performance changes can be measured against a stable reference.",
+    "The batch size now defines the staging load unit size. Increase --batch-size only after validating RAM usage and PostgreSQL stability in your environment.",
   ];
 }
 

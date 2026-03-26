@@ -1,6 +1,10 @@
 import { ValidationError } from "../../core/errors/index.js";
 import type { TableLayout } from "../../dictionary/layouts/index.js";
-import type { ImportDatasetType, ImportSchemaCapabilities } from "./types.js";
+import type {
+  ImportDatasetType,
+  ImportSchemaCapabilities,
+  ImportWriteTarget,
+} from "./types.js";
 
 export function parseDelimitedLine(line: string): string[] {
   const fields: string[] = [];
@@ -143,6 +147,7 @@ export function transformRecord(
   layout: TableLayout,
   rawFields: string[],
   schemaCapabilities: ImportSchemaCapabilities,
+  writeTarget: ImportWriteTarget,
 ): unknown[] {
   const values = layout.fields.map((field, index) =>
     toDatabaseValue(field.dataType, rawFields[index] ?? ""),
@@ -172,6 +177,7 @@ export function transformRecord(
 
   if (
     dataset === "partners" &&
+    writeTarget === "final" &&
     schemaCapabilities.includePartnerDedupeKeyInInsert
   ) {
     return [...values, buildPartnerDedupeKey(recordByColumn)];

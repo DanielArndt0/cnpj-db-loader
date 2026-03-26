@@ -22,12 +22,13 @@ The import pipeline now uses:
 - an exact preparatory scan that counts total source rows and planned batches before the first write
 - streaming file reads to avoid loading the full dataset into RAM
 - an optional sanitize step that removes known low-level byte issues before import starts
-- conflict-safe inserts and upserts to avoid duplication
+- COPY-based staged writes for the large datasets
+- conflict-safe upserts for the smaller domain datasets
 - `import_plans` and `import_plan_files` to persist exact import plans and avoid recounting the same source files on resume
 - `import_checkpoints` to resume a failed load without clearing the whole database
 - `import_quarantine` to store invalid rows and continue long-running imports
 - a dedicated `quarantine` service to inspect quarantine rows without touching the import pipeline
-- conservative batch commits to reduce memory pressure and prevent giant rollbacks
+- conservative load units to reduce memory pressure and prevent giant rollbacks
 - compatibility with both generated and regular `partner_dedupe_key` schemas during partner imports
 
 ## Import modules
@@ -38,17 +39,17 @@ The importer is now split into focused modules so future performance work can re
 - `source-reader`: streams validated files by byte offset for resume-safe reads
 - `parser`: converts raw Receita lines into delimited field arrays
 - `normalizer`: validates field counts and transforms parsed rows into database-ready records
-- `staging-writer`: current write boundary for batched row persistence and future staging-table work
+- `staging-writer`: chooses the current write target and uses COPY for staged bulk loads
 - `finalizer`: centralizes performance tracking and import summary generation
 - `checkpoint-manager`: owns checkpoint resume, persistence, and failed-file markers
 - `quarantine-writer`: stores bad rows without stopping long imports
 - `runner`: orchestrates the current import flow while keeping the service entry point small
 
-The project now also generates dedicated staging tables for large datasets. The public CLI flow remains the same while the current write path still targets the final schema directly.
+The project now also generates dedicated staging tables for large datasets. The public CLI flow remains the same, but the write path now sends the heavy datasets to staging tables first and keeps the smaller catalog datasets on the final schema.
 
 ## Staging schema
 
-The generated SQL schema now supports lightweight `staging_*` tables for the large datasets that will move to a staged bulk-load flow in the next phases.
+The generated SQL schema supports lightweight `staging_*` tables for the large datasets that now move through the staged bulk-load flow.
 
 These staging tables are intentionally:
 

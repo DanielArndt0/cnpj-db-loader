@@ -14,15 +14,15 @@ cnpj-db-loader import ./downloads/sanitized --batch-size 500 --verbose-progress
 
 ## What each step does
 
-| Step | Command                          | Purpose                                                                                                          |
-| ---- | -------------------------------- | ---------------------------------------------------------------------------------------------------------------- |
-| 1    | `inspect <input>`                | Detect whether the folder contains ZIP archives, extracted content, or both                                      |
-| 2    | `extract <input>`                | Extract every Receita ZIP archive into `./extracted` by default                                                  |
-| 3    | `validate <input>`               | Validate the extracted dataset tree and confirm that the required dataset blocks are present                     |
-| 4    | `sanitize <input>`               | Prepare a sanitized dataset tree by removing known low-level byte issues before import                           |
-| 5    | `db show` / `db set <url>`       | Review or configure the PostgreSQL connection                                                                    |
-| 6    | `schema generate --profile full` | Generate the combined SQL schema with final, control, and staging tables                                         |
-| 7    | `import <input>`                 | Import sanitized files with streaming batches, conflict-safe upserts, checkpoint resume, and quarantine fallback |
+| Step | Command                          | Purpose                                                                                                                                                   |
+| ---- | -------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1    | `inspect <input>`                | Detect whether the folder contains ZIP archives, extracted content, or both                                                                               |
+| 2    | `extract <input>`                | Extract every Receita ZIP archive into `./extracted` by default                                                                                           |
+| 3    | `validate <input>`               | Validate the extracted dataset tree and confirm that the required dataset blocks are present                                                              |
+| 4    | `sanitize <input>`               | Prepare a sanitized dataset tree by removing known low-level byte issues before import                                                                    |
+| 5    | `db show` / `db set <url>`       | Review or configure the PostgreSQL connection                                                                                                             |
+| 6    | `schema generate --profile full` | Generate the combined SQL schema with final, control, and staging tables                                                                                  |
+| 7    | `import <input>`                 | Import sanitized files with COPY-based staging loads for the large datasets, direct upserts for domain tables, checkpoint resume, and quarantine fallback |
 
 ## Schema profiles
 
@@ -30,7 +30,7 @@ Use the schema command profile that matches the database shape you want to prepa
 
 - `full`: final tables, import control tables, and staging tables
 - `final`: only the final relational and control tables
-- `staging`: only the lightweight `staging_*` tables for future bulk-load steps
+- `staging`: only the lightweight `staging_*` tables used by the current staged bulk-load steps
 
 Examples:
 
@@ -47,11 +47,13 @@ cnpj-db-loader schema generate --profile staging
 - it starts with an exact preparatory scan that counts source rows and planned batches when no saved plan exists
 - it persists the import plan in the database and reuses it on resume when the validated source files and batch size match
 - it reads files in streaming mode
-- it commits per batch instead of holding one giant transaction
+- it loads the large datasets into lightweight staging tables through PostgreSQL COPY
+- it still upserts the smaller domain datasets directly into the final schema
+- it commits per load unit instead of holding one giant transaction
 - it stores progress in `import_checkpoints`
 - rows that still fail validation or database constraints are written to `import_quarantine` and skipped
 - if a batch fails, rerunning the same command resumes from the last committed byte offset
-- it stays idempotent for the current schema, so rerunning the same files does not create duplicate rows
+- new import plans truncate the selected staging tables before loading, while resumed plans reuse staged rows that already match saved checkpoints
 
 ## Recommended import settings
 
@@ -62,7 +64,7 @@ cnpj-db-loader sanitize ./downloads/extracted
 cnpj-db-loader import ./downloads/sanitized --batch-size 500 --verbose-progress
 ```
 
-Increase the batch size only after you confirm that your PostgreSQL instance and Docker memory budget can handle it.
+Increase the batch size only after you confirm that your PostgreSQL instance and memory budget can handle larger COPY load units.
 
 ## PostgreSQL and Docker recommendations
 

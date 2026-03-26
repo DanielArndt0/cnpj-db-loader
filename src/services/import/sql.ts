@@ -4,13 +4,13 @@ import { DATASET_LAYOUTS } from "./types.js";
 import type {
   ImportDatasetType,
   ImportSchemaCapabilities,
-  LookupCacheMap,
+  ImportWriteTarget,
 } from "./types.js";
-import { ensureBatchForeignKeys } from "./lookups.js";
 
 export function getInsertColumns(
   dataset: ImportDatasetType,
   schemaCapabilities: ImportSchemaCapabilities,
+  writeTarget: ImportWriteTarget = "final",
 ): string[] {
   const columns = DATASET_LAYOUTS[dataset].fields.map(
     (field) => field.columnName,
@@ -18,6 +18,7 @@ export function getInsertColumns(
 
   if (
     dataset === "partners" &&
+    writeTarget === "final" &&
     schemaCapabilities.includePartnerDedupeKeyInInsert
   ) {
     return [...columns, "partner_dedupe_key"];
@@ -81,8 +82,8 @@ export function getConflictClause(
 export function buildInsertQuery(
   tableName: string,
   columns: string[],
-  rows: unknown[][],
-  conflictClause: string,
+  rows: readonly unknown[][],
+  conflictClause = "",
 ): { text: string; values: unknown[] } {
   const values: unknown[] = [];
 
@@ -111,52 +112,25 @@ export function buildInsertQuery(
   };
 }
 
-export function buildSecondaryCnaesQuery(
-  rows: Array<[string, string, number]>,
+export function buildSecondaryInsertQuery(
+  tableName: string,
+  rows: ReadonlyArray<[string, string, number]>,
+  conflictClause = "",
 ): {
   text: string;
   values: unknown[];
 } {
   return buildInsertQuery(
-    "establishment_secondary_cnaes",
+    tableName,
     ["establishment_cnpj_full", "cnae_code", "source_order"],
-    rows,
-    "on conflict (establishment_cnpj_full, cnae_code) do update set source_order = excluded.source_order",
-  );
-}
-
-export async function flushRows(
-  client: Client,
-  lookupCache: LookupCacheMap,
-  dataset: ImportDatasetType,
-  rows: unknown[][],
-  schemaCapabilities: ImportSchemaCapabilities,
-): Promise<void> {
-  if (rows.length === 0) {
-    return;
-  }
-
-  const layout = DATASET_LAYOUTS[dataset];
-  const columns = getInsertColumns(dataset, schemaCapabilities);
-  await ensureBatchForeignKeys(client, lookupCache, dataset, rows, columns);
-  const conflictClause = getConflictClause(dataset, columns);
-  const query = buildInsertQuery(
-    layout.tableName,
-    columns,
     rows,
     conflictClause,
   );
-  await client.query(query);
 }
 
-export async function flushSecondaryCnaes(
+export async function flushInsertQuery(
   client: Client,
-  rows: Array<[string, string, number]>,
+  query: { text: string; values: unknown[] },
 ): Promise<void> {
-  if (rows.length === 0) {
-    return;
-  }
-
-  const query = buildSecondaryCnaesQuery(rows);
   await client.query(query);
 }
