@@ -12,6 +12,7 @@ function createUnloggedStagingTableSql(
 ): string {
   return [
     `create unlogged table if not exists ${tableName} (`,
+    "  staging_id bigserial primary key,",
     columnsSql,
     ");",
   ].join("\n");

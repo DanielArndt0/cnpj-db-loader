@@ -13,6 +13,10 @@ export function createImportPlansSql(): string {
     "  total_batches bigint not null,",
     "  execution_order jsonb not null,",
     "  status text not null default 'planned',",
+    "  load_status text not null default 'pending',",
+    "  materialization_status text not null default 'pending',",
+    "  last_phase text,",
+    "  last_error text,",
     "  created_at timestamp with time zone not null default now(),",
     "  updated_at timestamp with time zone not null default now(),",
     "  last_used_at timestamp with time zone not null default now()",
@@ -57,6 +61,26 @@ export function createImportCheckpointsSql(): string {
   ].join("\n");
 }
 
+export function createImportMaterializationCheckpointsSql(): string {
+  return [
+    "create table if not exists import_materialization_checkpoints (",
+    "  id bigserial primary key,",
+    "  plan_id bigint not null references import_plans (id) on delete cascade,",
+    "  dataset text not null,",
+    "  target_table text not null,",
+    "  status text not null default 'pending',",
+    "  rows_materialized bigint not null default 0,",
+    "  last_staging_id bigint not null default 0,",
+    "  chunks_completed bigint not null default 0,",
+    "  last_error text,",
+    "  started_at timestamp with time zone,",
+    "  completed_at timestamp with time zone,",
+    "  updated_at timestamp with time zone not null default now(),",
+    "  unique (plan_id, dataset)",
+    ");",
+  ].join("\n");
+}
+
 export function createImportQuarantineSql(): string {
   return [
     "create table if not exists import_quarantine (",
@@ -85,6 +109,7 @@ export function createControlSchemaParts(): string[] {
     createImportPlansSql(),
     createImportPlanFilesSql(),
     createImportCheckpointsSql(),
+    createImportMaterializationCheckpointsSql(),
     createImportQuarantineSql(),
   ];
 }

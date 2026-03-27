@@ -143,4 +143,4 @@ vite.config.ts.timestamp-*
 logs/
 
 # Schemas
-schema.sql
+*.sql

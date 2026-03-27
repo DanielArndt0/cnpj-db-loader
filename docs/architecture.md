@@ -22,10 +22,11 @@ The import pipeline now uses:
 - an exact preparatory scan that counts total source rows and planned batches before the first write
 - streaming file reads to avoid loading the full dataset into RAM
 - an optional sanitize step that removes known low-level byte issues before import starts
-- COPY-based staged writes for the large datasets
+- COPY-based staged writes for the large datasets followed by staged-to-final materialization
 - conflict-safe upserts for the smaller domain datasets
 - `import_plans` and `import_plan_files` to persist exact import plans and avoid recounting the same source files on resume
 - `import_checkpoints` to resume a failed load without clearing the whole database
+- `import_materialization_checkpoints` to resume staged-to-final consolidation by dataset and chunk
 - `import_quarantine` to store invalid rows and continue long-running imports
 - a dedicated `quarantine` service to inspect quarantine rows without touching the import pipeline
 - conservative load units to reduce memory pressure and prevent giant rollbacks
@@ -40,16 +41,18 @@ The importer is now split into focused modules so future performance work can re
 - `parser`: converts raw Receita lines into delimited field arrays
 - `normalizer`: validates field counts and transforms parsed rows into database-ready records
 - `staging-writer`: chooses the current write target and uses COPY for staged bulk loads
+- `materializer`: consolidates staged datasets into the final relational schema with ordered upserts and resumable chunk checkpoints
+- materialization progress is now exposed explicitly to the CLI progress reporter and to JSONL heartbeat logs so long-running final upserts do not look stalled
 - `finalizer`: centralizes performance tracking and import summary generation
 - `checkpoint-manager`: owns checkpoint resume, persistence, and failed-file markers
 - `quarantine-writer`: stores bad rows without stopping long imports
 - `runner`: orchestrates the current import flow while keeping the service entry point small
 
-The project now also generates dedicated staging tables for large datasets. The public CLI flow remains the same, but the write path now sends the heavy datasets to staging tables first and keeps the smaller catalog datasets on the final schema.
+The project now also generates dedicated staging tables for large datasets. The CLI exposes both a one-shot command (`import`) and split commands (`import load`, `import materialize`, `import cleanup-staging`). The write path sends the heavy datasets to staging tables first, then consolidates them into the final schema in dependency order while keeping the smaller catalog datasets on the final schema directly.
 
 ## Staging schema
 
-The generated SQL schema supports lightweight `staging_*` tables for the large datasets that now move through the staged bulk-load flow.
+The generated SQL schema supports lightweight `staging_*` tables for the large datasets that now move through the staged bulk-load flow before controlled final materialization.
 
 These staging tables are intentionally:
 
@@ -57,6 +60,7 @@ These staging tables are intentionally:
 - free of foreign keys and secondary indexes
 - free of generated columns and upsert-only constraints
 - shaped to mirror the validated dataset rows with minimal insert overhead
+- equipped with `staging_id` so the materializer can checkpoint chunk progress safely
 
 ## Current execution flow
 
@@ -67,7 +71,8 @@ inspect -> extract -> validate -> sanitize -> db/schema -> import
 ## Internal import flow
 
 ```text
-planner -> source-reader -> parser -> normalizer -> staging-writer -> finalizer
+planner -> source-reader -> parser -> normalizer -> staging-writer -> materializer -> finalizer
                   |                              |
                   +-> checkpoint-manager         +-> quarantine-writer
+                                                 +-> materialization-checkpoints
 ```

@@ -4,6 +4,7 @@ import {
   partnersLayout,
   simplesLayout,
 } from "../../dictionary/layouts/index.js";
+import { createPartnerDedupeGeneratedExpression } from "./partner-dedupe.js";
 import { createColumnSql } from "./shared.js";
 
 export function createCompaniesSql(): string {
@@ -63,19 +64,7 @@ export function createPartnersSql(): string {
     "create table if not exists partners (",
     "  id bigserial primary key,",
     partnersLayout.fields.map(createColumnSql).join(",\n") + ",",
-    "  partner_dedupe_key text generated always as (md5(concat_ws('|',",
-    "    coalesce(cnpj_root, ''),",
-    "    coalesce(partner_type_code, ''),",
-    "    coalesce(partner_name, ''),",
-    "    coalesce(partner_document, ''),",
-    "    coalesce(partner_qualification_code, ''),",
-    "    coalesce(entry_date::text, ''),",
-    "    coalesce(country_code, ''),",
-    "    coalesce(legal_representative_document, ''),",
-    "    coalesce(legal_representative_name, ''),",
-    "    coalesce(legal_representative_qualification_code, ''),",
-    "    coalesce(age_group_code, '')",
-    "  ))) stored,",
+    `  partner_dedupe_key text generated always as (\n${createPartnerDedupeGeneratedExpression()}\n  ) stored,`,
     "  created_at timestamp without time zone not null default now(),",
     "  updated_at timestamp without time zone not null default now(),",
     "  unique (partner_dedupe_key),",

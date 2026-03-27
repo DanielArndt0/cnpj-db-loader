@@ -3,6 +3,7 @@ import { Client } from "pg";
 import type {
   ImportDatasetPlan,
   ImportDatasetType,
+  ImportPhaseStatus,
   ImportPlanRecord,
   ImportPlanStatus,
 } from "./types.js";
@@ -22,11 +23,28 @@ export async function ensureImportPlanTables(client: Client): Promise<void> {
       total_batches bigint not null,
       execution_order jsonb not null,
       status text not null default 'planned',
+      load_status text not null default 'pending',
+      materialization_status text not null default 'pending',
+      last_phase text,
+      last_error text,
       created_at timestamptz not null default now(),
       updated_at timestamptz not null default now(),
       last_used_at timestamptz not null default now()
     )
   `);
+
+  await client.query(
+    `alter table import_plans add column if not exists load_status text not null default 'pending'`,
+  );
+  await client.query(
+    `alter table import_plans add column if not exists materialization_status text not null default 'pending'`,
+  );
+  await client.query(
+    `alter table import_plans add column if not exists last_phase text`,
+  );
+  await client.query(
+    `alter table import_plans add column if not exists last_error text`,
+  );
 
   await client.query(`
     create table if not exists import_plan_files (
@@ -49,6 +67,12 @@ export async function ensureImportPlanTables(client: Client): Promise<void> {
     `create index if not exists idx_import_plans_status on import_plans (status)`,
   );
   await client.query(
+    `create index if not exists idx_import_plans_load_status on import_plans (load_status)`,
+  );
+  await client.query(
+    `create index if not exists idx_import_plans_materialization_status on import_plans (materialization_status)`,
+  );
+  await client.query(
     `create index if not exists idx_import_plan_files_plan_id on import_plan_files (plan_id)`,
   );
   await client.query(
@@ -69,6 +93,10 @@ type ImportPlanRow = {
   total_batches: string;
   execution_order: ImportDatasetType[];
   status: ImportPlanStatus;
+  load_status: ImportPhaseStatus;
+  materialization_status: ImportPhaseStatus;
+  last_phase: string | null;
+  last_error: string | null;
   created_at: Date;
   updated_at: Date;
   last_used_at: Date;
@@ -100,46 +128,20 @@ function mapImportPlanRow(row: ImportPlanRow): ImportPlanRecord {
     totalBatches: Number.parseInt(row.total_batches, 10),
     executionOrder: row.execution_order,
     status: row.status,
+    loadStatus: row.load_status,
+    materializationStatus: row.materialization_status,
+    lastPhase: row.last_phase,
+    lastError: row.last_error,
     createdAt: new Date(row.created_at),
     updatedAt: new Date(row.updated_at),
     lastUsedAt: new Date(row.last_used_at),
   };
 }
 
-export async function readSavedImportPlan(
+async function readPlanDatasets(
   client: Client,
-  sourceFingerprint: string,
-): Promise<{
-  plan: ImportPlanRecord;
-  datasets: ImportDatasetPlan[];
-} | null> {
-  const planResult = await client.query<ImportPlanRow>(
-    `select
-        id,
-        source_fingerprint,
-        input_path,
-        validated_path,
-        batch_size,
-        target_database,
-        total_datasets,
-        total_files,
-        total_rows,
-        total_batches,
-        execution_order,
-        status,
-        created_at,
-        updated_at,
-        last_used_at
-      from import_plans
-      where source_fingerprint = $1`,
-    [sourceFingerprint],
-  );
-
-  if (planResult.rowCount === 0) {
-    return null;
-  }
-
-  const plan = mapImportPlanRow(planResult.rows[0]!);
+  plan: ImportPlanRecord,
+): Promise<ImportDatasetPlan[]> {
   const filesResult = await client.query<ImportPlanFileRow>(
     `select
         dataset,
@@ -184,9 +186,27 @@ export async function readSavedImportPlan(
     grouped.set(row.dataset, current);
   }
 
-  const datasets = plan.executionOrder
+  return plan.executionOrder
     .map((dataset) => grouped.get(dataset))
     .filter((item): item is ImportDatasetPlan => item !== undefined);
+}
+
+async function readPlanRecordByQuery(
+  client: Client,
+  query: string,
+  values: readonly unknown[],
+): Promise<{
+  plan: ImportPlanRecord;
+  datasets: ImportDatasetPlan[];
+} | null> {
+  const planResult = await client.query<ImportPlanRow>(query, [...values]);
+
+  if (planResult.rowCount === 0) {
+    return null;
+  }
+
+  const plan = mapImportPlanRow(planResult.rows[0]!);
+  const datasets = await readPlanDatasets(client, plan);
 
   await client.query(
     `update import_plans set last_used_at = now(), updated_at = now() where id = $1`,
@@ -194,6 +214,80 @@ export async function readSavedImportPlan(
   );
 
   return { plan, datasets };
+}
+
+export async function readSavedImportPlan(
+  client: Client,
+  sourceFingerprint: string,
+): Promise<{
+  plan: ImportPlanRecord;
+  datasets: ImportDatasetPlan[];
+} | null> {
+  return readPlanRecordByQuery(
+    client,
+    `select
+        id,
+        source_fingerprint,
+        input_path,
+        validated_path,
+        batch_size,
+        target_database,
+        total_datasets,
+        total_files,
+        total_rows,
+        total_batches,
+        execution_order,
+        status,
+        load_status,
+        materialization_status,
+        last_phase,
+        last_error,
+        created_at,
+        updated_at,
+        last_used_at
+      from import_plans
+      where source_fingerprint = $1`,
+    [sourceFingerprint],
+  );
+}
+
+export async function readLatestImportPlanForValidatedPath(
+  client: Client,
+  validatedPath: string,
+  targetDatabase: string,
+): Promise<{
+  plan: ImportPlanRecord;
+  datasets: ImportDatasetPlan[];
+} | null> {
+  return readPlanRecordByQuery(
+    client,
+    `select
+        id,
+        source_fingerprint,
+        input_path,
+        validated_path,
+        batch_size,
+        target_database,
+        total_datasets,
+        total_files,
+        total_rows,
+        total_batches,
+        execution_order,
+        status,
+        load_status,
+        materialization_status,
+        last_phase,
+        last_error,
+        created_at,
+        updated_at,
+        last_used_at
+      from import_plans
+      where validated_path = $1
+        and target_database = $2
+      order by last_used_at desc, updated_at desc, id desc
+      limit 1`,
+    [validatedPath, targetDatabase],
+  );
 }
 
 export async function saveImportPlan(
@@ -236,11 +330,15 @@ export async function saveImportPlan(
           total_batches,
           execution_order,
           status,
+          load_status,
+          materialization_status,
+          last_phase,
+          last_error,
           created_at,
           updated_at,
           last_used_at
         ) values (
-          $1, $2, $3, $4, $5, $6, $7, $8, $9, $10::jsonb, 'planned', now(), now(), now()
+          $1, $2, $3, $4, $5, $6, $7, $8, $9, $10::jsonb, 'planned', 'pending', 'pending', 'planning', null, now(), now(), now()
         )
         on conflict (source_fingerprint)
         do update set
@@ -254,6 +352,10 @@ export async function saveImportPlan(
           total_batches = excluded.total_batches,
           execution_order = excluded.execution_order,
           status = 'planned',
+          load_status = 'pending',
+          materialization_status = 'pending',
+          last_phase = 'planning',
+          last_error = null,
           updated_at = now(),
           last_used_at = now()
         returning
@@ -269,6 +371,10 @@ export async function saveImportPlan(
           total_batches,
           execution_order,
           status,
+          load_status,
+          materialization_status,
+          last_phase,
+          last_error,
           created_at,
           updated_at,
           last_used_at`,
@@ -351,5 +457,49 @@ export async function updateImportPlanStatus(
             last_used_at = now()
       where id = $1`,
     [planId, status],
+  );
+}
+
+export async function updateImportPlanPhaseState(
+  client: Client,
+  input: {
+    planId: number;
+    loadStatus?: ImportPhaseStatus;
+    materializationStatus?: ImportPhaseStatus;
+    lastPhase?: string | null;
+    lastError?: string | null;
+  },
+): Promise<void> {
+  const assignments: string[] = ["updated_at = now()", "last_used_at = now()"];
+  const values: unknown[] = [input.planId];
+  let nextIndex = 2;
+
+  if (input.loadStatus !== undefined) {
+    assignments.push(`load_status = $${nextIndex}`);
+    values.push(input.loadStatus);
+    nextIndex += 1;
+  }
+
+  if (input.materializationStatus !== undefined) {
+    assignments.push(`materialization_status = $${nextIndex}`);
+    values.push(input.materializationStatus);
+    nextIndex += 1;
+  }
+
+  if (input.lastPhase !== undefined) {
+    assignments.push(`last_phase = $${nextIndex}`);
+    values.push(input.lastPhase);
+    nextIndex += 1;
+  }
+
+  if (input.lastError !== undefined) {
+    assignments.push(`last_error = $${nextIndex}`);
+    values.push(input.lastError);
+    nextIndex += 1;
+  }
+
+  await client.query(
+    `update import_plans set ${assignments.join(", ")} where id = $1`,
+    values,
   );
 }

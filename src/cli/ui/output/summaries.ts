@@ -186,7 +186,14 @@ export function printImportSummary(
   summary: ImportSummary,
   logFilePath: string,
 ): void {
-  console.log(theme.successLabel("IMPORT"), "Database import completed.");
+  const headline =
+    summary.executionMode === "load"
+      ? "Staging/direct load completed."
+      : summary.executionMode === "materialize"
+        ? "Staged materialization completed."
+        : "Database import completed.";
+
+  console.log(theme.successLabel("IMPORT"), headline);
   console.log(formatKeyValue("Input path", summary.inputPath));
   console.log(formatKeyValue("Validated path", summary.validatedPath));
   console.log(formatKeyValue("Target database", summary.targetDatabase));
@@ -272,6 +279,12 @@ export function printImportSummary(
   );
   console.log(
     formatKeyValue(
+      "Materialization",
+      formatDuration(summary.performance.materializationDurationMs),
+    ),
+  );
+  console.log(
+    formatKeyValue(
       "Throughput",
       `${formatRate(summary.performance.rowsPerSecond, "rows/s")} | ${formatRate(summary.performance.batchesPerMinute, "batches/min")}`,
     ),
@@ -284,7 +297,7 @@ export function printImportSummary(
         `  ${theme.blue("•")} ${datasetPerformance.dataset}: ${formatCount(datasetPerformance.importedRows)} row(s), ${formatCount(datasetPerformance.committedBatches)} batch(es), ${formatDuration(datasetPerformance.importDurationMs)}, ${formatRate(datasetPerformance.rowsPerSecond, "rows/s")}`,
       );
       console.log(
-        `    scan ${formatDuration(datasetPerformance.scanDurationMs)} | insert ${formatDuration(datasetPerformance.insertDurationMs)} | retry ${formatDuration(datasetPerformance.retryDurationMs)} | quarantine ${formatDuration(datasetPerformance.quarantineDurationMs)} | resumed ${formatCount(datasetPerformance.resumedFiles)} | skipped ${formatCount(datasetPerformance.skippedCompletedFiles)}`,
+        `    scan ${formatDuration(datasetPerformance.scanDurationMs)} | insert ${formatDuration(datasetPerformance.insertDurationMs)} | materialize ${formatDuration(datasetPerformance.materializationDurationMs)} | retry ${formatDuration(datasetPerformance.retryDurationMs)} | quarantine ${formatDuration(datasetPerformance.quarantineDurationMs)} | resumed ${formatCount(datasetPerformance.resumedFiles)} | skipped ${formatCount(datasetPerformance.skippedCompletedFiles)}`,
       );
     }
   }

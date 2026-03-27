@@ -15,6 +15,7 @@ export async function ensureStagingSchemaSupport(
   }
 
   const missingTables: string[] = [];
+  const invalidTables: string[] = [];
 
   for (const tableName of requiredTables) {
     const result = await client.query<{ exists: string | null }>(
@@ -24,12 +25,34 @@ export async function ensureStagingSchemaSupport(
 
     if (!result.rows[0]?.exists) {
       missingTables.push(tableName);
+      continue;
+    }
+
+    const stagingIdResult = await client.query<{ exists: boolean }>(
+      `select exists (
+         select 1
+           from information_schema.columns
+          where table_schema = current_schema()
+            and table_name = $1
+            and column_name = 'staging_id'
+       ) as exists`,
+      [tableName],
+    );
+
+    if (!stagingIdResult.rows[0]?.exists) {
+      invalidTables.push(tableName);
     }
   }
 
   if (missingTables.length > 0) {
     throw new ValidationError(
       `The staging schema is required for the selected bulk-load datasets. Missing tables: ${missingTables.join(", ")}. Run "cnpj-db-loader schema generate --profile full" or "cnpj-db-loader schema generate --profile staging" and apply the SQL before importing.`,
+    );
+  }
+
+  if (invalidTables.length > 0) {
+    throw new ValidationError(
+      `The staging schema is outdated for chunked materialization. Recreate or migrate these tables so they include the staging_id column: ${invalidTables.join(", ")}.`,
     );
   }
 }

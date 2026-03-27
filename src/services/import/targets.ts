@@ -59,3 +59,14 @@ export function collectRequiredStagingTables(
 
   return [...tableNames];
 }
+
+const FINAL_TABLE_BY_DATASET: Partial<Record<ImportDatasetType, string>> = {
+  companies: "companies",
+  establishments: "establishments",
+  partners: "partners",
+  simples_options: "simples_options",
+};
+
+export function getFinalTargetTableName(dataset: ImportDatasetType): string {
+  return FINAL_TABLE_BY_DATASET[dataset] ?? dataset;
+}

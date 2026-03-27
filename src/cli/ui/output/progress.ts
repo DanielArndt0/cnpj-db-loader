@@ -5,6 +5,7 @@ import type { SanitizeProgressEvent } from "../../../services/sanitize.service.j
 import {
   formatBytes,
   formatCount,
+  formatDuration,
   formatKeyValue,
   truncateMiddle,
 } from "./shared.js";
@@ -354,6 +355,66 @@ export function createImportProgressReporter(): (
         ...currentLines.slice(1),
       ]);
       startSpinner();
+      return;
+    }
+
+    if (event.kind === "materialization_start") {
+      currentLines = [
+        `${theme.infoLabel("MATERIALIZING")} __SPINNER__ staging -> final`,
+        `Datasets: ${event.datasets.join(" > ")}`,
+        `Files imported: ${formatCount(event.completedFiles)}/${formatCount(event.totalFiles)} | Rows: ${formatCount(event.processedRows)}/${formatCount(event.totalRows)}`,
+        `Batches committed: ${formatCount(event.committedBatches)}/${formatCount(event.totalBatches)}`,
+        `Current: waiting for final materialization...`,
+      ];
+      renderBlock([
+        currentLines[0]!.replace(
+          "__SPINNER__",
+          theme.blue(frames[frameIndex % frames.length] ?? "⠋"),
+        ),
+        ...currentLines.slice(1),
+      ]);
+      startSpinner();
+      return;
+    }
+
+    if (event.kind === "materialization_progress") {
+      currentLines = [
+        `${theme.infoLabel("MATERIALIZING")} __SPINNER__ status`,
+        `Dataset: ${event.dataset} (${formatCount(event.datasetIndex)}/${formatCount(event.totalDatasets)}) | completed ${formatCount(event.completedDatasets)}/${formatCount(event.totalDatasets)}`,
+        `Target table: ${event.targetTable}`,
+        `Files imported: ${formatCount(event.completedFiles)}/${formatCount(event.totalFiles)} | Rows staged: ${formatCount(event.processedRows)}/${formatCount(event.totalRows)}`,
+        `Batches committed: ${formatCount(event.committedBatches)}/${formatCount(event.totalBatches)}`,
+        `Step: ${event.stepLabel}${event.elapsedMs === undefined ? "" : ` | elapsed ${formatDuration(event.elapsedMs)}`}`,
+      ];
+      renderBlock([
+        currentLines[0]!.replace(
+          "__SPINNER__",
+          theme.blue(frames[frameIndex % frames.length] ?? "⠋"),
+        ),
+        ...currentLines.slice(1),
+      ]);
+      startSpinner();
+      return;
+    }
+
+    if (event.kind === "materialization_finish") {
+      finalizeDynamicOutput();
+      console.log(
+        theme.successLabel("MATERIALIZING"),
+        `Completed ${formatCount(event.completedDatasets)}/${formatCount(event.totalDatasets)} staged dataset(s).`,
+      );
+      console.log(
+        formatKeyValue(
+          "Secondary CNAE rows",
+          formatCount(event.secondaryCnaesRows),
+        ),
+      );
+      console.log(
+        formatKeyValue(
+          "Secondary CNAE duration",
+          formatDuration(event.secondaryCnaesDurationMs),
+        ),
+      );
       return;
     }
 

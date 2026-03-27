@@ -42,7 +42,7 @@ cnpj-db-loader validate ./downloads/extracted
 cnpj-db-loader sanitize ./downloads/extracted
 cnpj-db-loader db set "postgresql://user:password@localhost:5432/cnpj"
 cnpj-db-loader schema generate --profile full
-cnpj-db-loader import ./downloads/sanitized --batch-size 500 --verbose-progress
+cnpj-db-loader import ./downloads/sanitized --load-batch-size 500 --materialize-batch-size 50000 --verbose-progress
 ```
 
 ## Stable commands
@@ -58,7 +58,10 @@ cnpj-db-loader db set <url>
 cnpj-db-loader db show
 cnpj-db-loader db test [--db-url <url>]
 cnpj-db-loader db reset [--yes]
-cnpj-db-loader import <input> [--db-url <url>] [--dataset <name>] [--batch-size <size>] [--verbose-progress] [-f]
+cnpj-db-loader import <input> [--db-url <url>] [--dataset <name>] [--load-batch-size <size>] [--materialize-batch-size <size>] [--verbose-progress] [-f]
+cnpj-db-loader import load <input> [--db-url <url>] [--dataset <name>] [--load-batch-size <size>] [--verbose-progress] [-f]
+cnpj-db-loader import materialize <input> [--db-url <url>] [--dataset <name>] [--materialize-batch-size <size>] [--verbose-progress] [-f]
+cnpj-db-loader import cleanup-staging [--db-url <url>] [--dataset <name>] [--validated-path <path>] [-f]
 cnpj-db-loader doctor [--input <path>] [--db-url <url>]
 cnpj-db-loader quarantine stats [--dataset <name>] [--category <name>] [--stage <name>] [--retryable] [--terminal]
 cnpj-db-loader quarantine list [--dataset <name>] [--category <name>] [--stage <name>] [--retryable] [--terminal] [--limit <number>] [--after-id <id>]
@@ -75,7 +78,11 @@ For `import`, the CLI now also writes an incremental JSONL progress log with one
 
 The final import summary now includes baseline timing and throughput metrics such as preparatory scan duration, execution duration, insert time, retry time, quarantine time, rows per second, and batches per minute.
 
-The import internals are now split into dedicated modules such as planner, source reader, parser, normalizer, checkpoint manager, quarantine writer, staging writer, and finalizer so staged bulk-load changes can be implemented without rewriting the whole import command.
+The import internals are now split into dedicated modules such as planner, source reader, parser, normalizer, checkpoint manager, quarantine writer, staging writer, materializer, and finalizer so staged bulk-load and final materialization changes can be implemented without rewriting the whole import command.
+
+The CLI now exposes a split workflow as well: `import` runs the full pipeline, `import load` stops after staging/direct writes, `import materialize` resumes from the saved plan and pushes staged rows into the final tables, and `import cleanup-staging` truncates staging tables for a clean rerun.
+
+Materialization progress is now checkpointed separately from file-load checkpoints, and the materializer works in resumable chunks controlled by `--materialize-batch-size`. During long final materialization steps, the CLI keeps the live progress output on a dedicated MATERIALIZING stage and the JSONL progress log emits periodic heartbeat entries so long-running staging-to-final upserts remain visible.
 
 The generated database schema now supports three profiles:
 

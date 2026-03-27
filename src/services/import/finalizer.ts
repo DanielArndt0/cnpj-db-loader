@@ -53,6 +53,7 @@ export function createDatasetPerformanceTracker(
     insertDurationMs: 0,
     retryDurationMs: 0,
     quarantineDurationMs: 0,
+    materializationDurationMs: 0,
   };
 }
 
@@ -102,6 +103,10 @@ export function buildImportPerformanceSummary(input: {
       (sum, item) => sum + item.quarantineDurationMs,
       0,
     ),
+    materializationDurationMs: finalizedDatasets.reduce(
+      (sum, item) => sum + item.materializationDurationMs,
+      0,
+    ),
     rowsPerSecond: calculateRowsPerSecond(
       input.executionRowsCommitted,
       input.executionDurationMs,
@@ -117,12 +122,12 @@ export function buildImportPerformanceSummary(input: {
 export function buildImportWarnings(): string[] {
   return [
     "The importer uses exact file planning, checkpointed batch commits, and byte-offset resume. If a load unit fails, rerunning the same command resumes from the last committed checkpoint instead of restarting the full load.",
-    "Import plans are persisted in the database and reused for the same validated input, source files, and batch size so resumed imports do not recount rows unnecessarily.",
-    "Large datasets now land in lightweight staging tables through PostgreSQL COPY before final materialization. The final schema load is handled in a later phase of the pipeline.",
+    "Import plans are persisted in the database and reused for the same validated input, source files, and load batch size so resumed imports do not recount rows unnecessarily.",
+    "Large datasets now land in lightweight staging tables through PostgreSQL COPY and are materialized into the final relational tables in a controlled dependency order before the import finishes.",
     "When a new import plan starts, the selected staging tables are truncated before loading so staged bulk loads stay clean and predictable. Resumed plans keep the staged rows that already match the saved checkpoints.",
     "Rows that fail parsing, normalization, COPY fallback, or row-level inserts are moved to import_quarantine and the import continues from the next row.",
-    "The import summary includes baseline timing and throughput metrics for scan, execution, retry, and quarantine paths so future performance changes can be measured against a stable reference.",
-    "The batch size now defines the staging load unit size. Increase --batch-size only after validating RAM usage and PostgreSQL stability in your environment.",
+    "The import summary includes baseline timing and throughput metrics for scan, execution, staging writes, materialization, retry, and quarantine paths so future performance changes can be measured against a stable reference.",
+    "The load batch size defines the staging load unit size, while the materialization batch size defines how many staged rows each consolidation chunk processes before saving a materialization checkpoint.",
   ];
 }
 

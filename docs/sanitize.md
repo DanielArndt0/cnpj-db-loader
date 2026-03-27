@@ -32,7 +32,7 @@ cnpj-db-loader inspect ./downloads
 cnpj-db-loader extract ./downloads
 cnpj-db-loader validate ./downloads/extracted
 cnpj-db-loader sanitize ./downloads/extracted
-cnpj-db-loader import ./downloads/sanitized --batch-size 500 --verbose-progress
+cnpj-db-loader import ./downloads/sanitized --load-batch-size 500 --materialize-batch-size 50000 --verbose-progress
 ```
 
 ## What it improves

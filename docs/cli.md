@@ -13,6 +13,10 @@ cnpj-db-loader db set <url>
 cnpj-db-loader db show
 cnpj-db-loader db test [--db-url <url>]
 cnpj-db-loader db reset [--yes]
+cnpj-db-loader import <input> [--db-url <url>] [--dataset <name>] [--load-batch-size <size>] [--materialize-batch-size <size>] [--verbose-progress] [-f]
+cnpj-db-loader import load <input> [--db-url <url>] [--dataset <name>] [--load-batch-size <size>] [--verbose-progress] [-f]
+cnpj-db-loader import materialize <input> [--db-url <url>] [--dataset <name>] [--materialize-batch-size <size>] [--verbose-progress] [-f]
+cnpj-db-loader import cleanup-staging [--db-url <url>] [--dataset <name>] [--validated-path <path>] [-f]
 cnpj-db-loader doctor [--input <path>] [--db-url <url>]
 cnpj-db-loader quarantine stats [--dataset <name>] [--category <name>] [--stage <name>] [--retryable] [--terminal]
 cnpj-db-loader quarantine list [--dataset <name>] [--category <name>] [--stage <name>] [--retryable] [--terminal] [--limit <number>] [--after-id <id>]
@@ -21,7 +25,8 @@ cnpj-db-loader quarantine show <id> [--db-url <url>]
 
 ## Design notes
 
-- The public CLI stays intentionally small.
+- The public CLI stays intentionally small, but the import workflow now exposes split phases for automation.
+- `import` runs the whole pipeline, while `import load` and `import materialize` keep staging and final consolidation independently runnable.
 - Placeholder commands are not exposed.
 - Positional arguments are preferred when they make commands easier to type.
 - Only destructive actions ask for confirmation.

@@ -1,3 +1,4 @@
+import { ValidationError } from "../../core/errors/index.js";
 import type { TableLayout } from "../../dictionary/layouts/index.js";
 import { getInsertColumns } from "./sql.js";
 import { resolveImportWriteTarget } from "./targets.js";
@@ -22,6 +23,18 @@ export type NormalizeImportRowInput = {
   sourceRowNumber: number;
 };
 
+function validateRequiredColumns(layout: TableLayout, values: unknown[]): void {
+  for (const [index, field] of layout.fields.entries()) {
+    if (field.nullable || values[index] !== null) {
+      continue;
+    }
+
+    throw new ValidationError(
+      `Missing required value for ${field.columnName}.`,
+    );
+  }
+}
+
 export function normalizeImportRow({
   dataset,
   filePath,
@@ -45,6 +58,8 @@ export function normalizeImportRow({
     schemaCapabilities,
     writeTarget,
   );
+
+  validateRequiredColumns(layout, values);
 
   return {
     values,
