@@ -82,7 +82,7 @@ The import internals are now split into dedicated modules such as planner, sourc
 
 The CLI now exposes a split workflow as well: `import` runs the full pipeline, `import load` stops after staging/direct writes, `import materialize` resumes from the saved plan and pushes staged rows into the final tables, and `import cleanup-staging` truncates staging tables for a clean rerun.
 
-Materialization progress is now checkpointed separately from file-load checkpoints, and the materializer works in resumable chunks controlled by `--materialize-batch-size`. During long final materialization steps, the CLI keeps the live progress output on a dedicated MATERIALIZING stage and the JSONL progress log emits periodic heartbeat entries so long-running staging-to-final upserts remain visible.
+Materialization progress is now checkpointed separately from file-load checkpoints, and the materializer works in resumable chunks controlled by `--materialize-batch-size`. During long final materialization steps, the CLI keeps the live progress output on a dedicated MATERIALIZING stage and the JSONL progress log emits periodic heartbeat entries so long-running staging-to-final upserts remain visible. Secondary CNAE expansion and partner dedupe-key derivation now happen during materialization instead of inside the initial staged write path.
 
 The generated database schema now supports three profiles:
 

@@ -123,7 +123,7 @@ export function buildImportWarnings(): string[] {
   return [
     "The importer uses exact file planning, checkpointed batch commits, and byte-offset resume. If a load unit fails, rerunning the same command resumes from the last committed checkpoint instead of restarting the full load.",
     "Import plans are persisted in the database and reused for the same validated input, source files, and load batch size so resumed imports do not recount rows unnecessarily.",
-    "Large datasets now land in lightweight staging tables through PostgreSQL COPY and are materialized into the final relational tables in a controlled dependency order before the import finishes.",
+    "Large datasets now land in lightweight staging tables through PostgreSQL COPY with only light normalization on the write hot path. Heavier work such as partner dedupe keys and secondary CNAE expansion is deferred to the materialization stage before the import finishes.",
     "When a new import plan starts, the selected staging tables are truncated before loading so staged bulk loads stay clean and predictable. Resumed plans keep the staged rows that already match the saved checkpoints.",
     "Rows that fail parsing, normalization, COPY fallback, or row-level inserts are moved to import_quarantine and the import continues from the next row.",
     "The import summary includes baseline timing and throughput metrics for scan, execution, staging writes, materialization, retry, and quarantine paths so future performance changes can be measured against a stable reference.",

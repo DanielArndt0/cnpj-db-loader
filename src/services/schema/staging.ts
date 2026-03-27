@@ -46,17 +46,6 @@ export function createStagingSimplesSql(): string {
   );
 }
 
-export function createStagingSecondaryCnaesSql(): string {
-  return createUnloggedStagingTableSql(
-    "staging_establishment_secondary_cnaes",
-    [
-      "  establishment_cnpj_full text not null",
-      "  cnae_code text not null",
-      "  source_order integer not null",
-    ].join(",\n"),
-  );
-}
-
 export function createStagingSchemaParts(): string[] {
   return [
     "-- Staging tables for bulk-oriented imports",
@@ -64,6 +53,5 @@ export function createStagingSchemaParts(): string[] {
     createStagingEstablishmentsSql(),
     createStagingPartnersSql(),
     createStagingSimplesSql(),
-    createStagingSecondaryCnaesSql(),
   ];
 }

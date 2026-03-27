@@ -36,7 +36,7 @@ export function getSecondaryTargetTableName(
   }
 
   return usesStagingWriteTarget(dataset)
-    ? "staging_establishment_secondary_cnaes"
+    ? null
     : "establishment_secondary_cnaes";
 }
 
@@ -51,10 +51,6 @@ export function collectRequiredStagingTables(
     }
 
     tableNames.add(getTargetTableName(dataset));
-    const secondaryTableName = getSecondaryTargetTableName(dataset);
-    if (secondaryTableName) {
-      tableNames.add(secondaryTableName);
-    }
   }
 
   return [...tableNames];

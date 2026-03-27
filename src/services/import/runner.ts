@@ -567,7 +567,7 @@ async function runMaterializationStage(
     lastError: null,
   });
 
-  await materializeStagedDatasets({
+  const materializationSummary = await materializeStagedDatasets({
     client: execution.client,
     planId: execution.planId,
     datasets: execution.plan.datasets.map((datasetPlan) => datasetPlan.dataset),
@@ -583,6 +583,9 @@ async function runMaterializationStage(
     totalBatches: execution.plan.totalBatches,
     chunkSize: execution.materializeBatchSize,
   });
+
+  execution.counters.secondaryCnaesRows =
+    materializationSummary.secondaryCnaesRows;
 
   await updateImportPlanPhaseState(execution.client, {
     planId: execution.planId,

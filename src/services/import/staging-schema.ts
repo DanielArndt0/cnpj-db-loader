@@ -4,6 +4,39 @@ import { ValidationError } from "../../core/errors/index.js";
 import type { ImportDatasetType } from "./types.js";
 import { collectRequiredStagingTables } from "./targets.js";
 
+const LEGACY_STAGING_TABLES = [
+  "staging_establishment_secondary_cnaes",
+] as const;
+
+async function tableExists(
+  client: Client,
+  tableName: string,
+): Promise<boolean> {
+  const result = await client.query<{ exists: string | null }>(
+    "select to_regclass(current_schema() || '.' || $1) as exists",
+    [tableName],
+  );
+
+  return Boolean(result.rows[0]?.exists);
+}
+
+async function collectResettableStagingTables(
+  client: Client,
+  datasets: readonly ImportDatasetType[],
+): Promise<string[]> {
+  const tableNames = new Set(collectRequiredStagingTables(datasets));
+
+  if (datasets.includes("establishments")) {
+    for (const tableName of LEGACY_STAGING_TABLES) {
+      if (await tableExists(client, tableName)) {
+        tableNames.add(tableName);
+      }
+    }
+  }
+
+  return [...tableNames];
+}
+
 export async function ensureStagingSchemaSupport(
   client: Client,
   datasets: readonly ImportDatasetType[],
@@ -18,12 +51,7 @@ export async function ensureStagingSchemaSupport(
   const invalidTables: string[] = [];
 
   for (const tableName of requiredTables) {
-    const result = await client.query<{ exists: string | null }>(
-      "select to_regclass(current_schema() || '.' || $1) as exists",
-      [tableName],
-    );
-
-    if (!result.rows[0]?.exists) {
+    if (!(await tableExists(client, tableName))) {
       missingTables.push(tableName);
       continue;
     }
@@ -61,7 +89,7 @@ export async function resetStagingTablesForFreshPlan(
   client: Client,
   datasets: readonly ImportDatasetType[],
 ): Promise<string[]> {
-  const tableNames = collectRequiredStagingTables(datasets);
+  const tableNames = await collectResettableStagingTables(client, datasets);
 
   if (tableNames.length === 0) {
     return [];

@@ -6,6 +6,29 @@ import type {
   ImportWriteTarget,
 } from "./types.js";
 
+export type FieldValueParser = (rawValue: string) => unknown;
+
+export type PartnerDedupeKeyIndices = {
+  cnpjRoot: number;
+  partnerTypeCode: number;
+  partnerName: number;
+  partnerDocument: number;
+  partnerQualificationCode: number;
+  entryDate: number;
+  countryCode: number;
+  legalRepresentativeDocument: number;
+  legalRepresentativeName: number;
+  legalRepresentativeQualificationCode: number;
+  ageGroupCode: number;
+};
+
+export type SecondaryCnaesExtractionIndices = {
+  cnpjRoot: number;
+  cnpjOrder: number;
+  cnpjCheckDigits: number;
+  secondaryCnaesRaw: number;
+};
+
 export function parseDelimitedLine(line: string): string[] {
   const fields: string[] = [];
   let current = "";
@@ -69,49 +92,78 @@ export function normalizeFieldCount(
   return normalized;
 }
 
+export function createFieldValueParser(
+  dataType: TableLayout["fields"][number]["dataType"],
+): FieldValueParser {
+  switch (dataType) {
+    case "integer":
+      return (rawValue) => {
+        const trimmed = rawValue.trim();
+        if (trimmed === "") {
+          return null;
+        }
+
+        return /^-?\d+$/.test(trimmed) ? Number.parseInt(trimmed, 10) : null;
+      };
+    case "numeric":
+      return (rawValue) => {
+        const trimmed = rawValue.trim();
+        if (trimmed === "") {
+          return null;
+        }
+
+        if (trimmed.includes(",") && trimmed.includes(".")) {
+          return trimmed.replace(/\./g, "").replace(/,/g, ".");
+        }
+
+        if (trimmed.includes(",")) {
+          return trimmed.replace(/,/g, ".");
+        }
+
+        return trimmed;
+      };
+    case "date":
+      return (rawValue) => {
+        const trimmed = rawValue.trim();
+        if (trimmed === "" || trimmed === "00000000") {
+          return null;
+        }
+
+        if (!/^\d{8}$/.test(trimmed)) {
+          return null;
+        }
+
+        return `${trimmed.slice(0, 4)}-${trimmed.slice(4, 6)}-${trimmed.slice(6, 8)}`;
+      };
+    case "boolean":
+      return (rawValue) => {
+        const trimmed = rawValue.trim();
+        if (trimmed === "") {
+          return null;
+        }
+
+        const normalized = trimmed.toLowerCase();
+        if (["1", "true", "t", "y", "yes", "s"].includes(normalized)) {
+          return true;
+        }
+        if (["0", "false", "f", "n", "no"].includes(normalized)) {
+          return false;
+        }
+        return null;
+      };
+    default:
+      return (rawValue) => {
+        const trimmed = rawValue.trim();
+        return trimmed === "" ? null : trimmed;
+      };
+  }
+}
+
 export function toDatabaseValue(
   dataType: TableLayout["fields"][number]["dataType"],
   rawValue: string,
 ): unknown {
-  const trimmed = rawValue.trim();
-
-  if (trimmed === "") {
-    return null;
-  }
-
-  switch (dataType) {
-    case "integer":
-      return /^-?\d+$/.test(trimmed) ? Number.parseInt(trimmed, 10) : null;
-    case "numeric": {
-      let normalized = trimmed;
-
-      if (normalized.includes(",") && normalized.includes(".")) {
-        normalized = normalized.replace(/\./g, "").replace(/,/g, ".");
-      } else if (normalized.includes(",")) {
-        normalized = normalized.replace(/,/g, ".");
-      }
-
-      return normalized;
-    }
-    case "date":
-      if (!/^\d{8}$/.test(trimmed) || trimmed === "00000000") {
-        return null;
-      }
-
-      return `${trimmed.slice(0, 4)}-${trimmed.slice(4, 6)}-${trimmed.slice(6, 8)}`;
-    case "boolean": {
-      const normalized = trimmed.toLowerCase();
-      if (["1", "true", "t", "y", "yes", "s"].includes(normalized)) {
-        return true;
-      }
-      if (["0", "false", "f", "n", "no"].includes(normalized)) {
-        return false;
-      }
-      return null;
-    }
-    default:
-      return trimmed;
-  }
+  return createFieldValueParser(dataType)(rawValue);
 }
 
 function normalizeCode(value: unknown, fallback: string): string {
@@ -120,6 +172,72 @@ function normalizeCode(value: unknown, fallback: string): string {
   }
 
   return fallback;
+}
+
+export function createPartnerDedupeKeyBuilder(
+  indices: PartnerDedupeKeyIndices,
+): (record: readonly unknown[]) => string {
+  const orderedIndices = [
+    indices.cnpjRoot,
+    indices.partnerTypeCode,
+    indices.partnerName,
+    indices.partnerDocument,
+    indices.partnerQualificationCode,
+    indices.entryDate,
+    indices.countryCode,
+    indices.legalRepresentativeDocument,
+    indices.legalRepresentativeName,
+    indices.legalRepresentativeQualificationCode,
+    indices.ageGroupCode,
+  ];
+
+  return (record) =>
+    orderedIndices
+      .map((index) => {
+        const value = record[index];
+        return value == null ? "" : String(value).trim();
+      })
+      .join("|");
+}
+
+export function createSecondaryCnaesExtractor(
+  indices: SecondaryCnaesExtractionIndices,
+): (record: readonly unknown[]) => Array<[string, string, number]> {
+  return (record) => {
+    const root = String(record[indices.cnpjRoot] ?? "");
+    const order = String(record[indices.cnpjOrder] ?? "");
+    const digits = String(record[indices.cnpjCheckDigits] ?? "");
+    const raw = record[indices.secondaryCnaesRaw];
+
+    if (
+      !root ||
+      !order ||
+      !digits ||
+      typeof raw !== "string" ||
+      raw.trim() === ""
+    ) {
+      return [];
+    }
+
+    const cnpjFull = `${root}${order}${digits}`;
+    const seen = new Set<string>();
+    const rows: Array<[string, string, number]> = [];
+
+    raw
+      .split(",")
+      .map((value) => value.trim())
+      .filter(Boolean)
+      .forEach((cnaeCode, index) => {
+        if (seen.has(cnaeCode)) {
+          return;
+        }
+
+        seen.add(cnaeCode);
+        rows.push([cnpjFull, cnaeCode, index + 1]);
+      });
+
+    return rows;
+  };
 }
 
 function buildPartnerDedupeKey(
@@ -199,37 +317,10 @@ export function extractSecondaryCnaes(
   record: unknown[],
   columns: string[],
 ): Array<[string, string, number]> {
-  const root = String(record[columns.indexOf("cnpj_root")] ?? "");
-  const order = String(record[columns.indexOf("cnpj_order")] ?? "");
-  const digits = String(record[columns.indexOf("cnpj_check_digits")] ?? "");
-  const raw = record[columns.indexOf("secondary_cnaes_raw")];
-
-  if (
-    !root ||
-    !order ||
-    !digits ||
-    typeof raw !== "string" ||
-    raw.trim() === ""
-  ) {
-    return [];
-  }
-
-  const cnpjFull = `${root}${order}${digits}`;
-  const seen = new Set<string>();
-  const rows: Array<[string, string, number]> = [];
-
-  raw
-    .split(",")
-    .map((value) => value.trim())
-    .filter(Boolean)
-    .forEach((cnaeCode, index) => {
-      if (seen.has(cnaeCode)) {
-        return;
-      }
-
-      seen.add(cnaeCode);
-      rows.push([cnpjFull, cnaeCode, index + 1]);
-    });
-
-  return rows;
+  return createSecondaryCnaesExtractor({
+    cnpjRoot: columns.indexOf("cnpj_root"),
+    cnpjOrder: columns.indexOf("cnpj_order"),
+    cnpjCheckDigits: columns.indexOf("cnpj_check_digits"),
+    secondaryCnaesRaw: columns.indexOf("secondary_cnaes_raw"),
+  })(record);
 }

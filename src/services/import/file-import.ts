@@ -16,7 +16,7 @@ import {
   writeImportCheckpoint,
 } from "./checkpoint-manager.js";
 import { parseImportSourceLine } from "./parser.js";
-import { normalizeImportRow } from "./normalizer.js";
+import { createImportRowNormalizer } from "./normalizer.js";
 import { readImportSourceLines } from "./source-reader.js";
 import {
   writeImportBatchToTarget,
@@ -25,7 +25,6 @@ import {
 import { resolveImportWriteTarget } from "./targets.js";
 import { writeImportQuarantineRow } from "./quarantine-writer.js";
 import { buildParsedPayload } from "./transform.js";
-import { getInsertColumns } from "./sql.js";
 
 export async function importDatasetFile(
   client: Client,
@@ -62,7 +61,6 @@ export async function importDatasetFile(
   const filePath = filePlan.absolutePath;
   const layout = DATASET_LAYOUTS[dataset];
   const writeTarget = resolveImportWriteTarget(dataset);
-  const columns = getInsertColumns(dataset, schemaCapabilities, writeTarget);
   let checkpoint =
     filePlan.checkpoint ??
     (await readImportCheckpoint(
@@ -116,8 +114,16 @@ export async function importDatasetFile(
     return checkpoint.rowsCommitted;
   }
 
+  const rowNormalizer = createImportRowNormalizer({
+    dataset,
+    filePath,
+    layout,
+    schemaCapabilities,
+  });
+  const columns = rowNormalizer.columns;
+
   let fileRowsCommitted = checkpoint.rowsCommitted;
-  let batchRows: ReturnType<typeof normalizeImportRow>[] = [];
+  let batchRows: ReturnType<typeof rowNormalizer.normalize>[] = [];
   let batchLastOffset = checkpoint.byteOffset;
 
   const persistCheckpoint = async (
@@ -363,14 +369,10 @@ export async function importDatasetFile(
       try {
         const nextSourceRowNumber = fileRowsCommitted + 1;
         const parsedLine = parseImportSourceLine(sourceLine);
-        const normalizedRow = normalizeImportRow({
-          dataset,
-          filePath,
-          layout,
+        const normalizedRow = rowNormalizer.normalize(
           parsedLine,
-          schemaCapabilities,
-          sourceRowNumber: nextSourceRowNumber,
-        });
+          nextSourceRowNumber,
+        );
 
         batchRows.push(normalizedRow);
         fileRowsCommitted = nextSourceRowNumber;

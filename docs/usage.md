@@ -51,7 +51,7 @@ cnpj-db-loader schema generate --profile staging
 - it starts with an exact preparatory scan that counts source rows and planned batches when no saved plan exists
 - it persists the import plan in the database and reuses it on resume when the validated source files and batch size match
 - it reads files in streaming mode
-- it loads the large datasets into lightweight staging tables through PostgreSQL COPY and materializes them into the final relational tables in dependency order
+- it loads the large datasets into lightweight staging tables through PostgreSQL COPY with only light normalization in the hot path and defers heavier work to the materialization stage in dependency order
 - once the file import phase ends, the terminal switches to a dedicated MATERIALIZING stage and the JSONL progress log emits heartbeat entries during long staged-to-final upserts
 - it still upserts the smaller domain datasets directly into the final schema
 - it commits per load unit instead of holding one giant transaction
