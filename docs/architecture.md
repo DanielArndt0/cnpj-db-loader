@@ -42,6 +42,7 @@ The importer is now split into focused modules so future performance work can re
 - `normalizer`: validates field counts and transforms parsed rows into database-ready records
 - `staging-writer`: chooses the current write target and uses COPY for staged bulk loads
 - `materializer`: consolidates staged datasets into the final relational schema with ordered upserts and resumable chunk checkpoints
+- the materializer now reconciles missing lookup/domain codes from staged datasets before final upserts so late foreign-key failures do not stop the consolidation flow on placeholder-compatible domains
 - materialization progress is now exposed explicitly to the CLI progress reporter and to JSONL heartbeat logs so long-running final upserts do not look stalled
 - `finalizer`: centralizes performance tracking and import summary generation
 - `checkpoint-manager`: owns checkpoint resume, persistence, and failed-file markers

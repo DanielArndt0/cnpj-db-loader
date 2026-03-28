@@ -14,6 +14,7 @@ import {
   isMaterializationDataset,
   type MaterializationDataset,
 } from "./materialization-sql.js";
+import { reconcileMaterializationLookups } from "./materialization-lookups.js";
 import { type MutableDatasetPerformance } from "./finalizer.js";
 import { getFinalTargetTableName } from "./targets.js";
 import type {
@@ -521,6 +522,50 @@ export async function materializeStagedDatasets(input: {
     });
 
     try {
+      emitMaterializationProgress(input.onProgress, {
+        datasets: materializationDatasets,
+        dataset,
+        datasetIndex: datasetPosition,
+        targetTable,
+        stepLabel: "Reconciling lookup dependencies",
+        completedDatasets: summary.datasets.length,
+        completedFiles: input.completedFiles,
+        totalFiles: input.totalFiles,
+        processedRows: input.processedRows,
+        totalRows: input.totalRows,
+        committedBatches: input.committedBatches,
+        totalBatches: input.totalBatches,
+      });
+
+      await appendJsonLinesLog(input.progressLogPath, {
+        kind: "materialization_lookup_reconciliation_started",
+        dataset,
+        datasetIndex: datasetPosition,
+        totalDatasets: materializationDatasets.length,
+        targetTable,
+        timestamp: new Date().toISOString(),
+      });
+
+      const reconciliation = await reconcileMaterializationLookups({
+        client: input.client,
+        dataset,
+      });
+
+      await appendJsonLinesLog(input.progressLogPath, {
+        kind: "materialization_lookup_reconciliation_completed",
+        dataset,
+        datasetIndex: datasetPosition,
+        totalDatasets: materializationDatasets.length,
+        targetTable,
+        totalInsertedCodes: reconciliation.totalInsertedCodes,
+        results: reconciliation.results.map((item) => ({
+          lookupTable: item.lookupTable,
+          insertedCodes: item.insertedCodes,
+        })),
+        durationMs: reconciliation.durationMs,
+        timestamp: new Date().toISOString(),
+      });
+
       const result = await materializeDatasetByChunks({
         client: input.client,
         planId: input.planId,
