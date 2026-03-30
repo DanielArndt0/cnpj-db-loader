@@ -73,7 +73,7 @@ cnpj-db-loader import load ./downloads/sanitized --load-batch-size 20000
 cnpj-db-loader import materialize ./downloads/sanitized --materialize-batch-size 50000
 ```
 
-Increase `--load-batch-size` only after you confirm that your PostgreSQL instance and memory budget can handle larger COPY load units. Use `--materialize-batch-size` to control how many staged rows each materialization chunk processes before saving a materialization checkpoint.
+Increase `--load-batch-size` only after you confirm that your PostgreSQL instance and memory budget can handle larger COPY load units. Use `--materialize-batch-size` to control how many staged rows each materialization chunk processes before saving a materialization checkpoint. The saved import plan keeps the original load batch size used during planning/loading, so changing only `--materialize-batch-size` does not create a new plan; the UI now shows both values separately during resume/materialization runs.
 
 ## PostgreSQL and Docker recommendations
 

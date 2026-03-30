@@ -23,6 +23,7 @@ import {
   resetMaterializationCheckpoints,
 } from "./materialization-checkpoints.js";
 import { materializeStagedDatasets } from "./materializer.js";
+import { isMaterializationDataset } from "./materialization-sql.js";
 import {
   collectDatasetEntriesForImport,
   prepareImportPlan,
@@ -158,6 +159,22 @@ function resolveMaterializeBatchSize(
   options: ImportOptions | undefined,
 ): number {
   return Math.max(1, options?.materializeBatchSize ?? 50_000);
+}
+
+function buildExpectedStagedRowsByDataset(
+  datasets: readonly ImportDatasetPlan[],
+): ReadonlyMap<ImportDatasetType, number> {
+  return new Map(
+    datasets
+      .filter((datasetPlan) => isMaterializationDataset(datasetPlan.dataset))
+      .map((datasetPlan) => [
+        datasetPlan.dataset,
+        datasetPlan.files.reduce(
+          (sum, filePlan) => sum + (filePlan.checkpoint?.rowsCommitted ?? 0),
+          0,
+        ),
+      ]),
+  );
 }
 
 async function prepareExecutionForLoad(
@@ -325,6 +342,8 @@ async function prepareExecutionForMaterialization(
     totalDatasets: plan.datasets.length,
     totalFiles: plan.totalFiles,
     batchSize: savedPlan.plan.batchSize,
+    loadBatchSize: savedPlan.plan.batchSize,
+    materializeBatchSize: resolveMaterializeBatchSize(input.options),
     totalRows: plan.totalRows,
     totalBatches: plan.totalBatches,
     targetDatabase: input.targetDatabase,
@@ -567,6 +586,12 @@ async function runMaterializationStage(
     lastError: null,
   });
 
+  await hydrateImportPlanWithCheckpoints(
+    execution.client,
+    execution.plan.datasets,
+    execution.loadBatchSize,
+  );
+
   const materializationSummary = await materializeStagedDatasets({
     client: execution.client,
     planId: execution.planId,
@@ -579,6 +604,9 @@ async function runMaterializationStage(
         datasetPlan.dataset,
         datasetPlan.totalRows,
       ]),
+    ),
+    expectedStagedRowsByDataset: buildExpectedStagedRowsByDataset(
+      execution.plan.datasets,
     ),
     onProgress,
     completedFiles: execution.counters.completedFiles,

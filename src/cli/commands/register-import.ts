@@ -3,7 +3,6 @@ import type { Command } from "commander";
 import { confirm } from "../../core/prompts/confirm.js";
 import type { ImportOptions } from "../../services/index.js";
 import {
-  cleanupImportStaging,
   importDataToDatabase,
   loadImportDataToStaging,
   materializeImportedData,
@@ -12,7 +11,6 @@ import {
 import {
   createImportProgressReporter,
   printImportSummary,
-  printInfoWithLog,
 } from "../ui/output.js";
 
 type SharedOptions = {
@@ -62,11 +60,17 @@ function applySharedImportOptions(
   return nextOptions;
 }
 
+function hasForceFlag(
+  argv: readonly string[] = process.argv.slice(2),
+): boolean {
+  return argv.includes("-f") || argv.includes("--force");
+}
+
 async function confirmImportAction(
   message: string,
   force?: boolean,
 ): Promise<boolean> {
-  if (force) {
+  if (force || hasForceFlag()) {
     return true;
   }
 
@@ -177,59 +181,4 @@ export function registerImportCommands(program: Command): void {
     const logFilePath = await writeCommandLog("import-materialize", summary);
     printImportSummary(summary, logFilePath);
   });
-
-  registerSharedOptions(
-    importCommand
-      .command("cleanup-staging")
-      .description(
-        "Truncate staging tables so a fresh bulk load can start from a clean intermediate state.",
-      ),
-  )
-    .option(
-      "--validated-path <path>",
-      "Optionally clear saved materialization checkpoints for the latest plan of this validated path.",
-    )
-    .action(
-      async (
-        options: SharedOptions & {
-          validatedPath?: string;
-        },
-      ) => {
-        const confirmed = await confirmImportAction(
-          "Truncate the configured staging tables now? This removes intermediate bulk-load data.",
-          options.force,
-        );
-        if (!confirmed) {
-          console.log("Cleanup cancelled.");
-          return;
-        }
-
-        const cleanupOptions: {
-          dbUrl?: string;
-          dataset?: ImportOptions["dataset"];
-          validatedPath?: string;
-        } = {};
-
-        if (options.dbUrl) {
-          cleanupOptions.dbUrl = options.dbUrl;
-        }
-        if (options.dataset) {
-          cleanupOptions.dataset = options.dataset as ImportOptions["dataset"];
-        }
-        if (options.validatedPath) {
-          cleanupOptions.validatedPath = options.validatedPath;
-        }
-
-        const result = await cleanupImportStaging(cleanupOptions);
-        const logFilePath = await writeCommandLog(
-          "import-cleanup-staging",
-          result,
-        );
-        printInfoWithLog(
-          "IMPORT",
-          `Truncated ${result.truncatedTables.length} staging table(s) on ${result.targetDatabase}.`,
-          logFilePath,
-        );
-      },
-    );
 }

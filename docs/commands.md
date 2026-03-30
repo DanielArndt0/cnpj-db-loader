@@ -19,7 +19,6 @@
 | `import <input>`                | Run the full pipeline: plan, load validated files into staging/direct final targets, materialize staged datasets into final tables, and finalize the import plan. |
 | `import load <input>`           | Prepare the plan and run only the load phase. Heavy datasets stop in `staging_*`; domain datasets still upsert directly into the final schema.                    |
 | `import materialize <input>`    | Resume from the saved import plan and materialize staged datasets into the final relational tables with resumable chunks.                                         |
-| `import cleanup-staging`        | Truncate the staging tables so a fresh bulk load can start from a clean intermediate state.                                                                       |
 | `doctor`                        | Run a quick environment diagnosis.                                                                                                                                |
 | `quarantine stats`              | Show aggregate counts for the `import_quarantine` table.                                                                                                          |
 | `quarantine list`               | List quarantined rows with optional filters.                                                                                                                      |
@@ -46,7 +45,7 @@ cnpj-db-loader import ./downloads/sanitized --db-url "postgresql://user:password
 cnpj-db-loader import ./downloads/sanitized --dataset companies --load-batch-size 500
 cnpj-db-loader import load ./downloads/sanitized --load-batch-size 20000
 cnpj-db-loader import materialize ./downloads/sanitized --materialize-batch-size 50000
-cnpj-db-loader import cleanup-staging --validated-path ./downloads/sanitized
+cnpj-db-loader database cleanup staging --validated-path ./downloads/sanitized
 cnpj-db-loader import ./downloads/sanitized --force
 cnpj-db-loader quarantine stats
 cnpj-db-loader quarantine stats --dataset establishments --category invalid_utf8_sequence --retryable

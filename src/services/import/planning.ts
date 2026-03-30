@@ -206,6 +206,7 @@ export async function buildImportPlan(
     totalDatasets: datasetEntries.length,
     totalFiles,
     batchSize,
+    loadBatchSize: batchSize,
     targetDatabase,
   });
 

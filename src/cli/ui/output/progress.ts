@@ -179,6 +179,27 @@ export function createImportProgressReporter(): (
   const shortPath = (value: string, maxLength = 68): string =>
     truncateMiddle(value, maxLength);
 
+  const formatPlanBatchLine = (event: {
+    totalDatasets: number;
+    totalFiles: number;
+    batchSize: number;
+    loadBatchSize?: number;
+    materializeBatchSize?: number;
+  }): string => {
+    if (
+      typeof event.loadBatchSize === "number" &&
+      typeof event.materializeBatchSize === "number"
+    ) {
+      return `Datasets: ${formatCount(event.totalDatasets)} | Files: ${formatCount(event.totalFiles)} | Load batch: ${formatCount(event.loadBatchSize)} | Materialize batch: ${formatCount(event.materializeBatchSize)}`;
+    }
+
+    if (typeof event.loadBatchSize === "number") {
+      return `Datasets: ${formatCount(event.totalDatasets)} | Files: ${formatCount(event.totalFiles)} | Batch size: ${formatCount(event.loadBatchSize)}`;
+    }
+
+    return `Datasets: ${formatCount(event.totalDatasets)} | Files: ${formatCount(event.totalFiles)} | Batch size: ${formatCount(event.batchSize)}`;
+  };
+
   const renderBlock = (lines: string[]): void => {
     const block = lines.join("\n");
 
@@ -261,7 +282,7 @@ export function createImportProgressReporter(): (
         `${theme.infoLabel("PREPARING")} __SPINNER__ import plan`,
         `Input: ${shortPath(event.validatedPath)}`,
         `Target: ${event.targetDatabase}`,
-        `Datasets: ${formatCount(event.totalDatasets)} | Files: ${formatCount(event.totalFiles)} | Batch size: ${formatCount(event.batchSize)}`,
+        formatPlanBatchLine(event),
         `Scanning: 0/${formatCount(event.totalFiles)} files`,
         `Rows counted: ${formatCount(0)}`,
         `Current: waiting...`,
@@ -299,7 +320,7 @@ export function createImportProgressReporter(): (
       renderBlock([
         `${theme.successLabel("PREPARING")} ${event.reused ? "Saved import plan reused." : "Import plan ready."}`,
         `Target: ${event.targetDatabase}${event.planId === null ? "" : ` | Plan #${formatCount(event.planId)}`}`,
-        `Datasets: ${formatCount(event.totalDatasets)} | Files: ${formatCount(event.totalFiles)} | Batch size: ${formatCount(event.batchSize)}`,
+        formatPlanBatchLine(event),
         `Rows counted exactly: ${formatCount(event.totalRows)}`,
         `Batches planned exactly: ${formatCount(event.totalBatches)}`,
         `Order: ${event.executionOrder.join(" > ")}`,

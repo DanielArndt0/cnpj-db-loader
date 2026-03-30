@@ -49,7 +49,7 @@ The importer is now split into focused modules so future performance work can re
 - `quarantine-writer`: stores bad rows without stopping long imports
 - `runner`: orchestrates the current import flow while keeping the service entry point small
 
-The project now also generates dedicated staging tables for large datasets. The CLI exposes both a one-shot command (`import`) and split commands (`import load`, `import materialize`, `import cleanup-staging`). The write path sends the heavy datasets to staging tables first with only light normalization, then consolidates them into the final schema in dependency order while keeping the smaller catalog datasets on the final schema directly. Expensive transformations such as partner dedupe-key derivation and secondary CNAE expansion now run during materialization instead of inside the load hot path.
+The project now also generates dedicated staging tables for large datasets. The CLI exposes both a one-shot command (`import`) and split commands (`import load`, `import materialize`). Staging cleanup is handled explicitly through `database cleanup staging`. The write path sends the heavy datasets to staging tables first with only light normalization, then consolidates them into the final schema in dependency order while keeping the smaller catalog datasets on the final schema directly. Expensive transformations such as partner dedupe-key derivation and secondary CNAE expansion now run during materialization instead of inside the load hot path.
 
 ## Staging schema
 

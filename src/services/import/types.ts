@@ -153,6 +153,8 @@ export type ImportProgressEvent =
       totalDatasets: number;
       totalFiles: number;
       batchSize: number;
+      loadBatchSize?: number;
+      materializeBatchSize?: number;
       targetDatabase: string;
     }
   | {
@@ -167,6 +169,8 @@ export type ImportProgressEvent =
       totalDatasets: number;
       totalFiles: number;
       batchSize: number;
+      loadBatchSize?: number;
+      materializeBatchSize?: number;
       totalRows: number;
       totalBatches: number;
       targetDatabase: string;

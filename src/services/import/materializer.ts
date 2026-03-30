@@ -2,6 +2,7 @@ import { performance } from "node:perf_hooks";
 
 import type { Client } from "pg";
 
+import { ValidationError } from "../../core/errors/index.js";
 import { appendJsonLinesLog } from "../logging.service.js";
 import {
   readMaterializationCheckpoint,
@@ -53,6 +54,11 @@ type CountRow = {
 };
 
 type MaxRow = {
+  max_staging_id: string;
+};
+
+type StagingStateRow = {
+  total_count: string;
   max_staging_id: string;
 };
 
@@ -151,6 +157,88 @@ async function readStagingMaxId(
   return Number.parseInt(result.rows[0]?.max_staging_id ?? "0", 10);
 }
 
+async function readStagingState(
+  client: Client,
+  stagingTable: string,
+): Promise<{ rowCount: number; maxStagingId: number }> {
+  const result = await client.query<StagingStateRow>(
+    `select count(*)::bigint as total_count, coalesce(max(staging_id), 0)::bigint as max_staging_id from ${stagingTable}`,
+  );
+
+  return {
+    rowCount: Number.parseInt(result.rows[0]?.total_count ?? "0", 10),
+    maxStagingId: Number.parseInt(result.rows[0]?.max_staging_id ?? "0", 10),
+  };
+}
+
+function buildEmptyStagingMessage(
+  stagingTable: string,
+  dataset: MaterializationDataset,
+  expectedRows: number | undefined,
+): string {
+  if (typeof expectedRows === "number" && expectedRows > 0) {
+    return `The staging table ${stagingTable} is empty, but ${expectedRows} row(s) are expected for ${dataset} based on the saved load checkpoints. Run "cnpj-db-loader import load" again or clear stale checkpoint data before materializing.`;
+  }
+
+  return `The staging table ${stagingTable} is empty for ${dataset}. Load the dataset into staging before running materialization.`;
+}
+
+function buildStagingMismatchMessage(
+  stagingTable: string,
+  dataset: MaterializationDataset,
+  expectedRows: number,
+  actualRows: number,
+): string {
+  return `The staging table ${stagingTable} currently contains ${actualRows} row(s), but ${expectedRows} row(s) are expected for ${dataset} based on the saved load checkpoints. The saved staging state no longer matches the persisted load progress. Reload staging or clear the stale checkpoint data before retrying materialization.`;
+}
+
+async function validateStagingDatasetState(input: {
+  client: Client;
+  dataset: MaterializationDataset;
+  datasetIndex: number;
+  totalDatasets: number;
+  expectedRows: number | undefined;
+  progressLogPath: string;
+}): Promise<{ rowCount: number; maxStagingId: number }> {
+  const stagingTable = STAGING_TABLE_BY_DATASET[input.dataset];
+  const state = await readStagingState(input.client, stagingTable);
+
+  await appendJsonLinesLog(input.progressLogPath, {
+    kind: "materialization_staging_validation_completed",
+    dataset: input.dataset,
+    datasetIndex: input.datasetIndex,
+    totalDatasets: input.totalDatasets,
+    stagingTable,
+    expectedRows: input.expectedRows ?? null,
+    actualRows: state.rowCount,
+    maxStagingId: state.maxStagingId,
+    timestamp: new Date().toISOString(),
+  });
+
+  if (state.rowCount === 0) {
+    throw new ValidationError(
+      buildEmptyStagingMessage(stagingTable, input.dataset, input.expectedRows),
+    );
+  }
+
+  if (
+    typeof input.expectedRows === "number" &&
+    input.expectedRows > 0 &&
+    state.rowCount !== input.expectedRows
+  ) {
+    throw new ValidationError(
+      buildStagingMismatchMessage(
+        stagingTable,
+        input.dataset,
+        input.expectedRows,
+        state.rowCount,
+      ),
+    );
+  }
+
+  return state;
+}
+
 async function readRowCount(
   client: Client,
   tableName: string,
@@ -190,6 +278,7 @@ async function validateDatasetCheckpoint(input: {
   dataset: MaterializationDataset;
   targetTable: string;
   expectedRows?: number;
+  expectedStagedRows?: number;
 }): Promise<ValidatedCheckpoint> {
   const stagingTable = STAGING_TABLE_BY_DATASET[input.dataset];
   let checkpoint = await readMaterializationCheckpoint(
@@ -316,6 +405,7 @@ async function materializeDatasetByChunks(input: {
   targetTable: string;
   chunkSize: number;
   expectedRows?: number;
+  expectedStagedRows?: number;
   schemaCapabilities: ImportSchemaCapabilities;
   progressLogPath: string;
   onProgress?: ImportProgressListener | undefined;
@@ -333,6 +423,40 @@ async function materializeDatasetByChunks(input: {
   durationMs: number;
 }> {
   const startedAt = performance.now();
+  emitMaterializationProgress(input.onProgress, {
+    datasets: input.datasets,
+    dataset: input.dataset,
+    datasetIndex: input.datasetIndex,
+    targetTable: input.targetTable,
+    stepLabel: "Validating staging state",
+    completedDatasets: input.completedDatasets,
+    completedFiles: input.completedFiles,
+    totalFiles: input.totalFiles,
+    processedRows: input.processedRows,
+    totalRows: input.totalRows,
+    committedBatches: input.committedBatches,
+    totalBatches: input.totalBatches,
+  });
+
+  await appendJsonLinesLog(input.progressLogPath, {
+    kind: "materialization_staging_validation_started",
+    dataset: input.dataset,
+    datasetIndex: input.datasetIndex,
+    totalDatasets: input.datasets.length,
+    targetTable: input.targetTable,
+    expectedRows: input.expectedStagedRows ?? null,
+    timestamp: new Date().toISOString(),
+  });
+
+  await validateStagingDatasetState({
+    client: input.client,
+    dataset: input.dataset,
+    datasetIndex: input.datasetIndex,
+    totalDatasets: input.datasets.length,
+    expectedRows: input.expectedStagedRows,
+    progressLogPath: input.progressLogPath,
+  });
+
   const validated = await validateDatasetCheckpoint({
     client: input.client,
     planId: input.planId,
@@ -730,6 +854,7 @@ export async function materializeStagedDatasets(input: {
   progressLogPath: string;
   datasetPerformanceTrackers: Map<ImportDatasetType, MutableDatasetPerformance>;
   expectedRowsByDataset: ReadonlyMap<ImportDatasetType, number>;
+  expectedStagedRowsByDataset: ReadonlyMap<ImportDatasetType, number>;
   onProgress?: ImportProgressListener | undefined;
   completedFiles: number;
   totalFiles: number;
@@ -837,6 +962,7 @@ export async function materializeStagedDatasets(input: {
       });
 
       const expectedRows = input.expectedRowsByDataset.get(dataset);
+      const expectedStagedRows = input.expectedStagedRowsByDataset.get(dataset);
       const result = await materializeDatasetByChunks({
         client: input.client,
         planId: input.planId,
@@ -846,6 +972,7 @@ export async function materializeStagedDatasets(input: {
         targetTable,
         chunkSize,
         ...(expectedRows === undefined ? {} : { expectedRows }),
+        ...(expectedStagedRows === undefined ? {} : { expectedStagedRows }),
         schemaCapabilities: input.schemaCapabilities,
         progressLogPath: input.progressLogPath,
         onProgress: input.onProgress,
