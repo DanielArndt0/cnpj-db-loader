@@ -7,7 +7,7 @@ cnpj-db-loader inspect ./downloads
 cnpj-db-loader extract ./downloads
 cnpj-db-loader validate ./downloads/extracted
 cnpj-db-loader sanitize ./downloads/extracted
-cnpj-db-loader db set "postgresql://user:password@localhost:5432/cnpj"
+cnpj-db-loader database config set "postgresql://user:password@localhost:5432/cnpj"
 cnpj-db-loader schema generate --profile full
 cnpj-db-loader import ./downloads/sanitized --load-batch-size 500 --materialize-batch-size 50000 --verbose-progress
 cnpj-db-loader import load ./downloads/sanitized --load-batch-size 20000
@@ -16,17 +16,17 @@ cnpj-db-loader import materialize ./downloads/sanitized --materialize-batch-size
 
 ## What each step does
 
-| Step | Command                          | Purpose                                                                                         |
-| ---- | -------------------------------- | ----------------------------------------------------------------------------------------------- |
-| 1    | `inspect <input>`                | Detect whether the folder contains ZIP archives, extracted content, or both                     |
-| 2    | `extract <input>`                | Extract every Receita ZIP archive into `./extracted` by default                                 |
-| 3    | `validate <input>`               | Validate the extracted dataset tree and confirm that the required dataset blocks are present    |
-| 4    | `sanitize <input>`               | Prepare a sanitized dataset tree by removing known low-level byte issues before import          |
-| 5    | `db show` / `db set <url>`       | Review or configure the PostgreSQL connection                                                   |
-| 6    | `schema generate --profile full` | Generate the combined SQL schema with final, control, and staging tables                        |
-| 7    | `import <input>`                 | Run the full pipeline: staged/direct load, staged materialization, and final summary generation |
-| 8    | `import load <input>`            | Stop after the load phase when you want staging populated without immediately materializing it  |
-| 9    | `import materialize <input>`     | Resume from the saved plan and materialize staged datasets into the final schema in chunks      |
+| Step | Command                                              | Purpose                                                                                         |
+| ---- | ---------------------------------------------------- | ----------------------------------------------------------------------------------------------- |
+| 1    | `inspect <input>`                                    | Detect whether the folder contains ZIP archives, extracted content, or both                     |
+| 2    | `extract <input>`                                    | Extract every Receita ZIP archive into `./extracted` by default                                 |
+| 3    | `validate <input>`                                   | Validate the extracted dataset tree and confirm that the required dataset blocks are present    |
+| 4    | `sanitize <input>`                                   | Prepare a sanitized dataset tree by removing known low-level byte issues before import          |
+| 5    | `database config show` / `database config set <url>` | Review or configure the PostgreSQL connection                                                   |
+| 6    | `schema generate --profile full`                     | Generate the combined SQL schema with final, control, and staging tables                        |
+| 7    | `import <input>`                                     | Run the full pipeline: staged/direct load, staged materialization, and final summary generation |
+| 8    | `import load <input>`                                | Stop after the load phase when you want staging populated without immediately materializing it  |
+| 9    | `import materialize <input>`                         | Resume from the saved plan and materialize staged datasets into the final schema in chunks      |
 
 ## Schema profiles
 
@@ -46,7 +46,7 @@ cnpj-db-loader schema generate --profile staging
 
 ## Important behavior of import
 
-`import` is designed to be safe for large datasets. The CLI now also exposes `import load`, `import materialize`, and `import cleanup-staging` so the heavy phases can be automated separately.
+`import` is designed to be safe for large datasets. The CLI now also exposes `import load`, `import materialize`, and `database cleanup ...` so the heavy phases and safe reset operations can be automated separately.
 
 - it starts with an exact preparatory scan that counts source rows and planned batches when no saved plan exists
 - it persists the import plan in the database and reuses it on resume when the validated source files and batch size match
@@ -116,3 +116,17 @@ cnpj-db-loader quarantine show 42
 `quarantine list` is useful for paging through rows with filters such as `--retryable`, `--terminal`, `--category`, and `--stage`.
 
 `quarantine show` loads one quarantined row in detail, including the raw line and parsed payload when available.
+
+## Database maintenance commands
+
+The `database` command family now separates connection configuration from destructive maintenance actions:
+
+```bash
+cnpj-db-loader database config show
+cnpj-db-loader database cleanup staging --validated-path ./downloads/sanitized --force
+cnpj-db-loader database cleanup materialized --dataset companies --force
+cnpj-db-loader database cleanup checkpoints --phase all --validated-path ./downloads/sanitized --force
+cnpj-db-loader database cleanup plans --validated-path ./downloads/sanitized --force
+```
+
+Use `--force` to skip confirmation prompts. Without it, cleanup commands always ask before changing the database.

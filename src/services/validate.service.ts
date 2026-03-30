@@ -145,7 +145,7 @@ function inferNextStep(summary: {
       validatedBaseName === "sanitized" ||
       validatedBaseName.endsWith("-sanitized")
     ) {
-      return `cnpj-db-loader db show`;
+      return `cnpj-db-loader database config show`;
     }
 
     return `cnpj-db-loader sanitize ${normalizedValidatedPath}`;

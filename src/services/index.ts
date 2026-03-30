@@ -1,5 +1,5 @@
 export * from "./config.service.js";
-export * from "./db.service.js";
+export * from "./database.service.js";
 export * from "./dictionary.service.js";
 export * from "./doctor.service.js";
 export * from "./inspect.service.js";

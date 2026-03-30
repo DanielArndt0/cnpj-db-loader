@@ -182,7 +182,7 @@ export function buildSecondaryCnaesMaterializationChunkQuery(input: {
       "  from expanded",
       "  on conflict (establishment_cnpj_full, cnae_code) do update set source_order = excluded.source_order",
       "  returning 1",
-      "),",
+      ")",
       "select",
       "  coalesce((select max(staging_id)::bigint from chunked), $1::bigint) as max_staging_id,",
       "  coalesce((select count(*)::bigint from expanded), 0)::bigint as source_rows,",

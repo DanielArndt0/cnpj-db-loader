@@ -12,6 +12,7 @@ import {
   formatRate,
   printErrors,
   printWarnings,
+  printNotes,
   resolveLogFilePath,
 } from "./shared.js";
 
@@ -123,14 +124,89 @@ export function printValidationSummary(
   console.log(`${theme.muted("Log file:")} ${resolveLogFilePath(logFilePath)}`);
 }
 
-export function printDbConfigSummary(
+export function printDatabaseConfigSummary(
   config: { defaultDbUrl?: string },
   logFilePath: string,
 ): void {
-  console.log(theme.successLabel("DB"), "Database configuration loaded.");
+  console.log(theme.successLabel("DATABASE"), "Database configuration loaded.");
   console.log(
-    formatKeyValue("Default DB URL", config.defaultDbUrl ?? "not configured"),
+    formatKeyValue(
+      "Default database URL",
+      config.defaultDbUrl ?? "not configured",
+    ),
   );
+  console.log(`${theme.muted("Log file:")} ${resolveLogFilePath(logFilePath)}`);
+}
+
+export function printDatabaseCleanupSummary(
+  summary: {
+    scope: string;
+    targetDatabase: string;
+    dataset?: string | undefined;
+    phase?: string | undefined;
+    validatedPath?: string | undefined;
+    planId?: number | undefined;
+    truncatedTables: string[];
+    deletedLoadCheckpoints: number;
+    deletedMaterializationCheckpoints: number;
+    deletedPlans: number;
+    notes: string[];
+  },
+  logFilePath: string,
+): void {
+  console.log(
+    theme.successLabel("DATABASE"),
+    `Cleanup completed for ${summary.scope}.`,
+  );
+  console.log(formatKeyValue("Target database", summary.targetDatabase));
+  console.log(formatKeyValue("Scope", summary.scope));
+
+  if (summary.dataset) {
+    console.log(formatKeyValue("Dataset", summary.dataset));
+  }
+
+  if (summary.phase) {
+    console.log(formatKeyValue("Checkpoint phase", summary.phase));
+  }
+
+  if (summary.planId !== undefined) {
+    console.log(formatKeyValue("Plan id", summary.planId));
+  }
+
+  if (summary.validatedPath) {
+    console.log(formatKeyValue("Validated path", summary.validatedPath));
+  }
+
+  console.log(
+    formatKeyValue(
+      "Staging/final tables truncated",
+      summary.truncatedTables.length,
+    ),
+  );
+  console.log(
+    formatKeyValue(
+      "Load checkpoints deleted",
+      formatCount(summary.deletedLoadCheckpoints),
+    ),
+  );
+  console.log(
+    formatKeyValue(
+      "Materialization checkpoints deleted",
+      formatCount(summary.deletedMaterializationCheckpoints),
+    ),
+  );
+  console.log(
+    formatKeyValue("Import plans deleted", formatCount(summary.deletedPlans)),
+  );
+
+  if (summary.truncatedTables.length > 0) {
+    console.log(theme.warningLabel("TABLES"));
+    for (const tableName of summary.truncatedTables) {
+      console.log(`  ${theme.yellow("•")} ${tableName}`);
+    }
+  }
+
+  printNotes(summary.notes);
   console.log(`${theme.muted("Log file:")} ${resolveLogFilePath(logFilePath)}`);
 }
 
@@ -302,7 +378,7 @@ export function printImportSummary(
     }
   }
 
-  printWarnings(summary.warnings);
+  printNotes(summary.warnings);
   console.log(`${theme.muted("Log file:")} ${resolveLogFilePath(logFilePath)}`);
   console.log(
     `${theme.muted("Progress log:")} ${resolveLogFilePath(summary.progressLogPath)}`,

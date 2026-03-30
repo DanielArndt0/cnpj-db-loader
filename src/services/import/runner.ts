@@ -574,6 +574,12 @@ async function runMaterializationStage(
     schemaCapabilities: execution.schemaCapabilities,
     progressLogPath: execution.progressLogPath,
     datasetPerformanceTrackers: execution.datasetPerformanceTrackers,
+    expectedRowsByDataset: new Map(
+      execution.plan.datasets.map((datasetPlan) => [
+        datasetPlan.dataset,
+        datasetPlan.totalRows,
+      ]),
+    ),
     onProgress,
     completedFiles: execution.counters.completedFiles,
     totalFiles: execution.plan.totalFiles,

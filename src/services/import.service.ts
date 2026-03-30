@@ -1,5 +1,5 @@
 import { ValidationError } from "../core/errors/index.js";
-import { resolveDbUrl } from "./db.service.js";
+import { resolveDatabaseUrl } from "./database.service.js";
 import { inspectFiles } from "./inspect.service.js";
 import { validateInputDirectory } from "./validate.service.js";
 import {
@@ -68,7 +68,7 @@ async function prepareImportInput(
   }
 
   const inspection = await inspectFiles(validation.validatedPath);
-  const dbUrl = await resolveDbUrl(options.dbUrl);
+  const dbUrl = await resolveDatabaseUrl(options.dbUrl);
 
   return {
     inputPath,
@@ -116,7 +116,7 @@ export async function cleanupImportStaging(
   clearedPlans: number;
 }> {
   validateRequestedDataset(options.dataset);
-  const dbUrl = await resolveDbUrl(options.dbUrl);
+  const dbUrl = await resolveDatabaseUrl(options.dbUrl);
   const targetDatabase = maskDatabaseLabel(dbUrl);
   const client = new Client({ connectionString: dbUrl });
 

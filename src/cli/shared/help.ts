@@ -8,8 +8,9 @@ ${theme.section("Recommended flow")}
   ${theme.command("cnpj-db-loader validate ./downloads/extracted")}
   ${theme.command("cnpj-db-loader sanitize ./downloads/extracted")}
   ${theme.command("cnpj-db-loader schema generate")}
-  ${theme.command('cnpj-db-loader db set "postgresql://user:password@localhost:5432/cnpj"')}
-  ${theme.command("cnpj-db-loader db test")}
+  ${theme.command('cnpj-db-loader database config set "postgresql://user:password@localhost:5432/cnpj"')}
+  ${theme.command("cnpj-db-loader database config test")}
+  ${theme.command("cnpj-db-loader database cleanup staging --force")}
   ${theme.command("cnpj-db-loader import ./downloads/sanitized")}
 
 ${theme.section("Notes")}

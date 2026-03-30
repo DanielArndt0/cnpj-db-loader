@@ -10,6 +10,17 @@ export function formatKeyValue(label: string, value: string | number): string {
   return `${theme.muted(`- ${label}:`)} ${value}`;
 }
 
+export function printNotes(notes: string[]): void {
+  if (notes.length === 0) {
+    return;
+  }
+
+  console.log(theme.infoLabel("NOTES"));
+  for (const note of notes) {
+    console.log(`  ${theme.blue("•")} ${note}`);
+  }
+}
+
 export function printWarnings(warnings: string[]): void {
   if (warnings.length === 0) {
     return;

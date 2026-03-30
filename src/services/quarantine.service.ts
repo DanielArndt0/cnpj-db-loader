@@ -1,7 +1,7 @@
 import { Client } from "pg";
 
 import { ServiceError, ValidationError } from "../core/errors/index.js";
-import { resolveDbUrl } from "./db.service.js";
+import { resolveDatabaseUrl } from "./database.service.js";
 import { ensureQuarantineTable } from "./import/quarantine.js";
 import {
   readQuarantineList,
@@ -20,7 +20,7 @@ async function withQuarantineClient<T>(
   dbUrl: string | undefined,
   action: (client: Client) => Promise<T>,
 ): Promise<T> {
-  const url = await resolveDbUrl(dbUrl);
+  const url = await resolveDatabaseUrl(dbUrl);
   const client = new Client({ connectionString: url });
 
   try {

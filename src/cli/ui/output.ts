@@ -1,7 +1,8 @@
 export { configureProgramUi } from "./output/program-ui.js";
 export { handleCliError } from "./output/errors.js";
 export {
-  printDbConfigSummary,
+  printDatabaseCleanupSummary,
+  printDatabaseConfigSummary,
   printExtractionSummary,
   printImportSummary,
   printSanitizeSummary,

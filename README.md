@@ -40,7 +40,7 @@ cnpj-db-loader inspect ./downloads
 cnpj-db-loader extract ./downloads
 cnpj-db-loader validate ./downloads/extracted
 cnpj-db-loader sanitize ./downloads/extracted
-cnpj-db-loader db set "postgresql://user:password@localhost:5432/cnpj"
+cnpj-db-loader database config set "postgresql://user:password@localhost:5432/cnpj"
 cnpj-db-loader schema generate --profile full
 cnpj-db-loader import ./downloads/sanitized --load-batch-size 500 --materialize-batch-size 50000 --verbose-progress
 ```
@@ -54,10 +54,14 @@ cnpj-db-loader validate <input>
 cnpj-db-loader sanitize <input> [--output <path>] [--dataset <name>] [-f]
 cnpj-db-loader schema print [--profile <profile>]
 cnpj-db-loader schema generate [--name <name>] [--output <path>] [--profile <profile>]
-cnpj-db-loader db set <url>
-cnpj-db-loader db show
-cnpj-db-loader db test [--db-url <url>]
-cnpj-db-loader db reset [--yes]
+cnpj-db-loader database config set <url>
+cnpj-db-loader database config show
+cnpj-db-loader database config test [--db-url <url>]
+cnpj-db-loader database config reset [--force]
+cnpj-db-loader database cleanup staging [--db-url <url>] [--dataset <name>] [--validated-path <path>] [--force]
+cnpj-db-loader database cleanup materialized [--db-url <url>] [--dataset <name>] [--force]
+cnpj-db-loader database cleanup checkpoints [--db-url <url>] [--phase <phase>] [--dataset <name>] [--validated-path <path>] [--plan-id <id>] [--force]
+cnpj-db-loader database cleanup plans [--db-url <url>] [--validated-path <path>] [--plan-id <id>] [--force]
 cnpj-db-loader import <input> [--db-url <url>] [--dataset <name>] [--load-batch-size <size>] [--materialize-batch-size <size>] [--verbose-progress] [-f]
 cnpj-db-loader import load <input> [--db-url <url>] [--dataset <name>] [--load-batch-size <size>] [--verbose-progress] [-f]
 cnpj-db-loader import materialize <input> [--db-url <url>] [--dataset <name>] [--materialize-batch-size <size>] [--verbose-progress] [-f]
@@ -80,7 +84,7 @@ The final import summary now includes baseline timing and throughput metrics suc
 
 The import internals are now split into dedicated modules such as planner, source reader, parser, normalizer, checkpoint manager, quarantine writer, staging writer, materializer, and finalizer so staged bulk-load and final materialization changes can be implemented without rewriting the whole import command.
 
-The CLI now exposes a split workflow as well: `import` runs the full pipeline, `import load` stops after staging/direct writes, `import materialize` resumes from the saved plan and pushes staged rows into the final tables, and `import cleanup-staging` truncates staging tables for a clean rerun.
+The CLI now exposes a split workflow as well: `import` runs the full pipeline, `import load` stops after staging/direct writes, `import materialize` resumes from the saved plan and pushes staged rows into the final tables, and `database cleanup ...` exposes safe maintenance commands for staging tables, final materialized tables, checkpoints, and saved plans.
 
 Materialization progress is now checkpointed separately from file-load checkpoints, and the materializer works in resumable chunks controlled by `--materialize-batch-size`. During long final materialization steps, the CLI keeps the live progress output on a dedicated MATERIALIZING stage and the JSONL progress log emits periodic heartbeat entries so long-running staging-to-final upserts remain visible. Secondary CNAE expansion and partner dedupe-key derivation now happen during materialization instead of inside the initial staged write path.
 

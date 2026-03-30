@@ -1,4 +1,5 @@
-const TWO_PART_COMMANDS = new Set(["db", "quarantine"]);
+const TWO_PART_COMMANDS = new Set(["quarantine"]);
+const THREE_PART_COMMANDS = new Set(["database"]);
 
 export function resolveInvokedCommandLabel(argv: string[]): string {
   const tokens = argv.filter((token) => token.trim() !== "");
@@ -7,7 +8,19 @@ export function resolveInvokedCommandLabel(argv: string[]): string {
     return "cli";
   }
 
-  const [firstToken, secondToken] = tokens;
+  const [firstToken, secondToken, thirdToken] = tokens;
+
+  if (
+    firstToken !== undefined &&
+    secondToken !== undefined &&
+    thirdToken !== undefined &&
+    !firstToken.startsWith("-") &&
+    !secondToken.startsWith("-") &&
+    !thirdToken.startsWith("-") &&
+    THREE_PART_COMMANDS.has(firstToken)
+  ) {
+    return `${firstToken}-${secondToken}-${thirdToken}`;
+  }
 
   if (
     firstToken !== undefined &&

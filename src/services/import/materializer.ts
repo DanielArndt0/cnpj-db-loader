@@ -32,11 +32,36 @@ const MATERIALIZATION_ORDER: readonly MaterializationDataset[] = [
 
 const DEFAULT_MATERIALIZATION_CHUNK_SIZE = 50_000;
 const MATERIALIZATION_HEARTBEAT_INTERVAL_MS = 15_000;
+const EXACT_TARGET_COUNT_DATASETS: ReadonlySet<MaterializationDataset> =
+  new Set(["companies", "establishments", "simples_options"]);
+
+const STAGING_TABLE_BY_DATASET: Record<MaterializationDataset, string> = {
+  companies: "staging_companies",
+  establishments: "staging_establishments",
+  simples_options: "staging_simples_options",
+  partners: "staging_partners",
+};
 
 type ChunkRow = {
   max_staging_id: string;
   source_rows: string;
   affected_rows: string;
+};
+
+type CountRow = {
+  total_count: string;
+};
+
+type MaxRow = {
+  max_staging_id: string;
+};
+
+type ValidatedCheckpoint = {
+  checkpoint: MaterializationCheckpointRecord;
+  adjusted: boolean;
+  reason: string | null;
+  stagingMaxId: number;
+  targetRows: number | null;
 };
 
 export type MaterializationSummary = {
@@ -115,11 +140,171 @@ async function executeChunkQuery(
   };
 }
 
+async function readStagingMaxId(
+  client: Client,
+  stagingTable: string,
+): Promise<number> {
+  const result = await client.query<MaxRow>(
+    `select coalesce(max(staging_id), 0)::bigint as max_staging_id from ${stagingTable}`,
+  );
+
+  return Number.parseInt(result.rows[0]?.max_staging_id ?? "0", 10);
+}
+
+async function readRowCount(
+  client: Client,
+  tableName: string,
+): Promise<number> {
+  const result = await client.query<CountRow>(
+    `select count(*)::bigint as total_count from ${tableName}`,
+  );
+
+  return Number.parseInt(result.rows[0]?.total_count ?? "0", 10);
+}
+
 async function persistCheckpoint(
   client: Client,
   checkpoint: MaterializationCheckpointRecord,
 ): Promise<void> {
   await writeMaterializationCheckpoint(client, checkpoint);
+}
+
+function resetCheckpointForReplay(
+  checkpoint: MaterializationCheckpointRecord,
+): MaterializationCheckpointRecord {
+  return {
+    ...checkpoint,
+    status: "pending",
+    rowsMaterialized: 0,
+    lastStagingId: 0,
+    chunksCompleted: 0,
+    lastError: null,
+    startedAt: null,
+    completedAt: null,
+  };
+}
+
+async function validateDatasetCheckpoint(input: {
+  client: Client;
+  planId: number;
+  dataset: MaterializationDataset;
+  targetTable: string;
+  expectedRows?: number;
+}): Promise<ValidatedCheckpoint> {
+  const stagingTable = STAGING_TABLE_BY_DATASET[input.dataset];
+  let checkpoint = await readMaterializationCheckpoint(
+    input.client,
+    input.planId,
+    input.dataset,
+    input.targetTable,
+  );
+  const stagingMaxId = await readStagingMaxId(input.client, stagingTable);
+
+  let adjusted = false;
+  let reason: string | null = null;
+  let targetRows: number | null = null;
+
+  if (checkpoint.lastStagingId > stagingMaxId && stagingMaxId > 0) {
+    checkpoint = resetCheckpointForReplay(checkpoint);
+    adjusted = true;
+    reason =
+      "Checkpoint references a staging range beyond the current staging table. The dataset will be rematerialized from the beginning.";
+  } else if (
+    checkpoint.status === "completed" &&
+    checkpoint.lastStagingId < stagingMaxId
+  ) {
+    checkpoint = {
+      ...checkpoint,
+      status: "in_progress",
+      completedAt: null,
+      lastError: null,
+    };
+    adjusted = true;
+    reason =
+      "Checkpoint was marked as completed before the current staging tail. The dataset will resume materialization from the saved staging cursor.";
+  }
+
+  if (
+    EXACT_TARGET_COUNT_DATASETS.has(input.dataset) &&
+    input.expectedRows !== undefined
+  ) {
+    targetRows = await readRowCount(input.client, input.targetTable);
+
+    if (
+      (checkpoint.status === "completed" ||
+        checkpoint.lastStagingId >= stagingMaxId) &&
+      targetRows < input.expectedRows
+    ) {
+      checkpoint = resetCheckpointForReplay(checkpoint);
+      adjusted = true;
+      reason = `The target table currently has ${targetRows} row(s), but ${input.expectedRows} row(s) are expected for ${input.dataset}. The dataset will be rematerialized from the beginning.`;
+    }
+  }
+
+  if (adjusted) {
+    await persistCheckpoint(input.client, checkpoint);
+  }
+
+  return {
+    checkpoint,
+    adjusted,
+    reason,
+    stagingMaxId,
+    targetRows,
+  };
+}
+
+async function validateSecondaryCnaesCheckpoint(input: {
+  client: Client;
+  planId: number;
+}): Promise<ValidatedCheckpoint> {
+  const dataset = "secondary_cnaes" as MaterializationDataset;
+  const targetTable = "establishment_secondary_cnaes";
+  let checkpoint = await readMaterializationCheckpoint(
+    input.client,
+    input.planId,
+    dataset,
+    targetTable,
+  );
+  const stagingMaxId = await readStagingMaxId(
+    input.client,
+    STAGING_TABLE_BY_DATASET.establishments,
+  );
+
+  let adjusted = false;
+  let reason: string | null = null;
+
+  if (checkpoint.lastStagingId > stagingMaxId && stagingMaxId > 0) {
+    checkpoint = resetCheckpointForReplay(checkpoint);
+    adjusted = true;
+    reason =
+      "The saved secondary CNAE checkpoint no longer matches the current staging establishments table. Secondary CNAEs will be rematerialized from the beginning.";
+  } else if (
+    checkpoint.status === "completed" &&
+    checkpoint.lastStagingId < stagingMaxId
+  ) {
+    checkpoint = {
+      ...checkpoint,
+      status: "in_progress",
+      completedAt: null,
+      lastError: null,
+    };
+    adjusted = true;
+    reason =
+      "Secondary CNAE materialization was previously marked as completed before the current staging tail. It will resume from the saved staging cursor.";
+  }
+
+  if (adjusted) {
+    await persistCheckpoint(input.client, checkpoint);
+  }
+
+  return {
+    checkpoint,
+    adjusted,
+    reason,
+    stagingMaxId,
+    targetRows: null,
+  };
 }
 
 async function materializeDatasetByChunks(input: {
@@ -130,6 +315,7 @@ async function materializeDatasetByChunks(input: {
   datasets: readonly MaterializationDataset[];
   targetTable: string;
   chunkSize: number;
+  expectedRows?: number;
   schemaCapabilities: ImportSchemaCapabilities;
   progressLogPath: string;
   onProgress?: ImportProgressListener | undefined;
@@ -147,12 +333,46 @@ async function materializeDatasetByChunks(input: {
   durationMs: number;
 }> {
   const startedAt = performance.now();
-  let checkpoint = await readMaterializationCheckpoint(
-    input.client,
-    input.planId,
-    input.dataset,
-    input.targetTable,
-  );
+  const validated = await validateDatasetCheckpoint({
+    client: input.client,
+    planId: input.planId,
+    dataset: input.dataset,
+    targetTable: input.targetTable,
+    ...(input.expectedRows === undefined
+      ? {}
+      : { expectedRows: input.expectedRows }),
+  });
+  let checkpoint = validated.checkpoint;
+
+  if (validated.adjusted && validated.reason) {
+    emitMaterializationProgress(input.onProgress, {
+      datasets: input.datasets,
+      dataset: input.dataset,
+      datasetIndex: input.datasetIndex,
+      targetTable: input.targetTable,
+      stepLabel: "Checkpoint reconciled — resuming safely",
+      completedDatasets: input.completedDatasets,
+      completedFiles: input.completedFiles,
+      totalFiles: input.totalFiles,
+      processedRows: input.processedRows,
+      totalRows: input.totalRows,
+      committedBatches: input.committedBatches,
+      totalBatches: input.totalBatches,
+    });
+
+    await appendJsonLinesLog(input.progressLogPath, {
+      kind: "materialization_checkpoint_reconciled",
+      dataset: input.dataset,
+      datasetIndex: input.datasetIndex,
+      totalDatasets: input.datasets.length,
+      targetTable: input.targetTable,
+      reason: validated.reason,
+      stagingMaxId: validated.stagingMaxId,
+      targetRows: validated.targetRows,
+      expectedRows: input.expectedRows ?? null,
+      timestamp: new Date().toISOString(),
+    });
+  }
 
   if (checkpoint.status === "completed") {
     emitMaterializationProgress(input.onProgress, {
@@ -160,7 +380,7 @@ async function materializeDatasetByChunks(input: {
       dataset: input.dataset,
       datasetIndex: input.datasetIndex,
       targetTable: input.targetTable,
-      stepLabel: `Already completed (${checkpoint.chunksCompleted} chunk(s))`,
+      stepLabel: `Checkpoint complete — verified ${checkpoint.chunksCompleted} chunk(s)`,
       completedDatasets: input.completedDatasets,
       completedFiles: input.completedFiles,
       totalFiles: input.totalFiles,
@@ -178,6 +398,7 @@ async function materializeDatasetByChunks(input: {
       targetTable: input.targetTable,
       rowsMaterialized: checkpoint.rowsMaterialized,
       chunksCompleted: checkpoint.chunksCompleted,
+      verified: true,
       timestamp: new Date().toISOString(),
     });
 
@@ -345,6 +566,15 @@ async function materializeSecondaryCnaesByChunks(input: {
   planId: number;
   chunkSize: number;
   progressLogPath: string;
+  onProgress?: ImportProgressListener | undefined;
+  completedDatasets: number;
+  totalDatasets: number;
+  completedFiles: number;
+  totalFiles: number;
+  processedRows: number;
+  totalRows: number;
+  committedBatches: number;
+  totalBatches: number;
 }): Promise<{
   rows: number;
   chunksCompleted: number;
@@ -353,12 +583,36 @@ async function materializeSecondaryCnaesByChunks(input: {
   const checkpointDataset = "secondary_cnaes" as MaterializationDataset;
   const targetTable = "establishment_secondary_cnaes";
   const startedAt = performance.now();
-  let checkpoint = await readMaterializationCheckpoint(
-    input.client,
-    input.planId,
-    checkpointDataset,
-    targetTable,
-  );
+  const validated = await validateSecondaryCnaesCheckpoint({
+    client: input.client,
+    planId: input.planId,
+  });
+  let checkpoint = validated.checkpoint;
+
+  if (validated.adjusted && validated.reason) {
+    emitMaterializationProgress(input.onProgress, {
+      datasets: ["establishments"],
+      dataset: "establishments",
+      datasetIndex: input.totalDatasets,
+      targetTable,
+      stepLabel: "Secondary CNAEs checkpoint reconciled",
+      completedDatasets: input.completedDatasets,
+      completedFiles: input.completedFiles,
+      totalFiles: input.totalFiles,
+      processedRows: input.processedRows,
+      totalRows: input.totalRows,
+      committedBatches: input.committedBatches,
+      totalBatches: input.totalBatches,
+    });
+
+    await appendJsonLinesLog(input.progressLogPath, {
+      kind: "materialization_secondary_cnaes_checkpoint_reconciled",
+      targetTable,
+      reason: validated.reason,
+      stagingMaxId: validated.stagingMaxId,
+      timestamp: new Date().toISOString(),
+    });
+  }
 
   if (checkpoint.status === "completed") {
     return {
@@ -380,6 +634,21 @@ async function materializeSecondaryCnaesByChunks(input: {
   await persistCheckpoint(input.client, checkpoint);
 
   while (true) {
+    emitMaterializationProgress(input.onProgress, {
+      datasets: ["establishments"],
+      dataset: "establishments",
+      datasetIndex: input.totalDatasets,
+      targetTable,
+      stepLabel: `Secondary CNAEs chunk ${checkpoint.chunksCompleted + 1}`,
+      completedDatasets: input.completedDatasets,
+      completedFiles: input.completedFiles,
+      totalFiles: input.totalFiles,
+      processedRows: input.processedRows,
+      totalRows: input.totalRows,
+      committedBatches: input.committedBatches,
+      totalBatches: input.totalBatches,
+    });
+
     const query = buildSecondaryCnaesMaterializationChunkQuery({
       lastStagingId: checkpoint.lastStagingId,
       chunkSize: input.chunkSize,
@@ -460,6 +729,7 @@ export async function materializeStagedDatasets(input: {
   schemaCapabilities: ImportSchemaCapabilities;
   progressLogPath: string;
   datasetPerformanceTrackers: Map<ImportDatasetType, MutableDatasetPerformance>;
+  expectedRowsByDataset: ReadonlyMap<ImportDatasetType, number>;
   onProgress?: ImportProgressListener | undefined;
   completedFiles: number;
   totalFiles: number;
@@ -566,6 +836,7 @@ export async function materializeStagedDatasets(input: {
         timestamp: new Date().toISOString(),
       });
 
+      const expectedRows = input.expectedRowsByDataset.get(dataset);
       const result = await materializeDatasetByChunks({
         client: input.client,
         planId: input.planId,
@@ -574,6 +845,7 @@ export async function materializeStagedDatasets(input: {
         datasets: materializationDatasets,
         targetTable,
         chunkSize,
+        ...(expectedRows === undefined ? {} : { expectedRows }),
         schemaCapabilities: input.schemaCapabilities,
         progressLogPath: input.progressLogPath,
         onProgress: input.onProgress,
@@ -632,6 +904,15 @@ export async function materializeStagedDatasets(input: {
     planId: input.planId,
     chunkSize,
     progressLogPath: input.progressLogPath,
+    onProgress: input.onProgress,
+    completedDatasets: summary.datasets.length,
+    totalDatasets: materializationDatasets.length,
+    completedFiles: input.completedFiles,
+    totalFiles: input.totalFiles,
+    processedRows: input.processedRows,
+    totalRows: input.totalRows,
+    committedBatches: input.committedBatches,
+    totalBatches: input.totalBatches,
   });
   summary.secondaryCnaesRows = secondaryResult.rows;
   summary.secondaryCnaesChunks = secondaryResult.chunksCompleted;
