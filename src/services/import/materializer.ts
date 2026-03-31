@@ -61,6 +61,10 @@ type StagingStateRow = {
   max_staging_id: string;
 };
 
+type QuarantineCountRow = {
+  quarantined_rows: string;
+};
+
 type ValidatedCheckpoint = {
   checkpoint: MaterializationCheckpointRecord;
   adjusted: boolean;
@@ -167,6 +171,29 @@ async function readStagingState(
   };
 }
 
+async function readQuarantinedRowCountForPlan(input: {
+  client: Client;
+  planId: number;
+  dataset: MaterializationDataset;
+}): Promise<number> {
+  const result = await input.client.query<QuarantineCountRow>(
+    `select count(*)::bigint as quarantined_rows
+       from (
+         select distinct q.file_path, q.row_number
+           from import_quarantine q
+           inner join import_plan_files pf
+             on pf.plan_id = $1
+            and pf.dataset = q.dataset
+            and pf.file_path = q.file_path
+          where q.dataset = $2
+            and q.row_number is not null
+       ) quarantined`,
+    [input.planId, input.dataset],
+  );
+
+  return Number.parseInt(result.rows[0]?.quarantined_rows ?? "0", 10);
+}
+
 function buildEmptyStagingMessage(
   stagingTable: string,
   dataset: MaterializationDataset,
@@ -190,6 +217,7 @@ function buildStagingMismatchMessage(
 
 async function validateStagingDatasetState(input: {
   client: Client;
+  planId: number;
   dataset: MaterializationDataset;
   datasetIndex: number;
   totalDatasets: number;
@@ -198,6 +226,15 @@ async function validateStagingDatasetState(input: {
 }): Promise<{ rowCount: number; maxStagingId: number }> {
   const stagingTable = STAGING_TABLE_BY_DATASET[input.dataset];
   const state = await readStagingState(input.client, stagingTable);
+  const quarantinedRows = await readQuarantinedRowCountForPlan({
+    client: input.client,
+    planId: input.planId,
+    dataset: input.dataset,
+  });
+  const effectiveExpectedRows =
+    typeof input.expectedRows === "number"
+      ? Math.max(0, input.expectedRows - quarantinedRows)
+      : undefined;
 
   await appendJsonLinesLog(input.progressLogPath, {
     kind: "materialization_staging_validation_completed",
@@ -206,6 +243,8 @@ async function validateStagingDatasetState(input: {
     totalDatasets: input.totalDatasets,
     stagingTable,
     expectedRows: input.expectedRows ?? null,
+    quarantinedRows,
+    effectiveExpectedRows: effectiveExpectedRows ?? null,
     actualRows: state.rowCount,
     maxStagingId: state.maxStagingId,
     timestamp: new Date().toISOString(),
@@ -213,20 +252,24 @@ async function validateStagingDatasetState(input: {
 
   if (state.rowCount === 0) {
     throw new ValidationError(
-      buildEmptyStagingMessage(stagingTable, input.dataset, input.expectedRows),
+      buildEmptyStagingMessage(
+        stagingTable,
+        input.dataset,
+        effectiveExpectedRows ?? input.expectedRows,
+      ),
     );
   }
 
   if (
-    typeof input.expectedRows === "number" &&
-    input.expectedRows > 0 &&
-    state.rowCount !== input.expectedRows
+    typeof effectiveExpectedRows === "number" &&
+    effectiveExpectedRows > 0 &&
+    state.rowCount !== effectiveExpectedRows
   ) {
     throw new ValidationError(
       buildStagingMismatchMessage(
         stagingTable,
         input.dataset,
-        input.expectedRows,
+        effectiveExpectedRows,
         state.rowCount,
       ),
     );
@@ -393,6 +436,7 @@ async function materializeDatasetByChunks(input: {
 
   await validateStagingDatasetState({
     client: input.client,
+    planId: input.planId,
     dataset: input.dataset,
     datasetIndex: input.datasetIndex,
     totalDatasets: input.datasets.length,
