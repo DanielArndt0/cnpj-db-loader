@@ -288,12 +288,6 @@ export function printImportSummary(
     ),
   );
   console.log(
-    formatKeyValue(
-      "Secondary CNAE rows",
-      formatCount(summary.secondaryCnaesRows),
-    ),
-  );
-  console.log(
     formatKeyValue("Quarantined rows", formatCount(summary.quarantinedRows)),
   );
   console.log(formatKeyValue("Resumed files", summary.resumedFiles));

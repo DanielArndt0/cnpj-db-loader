@@ -6,7 +6,7 @@
 | `extract <input>`               | Extract every ZIP archive found inside the input directory.                                                                                                       |
 | `validate <input>`              | Validate an extracted dataset tree.                                                                                                                               |
 | `sanitize <input>`              | Prepare a sanitized dataset tree before import.                                                                                                                   |
-| `schema print`                  | Print a generated PostgreSQL schema profile (`full`, `final`, or `staging`) to stdout.                                                                            |
+| `schema print`                  | Print a generated PostgreSQL schema profile (`full`, `final`, or `staging`) to stdout. The final profile is simplified for fast first-load materialization.       |
 | `schema generate`               | Write a generated schema profile to the current working directory by default.                                                                                     |
 | `database config set <url>`     | Persist the default PostgreSQL URL.                                                                                                                               |
 | `database config show`          | Show the saved PostgreSQL URL.                                                                                                                                    |

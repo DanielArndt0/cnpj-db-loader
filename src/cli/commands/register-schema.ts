@@ -45,14 +45,14 @@ export function registerSchemaCommands(program: Command): void {
   const schema = program
     .command("schema")
     .description(
-      "Print or generate PostgreSQL schemas for final, staging, or combined profiles.",
+      "Print or generate PostgreSQL schemas for simplified final-load, staging, or combined profiles.",
     );
 
   schema
     .command("print")
     .option(
       "--profile <profile>",
-      "Schema profile to print: full, final, or staging. Defaults to full.",
+      "Schema profile to print: full, final, or staging. The final profile is simplified for fast materialization. Defaults to full.",
     )
     .description("Print the generated SQL schema to stdout.")
     .action((options: SchemaCommandOptions) => {
@@ -72,7 +72,7 @@ export function registerSchemaCommands(program: Command): void {
     )
     .option(
       "--profile <profile>",
-      "Schema profile to generate: full, final, or staging. Defaults to full.",
+      "Schema profile to generate: full, final, or staging. The final profile is simplified for fast materialization. Defaults to full.",
     )
     .description("Generate the SQL schema file from the internal model.")
     .action(async (options: SchemaCommandOptions) => {

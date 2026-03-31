@@ -105,6 +105,7 @@ export type ImportPlanRecord = {
 export type ImportWriteTarget = "final" | "staging";
 
 export type ImportSchemaCapabilities = {
+  includeEstablishmentCnpjFullInInsert: boolean;
   includePartnerDedupeKeyInInsert: boolean;
 };
 
@@ -242,8 +243,6 @@ export type ImportProgressEvent =
       kind: "materialization_finish";
       totalDatasets: number;
       completedDatasets: number;
-      secondaryCnaesRows: number;
-      secondaryCnaesDurationMs: number;
     }
   | {
       kind: "finish";
@@ -254,7 +253,6 @@ export type ImportProgressEvent =
       totalRows: number;
       committedBatches: number;
       totalBatches: number;
-      secondaryCnaesRows: number;
       quarantinedRows: number;
     };
 
@@ -285,7 +283,6 @@ export type ImportSummary = {
   plannedRows: number;
   committedBatches: number;
   plannedBatches: number;
-  secondaryCnaesRows: number;
   quarantinedRows: number;
   resumedFiles: number;
   skippedCompletedFiles: number;

@@ -46,6 +46,10 @@ function buildPartnerDedupeExpression(alias: string): string {
   ].join("\n");
 }
 
+function buildEstablishmentCnpjFullExpression(alias: string): string {
+  return `${alias}.cnpj_root || ${alias}.cnpj_order || ${alias}.cnpj_check_digits`;
+}
+
 function buildChunkInsertSql(input: {
   stagingTable: string;
   targetTable: string;
@@ -94,8 +98,10 @@ export function buildMaterializationChunkQuery(input: {
   schemaCapabilities: ImportSchemaCapabilities;
   lastStagingId: number;
   chunkSize: number;
+  useConflictClause?: boolean;
 }): MaterializationChunkQuery {
   const baseColumns = MATERIALIZATION_COLUMNS[input.dataset];
+  const useConflictClause = input.useConflictClause ?? true;
 
   switch (input.dataset) {
     case "partners": {
@@ -108,7 +114,13 @@ export function buildMaterializationChunkQuery(input: {
         targetTable: "partners",
         insertColumns,
         selectColumns: baseColumns,
-        conflictClause: getConflictClause("partners", [...insertColumns]),
+        conflictClause: useConflictClause
+          ? getConflictClause(
+              "partners",
+              [...insertColumns],
+              input.schemaCapabilities,
+            )
+          : "",
         lastStagingId: input.lastStagingId,
         chunkSize: input.chunkSize,
         extraSelects: input.schemaCapabilities.includePartnerDedupeKeyInInsert
@@ -122,74 +134,58 @@ export function buildMaterializationChunkQuery(input: {
         targetTable: "companies",
         insertColumns: baseColumns,
         selectColumns: baseColumns,
-        conflictClause: getConflictClause("companies", [...baseColumns]),
+        conflictClause: useConflictClause
+          ? getConflictClause(
+              "companies",
+              [...baseColumns],
+              input.schemaCapabilities,
+            )
+          : "",
         lastStagingId: input.lastStagingId,
         chunkSize: input.chunkSize,
       });
-    case "establishments":
+    case "establishments": {
+      const insertColumns = input.schemaCapabilities
+        .includeEstablishmentCnpjFullInInsert
+        ? [...baseColumns, "cnpj_full"]
+        : [...baseColumns];
       return buildChunkInsertSql({
         stagingTable: "staging_establishments",
         targetTable: "establishments",
-        insertColumns: baseColumns,
+        insertColumns,
         selectColumns: baseColumns,
-        conflictClause: getConflictClause("establishments", [...baseColumns]),
+        conflictClause: useConflictClause
+          ? getConflictClause(
+              "establishments",
+              [...insertColumns],
+              input.schemaCapabilities,
+            )
+          : "",
         lastStagingId: input.lastStagingId,
         chunkSize: input.chunkSize,
+        extraSelects: input.schemaCapabilities
+          .includeEstablishmentCnpjFullInInsert
+          ? [`${buildEstablishmentCnpjFullExpression("source")} as cnpj_full`]
+          : [],
       });
+    }
     case "simples_options":
       return buildChunkInsertSql({
         stagingTable: "staging_simples_options",
         targetTable: "simples_options",
         insertColumns: baseColumns,
         selectColumns: baseColumns,
-        conflictClause: getConflictClause("simples_options", [...baseColumns]),
+        conflictClause: useConflictClause
+          ? getConflictClause(
+              "simples_options",
+              [...baseColumns],
+              input.schemaCapabilities,
+            )
+          : "",
         lastStagingId: input.lastStagingId,
         chunkSize: input.chunkSize,
       });
   }
-}
-
-export function buildSecondaryCnaesMaterializationChunkQuery(input: {
-  lastStagingId: number;
-  chunkSize: number;
-}): MaterializationChunkQuery {
-  return {
-    text: [
-      "with chunked as (",
-      "  select",
-      "    source.staging_id,",
-      "    source.cnpj_root || source.cnpj_order || source.cnpj_check_digits as establishment_cnpj_full,",
-      "    source.secondary_cnaes_raw",
-      "  from staging_establishments source",
-      "  where source.staging_id > $1",
-      "  order by source.staging_id asc",
-      "  limit $2",
-      "),",
-      "expanded as (",
-      "  select",
-      "    chunked.staging_id,",
-      "    chunked.establishment_cnpj_full,",
-      "    trim(item.cnae_code) as cnae_code,",
-      "    min(item.source_order)::integer as source_order",
-      "  from chunked",
-      "  cross join lateral unnest(string_to_array(coalesce(chunked.secondary_cnaes_raw, ''), ',')) with ordinality as item(cnae_code, source_order)",
-      "  where trim(item.cnae_code) <> ''",
-      "  group by chunked.staging_id, chunked.establishment_cnpj_full, trim(item.cnae_code)",
-      "),",
-      "inserted as (",
-      "  insert into establishment_secondary_cnaes (establishment_cnpj_full, cnae_code, source_order)",
-      "  select establishment_cnpj_full, cnae_code, source_order",
-      "  from expanded",
-      "  on conflict (establishment_cnpj_full, cnae_code) do update set source_order = excluded.source_order",
-      "  returning 1",
-      ")",
-      "select",
-      "  coalesce((select max(staging_id)::bigint from chunked), $1::bigint) as max_staging_id,",
-      "  coalesce((select count(*)::bigint from expanded), 0)::bigint as source_rows,",
-      "  coalesce((select count(*)::bigint from inserted), 0)::bigint as affected_rows;",
-    ].join("\n"),
-    values: [input.lastStagingId, input.chunkSize],
-  };
 }
 
 export function isMaterializationDataset(

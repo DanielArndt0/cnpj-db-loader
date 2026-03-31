@@ -424,18 +424,6 @@ export function createImportProgressReporter(): (
         theme.successLabel("MATERIALIZING"),
         `Completed ${formatCount(event.completedDatasets)}/${formatCount(event.totalDatasets)} staged dataset(s).`,
       );
-      console.log(
-        formatKeyValue(
-          "Secondary CNAE rows",
-          formatCount(event.secondaryCnaesRows),
-        ),
-      );
-      console.log(
-        formatKeyValue(
-          "Secondary CNAE duration",
-          formatDuration(event.secondaryCnaesDurationMs),
-        ),
-      );
       return;
     }
 
@@ -448,12 +436,6 @@ export function createImportProgressReporter(): (
       formatKeyValue(
         "Batches committed",
         `${formatCount(event.committedBatches)} / ${formatCount(event.totalBatches)}`,
-      ),
-    );
-    console.log(
-      formatKeyValue(
-        "Secondary CNAE rows",
-        formatCount(event.secondaryCnaesRows),
       ),
     );
     console.log(

@@ -31,13 +31,8 @@ export function getTargetTableName(dataset: ImportDatasetType): string {
 export function getSecondaryTargetTableName(
   dataset: ImportDatasetType,
 ): string | null {
-  if (dataset !== "establishments") {
-    return null;
-  }
-
-  return usesStagingWriteTarget(dataset)
-    ? null
-    : "establishment_secondary_cnaes";
+  void dataset;
+  return null;
 }
 
 export function collectRequiredStagingTables(

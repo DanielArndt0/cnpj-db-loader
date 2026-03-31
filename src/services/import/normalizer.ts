@@ -3,9 +3,9 @@ import type { TableLayout } from "../../dictionary/layouts/index.js";
 import { getInsertColumns } from "./sql.js";
 import { resolveImportWriteTarget } from "./targets.js";
 import {
+  createEstablishmentCnpjFullBuilder,
   createFieldValueParser,
   createPartnerDedupeKeyBuilder,
-  createSecondaryCnaesExtractor,
   normalizeFieldCount,
 } from "./transform.js";
 import type { ParsedImportSourceLine } from "./parser.js";
@@ -86,10 +86,24 @@ export function createImportRowNormalizer(input: {
     input.dataset === "establishments"
       ? resolveLayoutColumnIndex(input.layout, "registration_status_code")
       : -1;
+  const appendEstablishmentCnpjFull =
+    input.dataset === "establishments" &&
+    writeTarget === "final" &&
+    input.schemaCapabilities.includeEstablishmentCnpjFullInInsert;
   const appendPartnerDedupeKey =
     input.dataset === "partners" &&
     writeTarget === "final" &&
     input.schemaCapabilities.includePartnerDedupeKeyInInsert;
+  const buildEstablishmentCnpjFull = appendEstablishmentCnpjFull
+    ? createEstablishmentCnpjFullBuilder({
+        cnpjRoot: resolveLayoutColumnIndex(input.layout, "cnpj_root"),
+        cnpjOrder: resolveLayoutColumnIndex(input.layout, "cnpj_order"),
+        cnpjCheckDigits: resolveLayoutColumnIndex(
+          input.layout,
+          "cnpj_check_digits",
+        ),
+      })
+    : null;
   const buildPartnerDedupeKey = appendPartnerDedupeKey
     ? createPartnerDedupeKeyBuilder({
         cnpjRoot: resolveLayoutColumnIndex(input.layout, "cnpj_root"),
@@ -123,21 +137,6 @@ export function createImportRowNormalizer(input: {
         ageGroupCode: resolveLayoutColumnIndex(input.layout, "age_group_code"),
       })
     : null;
-  const extractSecondaryCnaes =
-    input.dataset === "establishments" && writeTarget === "final"
-      ? createSecondaryCnaesExtractor({
-          cnpjRoot: resolveLayoutColumnIndex(input.layout, "cnpj_root"),
-          cnpjOrder: resolveLayoutColumnIndex(input.layout, "cnpj_order"),
-          cnpjCheckDigits: resolveLayoutColumnIndex(
-            input.layout,
-            "cnpj_check_digits",
-          ),
-          secondaryCnaesRaw: resolveLayoutColumnIndex(
-            input.layout,
-            "secondary_cnaes_raw",
-          ),
-        })
-      : null;
 
   return {
     columns,
@@ -181,6 +180,10 @@ export function createImportRowNormalizer(input: {
 
       validateRequiredColumns(requiredIndexes, values, input.layout);
 
+      if (buildEstablishmentCnpjFull) {
+        values.push(buildEstablishmentCnpjFull(values));
+      }
+
       if (buildPartnerDedupeKey) {
         values.push(buildPartnerDedupeKey(values));
       }
@@ -190,9 +193,7 @@ export function createImportRowNormalizer(input: {
         rawLine: parsedLine.rawLine,
         nextOffset: parsedLine.nextOffset,
         sourceRowNumber,
-        secondaryRows: extractSecondaryCnaes
-          ? extractSecondaryCnaes(values)
-          : [],
+        secondaryRows: [],
       };
     },
   };

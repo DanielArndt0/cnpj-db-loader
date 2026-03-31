@@ -618,8 +618,7 @@ async function runMaterializationStage(
     chunkSize: execution.materializeBatchSize,
   });
 
-  execution.counters.secondaryCnaesRows =
-    materializationSummary.secondaryCnaesRows;
+  void materializationSummary;
 
   await updateImportPlanPhaseState(execution.client, {
     planId: execution.planId,
@@ -672,7 +671,6 @@ async function buildSummary(
     totalRows: execution.plan.totalRows,
     committedBatches: execution.counters.committedBatches,
     totalBatches: execution.plan.totalBatches,
-    secondaryCnaesRows: execution.counters.secondaryCnaesRows,
     quarantinedRows: execution.counters.quarantinedRows,
   });
 
@@ -685,7 +683,6 @@ async function buildSummary(
     totalRows: execution.plan.totalRows,
     committedBatches: execution.counters.committedBatches,
     totalBatches: execution.plan.totalBatches,
-    secondaryCnaesRows: execution.counters.secondaryCnaesRows,
     quarantinedRows: execution.counters.quarantinedRows,
     resumedFiles: execution.counters.resumedFiles,
     skippedCompletedFiles: execution.counters.skippedCompletedFiles,
@@ -708,7 +705,6 @@ async function buildSummary(
     plannedRows: execution.plan.totalRows,
     committedBatches: execution.counters.committedBatches,
     plannedBatches: execution.plan.totalBatches,
-    secondaryCnaesRows: execution.counters.secondaryCnaesRows,
     quarantinedRows: execution.counters.quarantinedRows,
     resumedFiles: execution.counters.resumedFiles,
     skippedCompletedFiles: execution.counters.skippedCompletedFiles,

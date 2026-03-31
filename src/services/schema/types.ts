@@ -13,6 +13,9 @@ const SCHEMA_PROFILE_ALIASES: Record<string, SchemaProfile> = {
   combined: "full",
   full: "full",
   final: "final",
+  "final-load": "final",
+  load: "final",
+  minimal: "final",
   operational: "final",
   production: "final",
   stage: "staging",
@@ -32,6 +35,6 @@ export function normalizeSchemaProfile(input?: string): SchemaProfile {
   }
 
   throw new ValidationError(
-    `Invalid schema profile "${input}". Expected one of: full, final, staging.`,
+    `Invalid schema profile "${input}". Expected one of: full, final, or staging. Aliases such as final-load, load, operational, and stage are also accepted.`,
   );
 }

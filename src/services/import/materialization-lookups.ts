@@ -75,14 +75,6 @@ const ESTABLISHMENTS_LOOKUP_SOURCES: readonly LookupReconciliationSource[] = [
     sourceSql:
       "select source.city_code as code from staging_establishments source",
   },
-  {
-    lookupTable: "cnaes",
-    sourceSql: [
-      "select trim(items.cnae_code) as code",
-      "from staging_establishments source",
-      "cross join lateral unnest(string_to_array(coalesce(source.secondary_cnaes_raw, ''), ',')) as items(cnae_code)",
-    ].join("\n"),
-  },
 ];
 
 const PARTNERS_LOOKUP_SOURCES: readonly LookupReconciliationSource[] = [

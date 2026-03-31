@@ -22,11 +22,10 @@ export type PartnerDedupeKeyIndices = {
   ageGroupCode: number;
 };
 
-export type SecondaryCnaesExtractionIndices = {
+export type EstablishmentCnpjFullIndices = {
   cnpjRoot: number;
   cnpjOrder: number;
   cnpjCheckDigits: number;
-  secondaryCnaesRaw: number;
 };
 
 export function parseDelimitedLine(line: string): string[] {
@@ -200,43 +199,14 @@ export function createPartnerDedupeKeyBuilder(
       .join("|");
 }
 
-export function createSecondaryCnaesExtractor(
-  indices: SecondaryCnaesExtractionIndices,
-): (record: readonly unknown[]) => Array<[string, string, number]> {
+export function createEstablishmentCnpjFullBuilder(
+  indices: EstablishmentCnpjFullIndices,
+): (record: readonly unknown[]) => string {
   return (record) => {
-    const root = String(record[indices.cnpjRoot] ?? "");
-    const order = String(record[indices.cnpjOrder] ?? "");
-    const digits = String(record[indices.cnpjCheckDigits] ?? "");
-    const raw = record[indices.secondaryCnaesRaw];
-
-    if (
-      !root ||
-      !order ||
-      !digits ||
-      typeof raw !== "string" ||
-      raw.trim() === ""
-    ) {
-      return [];
-    }
-
-    const cnpjFull = `${root}${order}${digits}`;
-    const seen = new Set<string>();
-    const rows: Array<[string, string, number]> = [];
-
-    raw
-      .split(",")
-      .map((value) => value.trim())
-      .filter(Boolean)
-      .forEach((cnaeCode, index) => {
-        if (seen.has(cnaeCode)) {
-          return;
-        }
-
-        seen.add(cnaeCode);
-        rows.push([cnpjFull, cnaeCode, index + 1]);
-      });
-
-    return rows;
+    const root = String(record[indices.cnpjRoot] ?? "").trim();
+    const order = String(record[indices.cnpjOrder] ?? "").trim();
+    const digits = String(record[indices.cnpjCheckDigits] ?? "").trim();
+    return `${root}${order}${digits}`;
   };
 }
 
@@ -293,15 +263,30 @@ export function transformRecord(
     );
   }
 
-  if (
-    dataset === "partners" &&
-    writeTarget === "final" &&
-    schemaCapabilities.includePartnerDedupeKeyInInsert
-  ) {
-    return [...values, buildPartnerDedupeKey(recordByColumn)];
+  const normalizedValues = layout.fields.map(
+    (field) => recordByColumn[field.columnName],
+  );
+
+  if (writeTarget === "final") {
+    if (
+      dataset === "establishments" &&
+      schemaCapabilities.includeEstablishmentCnpjFullInInsert
+    ) {
+      return [
+        ...normalizedValues,
+        `${recordByColumn.cnpj_root ?? ""}${recordByColumn.cnpj_order ?? ""}${recordByColumn.cnpj_check_digits ?? ""}`,
+      ];
+    }
+
+    if (
+      dataset === "partners" &&
+      schemaCapabilities.includePartnerDedupeKeyInInsert
+    ) {
+      return [...normalizedValues, buildPartnerDedupeKey(recordByColumn)];
+    }
   }
 
-  return layout.fields.map((field) => recordByColumn[field.columnName]);
+  return normalizedValues;
 }
 
 export function buildParsedPayload(
@@ -317,10 +302,7 @@ export function extractSecondaryCnaes(
   record: unknown[],
   columns: string[],
 ): Array<[string, string, number]> {
-  return createSecondaryCnaesExtractor({
-    cnpjRoot: columns.indexOf("cnpj_root"),
-    cnpjOrder: columns.indexOf("cnpj_order"),
-    cnpjCheckDigits: columns.indexOf("cnpj_check_digits"),
-    secondaryCnaesRaw: columns.indexOf("secondary_cnaes_raw"),
-  })(record);
+  void record;
+  void columns;
+  return [];
 }

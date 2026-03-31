@@ -11,7 +11,6 @@ import {
 } from "./materialization-checkpoints.js";
 import {
   buildMaterializationChunkQuery,
-  buildSecondaryCnaesMaterializationChunkQuery,
   isMaterializationDataset,
   type MaterializationDataset,
 } from "./materialization-sql.js";
@@ -79,9 +78,6 @@ export type MaterializationSummary = {
     chunksCompleted: number;
     durationMs: number;
   }>;
-  secondaryCnaesRows: number;
-  secondaryCnaesChunks: number;
-  secondaryCnaesDurationMs: number;
 };
 
 function resolveMaterializationDatasets(
@@ -343,59 +339,6 @@ async function validateDatasetCheckpoint(input: {
   };
 }
 
-async function validateSecondaryCnaesCheckpoint(input: {
-  client: Client;
-  planId: number;
-}): Promise<ValidatedCheckpoint> {
-  const dataset = "secondary_cnaes" as MaterializationDataset;
-  const targetTable = "establishment_secondary_cnaes";
-  let checkpoint = await readMaterializationCheckpoint(
-    input.client,
-    input.planId,
-    dataset,
-    targetTable,
-  );
-  const stagingMaxId = await readStagingMaxId(
-    input.client,
-    STAGING_TABLE_BY_DATASET.establishments,
-  );
-
-  let adjusted = false;
-  let reason: string | null = null;
-
-  if (checkpoint.lastStagingId > stagingMaxId && stagingMaxId > 0) {
-    checkpoint = resetCheckpointForReplay(checkpoint);
-    adjusted = true;
-    reason =
-      "The saved secondary CNAE checkpoint no longer matches the current staging establishments table. Secondary CNAEs will be rematerialized from the beginning.";
-  } else if (
-    checkpoint.status === "completed" &&
-    checkpoint.lastStagingId < stagingMaxId
-  ) {
-    checkpoint = {
-      ...checkpoint,
-      status: "in_progress",
-      completedAt: null,
-      lastError: null,
-    };
-    adjusted = true;
-    reason =
-      "Secondary CNAE materialization was previously marked as completed before the current staging tail. It will resume from the saved staging cursor.";
-  }
-
-  if (adjusted) {
-    await persistCheckpoint(input.client, checkpoint);
-  }
-
-  return {
-    checkpoint,
-    adjusted,
-    reason,
-    stagingMaxId,
-    targetRows: null,
-  };
-}
-
 async function materializeDatasetByChunks(input: {
   client: Client;
   planId: number;
@@ -547,6 +490,10 @@ async function materializeDatasetByChunks(input: {
   let affectedRows = checkpoint.rowsMaterialized;
   let sourceRows = checkpoint.rowsMaterialized;
   let chunksCompleted = checkpoint.chunksCompleted;
+  const targetHasRows =
+    checkpoint.rowsMaterialized > 0 ||
+    (await readRowCount(input.client, input.targetTable)) > 0;
+  const useConflictClause = targetHasRows;
 
   const heartbeatTimer = setInterval(() => {
     const elapsedMs = performance.now() - startedAt;
@@ -602,6 +549,7 @@ async function materializeDatasetByChunks(input: {
         schemaCapabilities: input.schemaCapabilities,
         lastStagingId: checkpoint.lastStagingId,
         chunkSize: input.chunkSize,
+        useConflictClause,
       });
       const chunkStartedAt = performance.now();
 
@@ -685,167 +633,6 @@ async function materializeDatasetByChunks(input: {
   };
 }
 
-async function materializeSecondaryCnaesByChunks(input: {
-  client: Client;
-  planId: number;
-  chunkSize: number;
-  progressLogPath: string;
-  onProgress?: ImportProgressListener | undefined;
-  completedDatasets: number;
-  totalDatasets: number;
-  completedFiles: number;
-  totalFiles: number;
-  processedRows: number;
-  totalRows: number;
-  committedBatches: number;
-  totalBatches: number;
-}): Promise<{
-  rows: number;
-  chunksCompleted: number;
-  durationMs: number;
-}> {
-  const checkpointDataset = "secondary_cnaes" as MaterializationDataset;
-  const targetTable = "establishment_secondary_cnaes";
-  const startedAt = performance.now();
-  const validated = await validateSecondaryCnaesCheckpoint({
-    client: input.client,
-    planId: input.planId,
-  });
-  let checkpoint = validated.checkpoint;
-
-  if (validated.adjusted && validated.reason) {
-    emitMaterializationProgress(input.onProgress, {
-      datasets: ["establishments"],
-      dataset: "establishments",
-      datasetIndex: input.totalDatasets,
-      targetTable,
-      stepLabel: "Secondary CNAEs checkpoint reconciled",
-      completedDatasets: input.completedDatasets,
-      completedFiles: input.completedFiles,
-      totalFiles: input.totalFiles,
-      processedRows: input.processedRows,
-      totalRows: input.totalRows,
-      committedBatches: input.committedBatches,
-      totalBatches: input.totalBatches,
-    });
-
-    await appendJsonLinesLog(input.progressLogPath, {
-      kind: "materialization_secondary_cnaes_checkpoint_reconciled",
-      targetTable,
-      reason: validated.reason,
-      stagingMaxId: validated.stagingMaxId,
-      timestamp: new Date().toISOString(),
-    });
-  }
-
-  if (checkpoint.status === "completed") {
-    return {
-      rows: checkpoint.rowsMaterialized,
-      chunksCompleted: checkpoint.chunksCompleted,
-      durationMs: performance.now() - startedAt,
-    };
-  }
-
-  checkpoint = {
-    ...checkpoint,
-    dataset: checkpointDataset,
-    targetTable,
-    status: "in_progress",
-    startedAt: checkpoint.startedAt ?? new Date(),
-    completedAt: null,
-    lastError: null,
-  };
-  await persistCheckpoint(input.client, checkpoint);
-
-  while (true) {
-    emitMaterializationProgress(input.onProgress, {
-      datasets: ["establishments"],
-      dataset: "establishments",
-      datasetIndex: input.totalDatasets,
-      targetTable,
-      stepLabel: `Secondary CNAEs chunk ${checkpoint.chunksCompleted + 1}`,
-      completedDatasets: input.completedDatasets,
-      completedFiles: input.completedFiles,
-      totalFiles: input.totalFiles,
-      processedRows: input.processedRows,
-      totalRows: input.totalRows,
-      committedBatches: input.committedBatches,
-      totalBatches: input.totalBatches,
-    });
-
-    const query = buildSecondaryCnaesMaterializationChunkQuery({
-      lastStagingId: checkpoint.lastStagingId,
-      chunkSize: input.chunkSize,
-    });
-
-    let chunkResult: {
-      maxStagingId: number;
-      sourceRows: number;
-      affectedRows: number;
-    };
-
-    await input.client.query("begin");
-    try {
-      chunkResult = await executeChunkQuery(
-        input.client,
-        query.text,
-        query.values,
-      );
-
-      if (chunkResult.sourceRows === 0) {
-        checkpoint = {
-          ...checkpoint,
-          status: "completed",
-          completedAt: new Date(),
-          lastError: null,
-        };
-        await persistCheckpoint(input.client, checkpoint);
-        await input.client.query("commit");
-        break;
-      }
-
-      checkpoint = {
-        ...checkpoint,
-        lastStagingId: chunkResult.maxStagingId,
-        rowsMaterialized:
-          checkpoint.rowsMaterialized + chunkResult.affectedRows,
-        chunksCompleted: checkpoint.chunksCompleted + 1,
-        lastError: null,
-      };
-      await persistCheckpoint(input.client, checkpoint);
-      await input.client.query("commit");
-    } catch (error) {
-      await input.client.query("rollback");
-      const message = error instanceof Error ? error.message : String(error);
-      checkpoint = {
-        ...checkpoint,
-        status: "failed",
-        lastError: message,
-      };
-      await persistCheckpoint(input.client, checkpoint);
-      throw error;
-    }
-
-    await appendJsonLinesLog(input.progressLogPath, {
-      kind: "materialization_secondary_cnaes_chunk_completed",
-      targetTable,
-      chunkNumber: checkpoint.chunksCompleted,
-      chunkSize: input.chunkSize,
-      sourceRows: chunkResult.sourceRows,
-      affectedRows: chunkResult.affectedRows,
-      lastStagingId: checkpoint.lastStagingId,
-      totalRowsMaterialized: checkpoint.rowsMaterialized,
-      timestamp: new Date().toISOString(),
-    });
-  }
-
-  return {
-    rows: checkpoint.rowsMaterialized,
-    chunksCompleted: checkpoint.chunksCompleted,
-    durationMs: performance.now() - startedAt,
-  };
-}
-
 export async function materializeStagedDatasets(input: {
   client: Client;
   planId: number;
@@ -874,9 +661,6 @@ export async function materializeStagedDatasets(input: {
 
   const summary: MaterializationSummary = {
     datasets: [],
-    secondaryCnaesRows: 0,
-    secondaryCnaesChunks: 0,
-    secondaryCnaesDurationMs: 0,
   };
 
   if (materializationDatasets.length === 0) {
@@ -1025,39 +809,10 @@ export async function materializeStagedDatasets(input: {
     }
   }
 
-  const secondaryStartedAt = performance.now();
-  const secondaryResult = await materializeSecondaryCnaesByChunks({
-    client: input.client,
-    planId: input.planId,
-    chunkSize,
-    progressLogPath: input.progressLogPath,
-    onProgress: input.onProgress,
-    completedDatasets: summary.datasets.length,
-    totalDatasets: materializationDatasets.length,
-    completedFiles: input.completedFiles,
-    totalFiles: input.totalFiles,
-    processedRows: input.processedRows,
-    totalRows: input.totalRows,
-    committedBatches: input.committedBatches,
-    totalBatches: input.totalBatches,
-  });
-  summary.secondaryCnaesRows = secondaryResult.rows;
-  summary.secondaryCnaesChunks = secondaryResult.chunksCompleted;
-  summary.secondaryCnaesDurationMs = secondaryResult.durationMs;
-
-  const establishmentsTracker =
-    input.datasetPerformanceTrackers.get("establishments");
-  if (establishmentsTracker) {
-    establishmentsTracker.materializationDurationMs +=
-      performance.now() - secondaryStartedAt;
-  }
-
   input.onProgress?.({
     kind: "materialization_finish",
     totalDatasets: materializationDatasets.length,
     completedDatasets: summary.datasets.length,
-    secondaryCnaesRows: summary.secondaryCnaesRows,
-    secondaryCnaesDurationMs: summary.secondaryCnaesDurationMs,
   });
 
   await appendJsonLinesLog(input.progressLogPath, {
@@ -1070,9 +825,6 @@ export async function materializeStagedDatasets(input: {
       chunksCompleted: item.chunksCompleted,
       durationMs: item.durationMs,
     })),
-    secondaryCnaesRows: summary.secondaryCnaesRows,
-    secondaryCnaesChunks: summary.secondaryCnaesChunks,
-    secondaryCnaesDurationMs: summary.secondaryCnaesDurationMs,
     timestamp: new Date().toISOString(),
   });
 

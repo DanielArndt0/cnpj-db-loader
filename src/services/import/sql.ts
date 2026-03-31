@@ -16,12 +16,20 @@ export function getInsertColumns(
     (field) => field.columnName,
   );
 
-  if (
-    dataset === "partners" &&
-    writeTarget === "final" &&
-    schemaCapabilities.includePartnerDedupeKeyInInsert
-  ) {
-    return [...columns, "partner_dedupe_key"];
+  if (writeTarget === "final") {
+    if (
+      dataset === "establishments" &&
+      schemaCapabilities.includeEstablishmentCnpjFullInInsert
+    ) {
+      return [...columns, "cnpj_full"];
+    }
+
+    if (
+      dataset === "partners" &&
+      schemaCapabilities.includePartnerDedupeKeyInInsert
+    ) {
+      return [...columns, "partner_dedupe_key"];
+    }
   }
 
   return columns;
@@ -30,6 +38,7 @@ export function getInsertColumns(
 export function getConflictClause(
   dataset: ImportDatasetType,
   columns: string[],
+  schemaCapabilities?: ImportSchemaCapabilities,
 ): string {
   switch (dataset) {
     case "countries":
@@ -51,12 +60,21 @@ export function getConflictClause(
       const updateColumns = columns
         .filter(
           (column) =>
-            !["cnpj_root", "cnpj_order", "cnpj_check_digits"].includes(column),
+            ![
+              "cnpj_root",
+              "cnpj_order",
+              "cnpj_check_digits",
+              "cnpj_full",
+            ].includes(column),
         )
         .map((column) => `${column} = excluded.${column}`)
         .concat(["updated_at = now()"])
         .join(", ");
-      return `on conflict (cnpj_root, cnpj_order, cnpj_check_digits) do update set ${updateColumns}`;
+      const conflictTarget =
+        schemaCapabilities?.includeEstablishmentCnpjFullInInsert
+          ? "cnpj_full"
+          : "cnpj_root, cnpj_order, cnpj_check_digits";
+      return `on conflict (${conflictTarget}) do update set ${updateColumns}`;
     }
     case "simples_options": {
       const updateColumns = columns
