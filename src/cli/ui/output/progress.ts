@@ -399,13 +399,28 @@ export function createImportProgressReporter(): (
     }
 
     if (event.kind === "materialization_progress") {
+      const rowsLine =
+        typeof event.rowsMaterialized === "number"
+          ? `Rows materialized: ${formatCount(event.rowsMaterialized)}${typeof event.datasetRowCount === "number" ? ` / ${formatCount(event.datasetRowCount)}` : ""}`
+          : `Rows materialized: waiting...`;
+      const chunksLine =
+        typeof event.chunksCompleted === "number"
+          ? `Chunks: ${formatCount(event.chunksCompleted)}${typeof event.estimatedChunks === "number" ? ` / ${formatCount(event.estimatedChunks)}` : ""}${typeof event.chunkSize === "number" ? ` | size ${formatCount(event.chunkSize)}` : ""}`
+          : `Chunks: waiting...${typeof event.chunkSize === "number" ? ` | size ${formatCount(event.chunkSize)}` : ""}`;
+      const cursorLine =
+        typeof event.lastStagingId === "number"
+          ? `Last staging id: ${formatCount(event.lastStagingId)}`
+          : `Last staging id: waiting...`;
+
       currentLines = [
         `${theme.infoLabel("MATERIALIZING")} __SPINNER__ status`,
         `Dataset: ${event.dataset} (${formatCount(event.datasetIndex)}/${formatCount(event.totalDatasets)}) | completed ${formatCount(event.completedDatasets)}/${formatCount(event.totalDatasets)}`,
         `Target table: ${event.targetTable}`,
-        `Files imported: ${formatCount(event.completedFiles)}/${formatCount(event.totalFiles)} | Rows staged: ${formatCount(event.processedRows)}/${formatCount(event.totalRows)}`,
-        `Batches committed: ${formatCount(event.committedBatches)}/${formatCount(event.totalBatches)}`,
+        rowsLine,
+        chunksLine,
+        cursorLine,
         `Step: ${event.stepLabel}${event.elapsedMs === undefined ? "" : ` | elapsed ${formatDuration(event.elapsedMs)}`}`,
+        `Reason: ${event.reason ?? "Running the next materialization step for this dataset."}`,
       ];
       renderBlock([
         currentLines[0]!.replace(

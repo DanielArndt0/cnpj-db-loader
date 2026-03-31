@@ -102,3 +102,5 @@ The generated database schema now supports three profiles:
 - [Commands](./docs/commands.md)
 - [Quarantine](./docs/quarantine.md)
 - [Sanitize](./docs/sanitize.md)
+
+- Materialization now stores lightweight staging validation markers (row count and max staging id) in the materialization checkpoint table so reruns can verify the live staging state quickly and reuse lookup reconciliation when the staging snapshot is unchanged.

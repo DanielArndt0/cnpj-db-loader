@@ -114,6 +114,12 @@ const LOOKUP_SOURCES_BY_DATASET: Readonly<
   simples_options: [],
 };
 
+export function getLookupReconciliationSources(
+  dataset: MaterializationDataset,
+): readonly LookupTableName[] {
+  return LOOKUP_SOURCES_BY_DATASET[dataset].map((source) => source.lookupTable);
+}
+
 async function ensureLookupCodesFromSource(input: {
   client: Client;
   lookupTable: LookupTableName;
@@ -152,12 +158,17 @@ async function ensureLookupCodesFromSource(input: {
 export async function reconcileMaterializationLookups(input: {
   client: Client;
   dataset: MaterializationDataset;
+  onLookupStart?:
+    | ((lookupTable: LookupTableName, index: number, total: number) => void)
+    | undefined;
 }): Promise<MaterializationLookupReconciliationSummary> {
   const startedAt = performance.now();
   const sources = LOOKUP_SOURCES_BY_DATASET[input.dataset];
   const aggregate = new Map<LookupTableName, number>();
 
-  for (const source of sources) {
+  for (const [index, source] of sources.entries()) {
+    input.onLookupStart?.(source.lookupTable, index + 1, sources.length);
+
     const insertedCodes = await ensureLookupCodesFromSource({
       client: input.client,
       lookupTable: source.lookupTable,

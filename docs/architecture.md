@@ -77,3 +77,5 @@ planner -> source-reader -> parser -> normalizer -> staging-writer -> materializ
                   +-> checkpoint-manager         +-> quarantine-writer
                                                  +-> materialization-checkpoints
 ```
+
+- Materialization now stores lightweight staging validation markers (row count and max staging id) in the materialization checkpoint table so reruns can verify the live staging state quickly and reuse lookup reconciliation when the staging snapshot is unchanged.

@@ -130,3 +130,5 @@ cnpj-db-loader database cleanup plans --validated-path ./downloads/sanitized --f
 ```
 
 Use `--force` to skip confirmation prompts. Without it, cleanup commands always ask before changing the database.
+
+- Materialization now stores lightweight staging validation markers (row count and max staging id) in the materialization checkpoint table so reruns can verify the live staging state quickly and reuse lookup reconciliation when the staging snapshot is unchanged.

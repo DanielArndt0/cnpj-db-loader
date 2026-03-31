@@ -14,7 +14,10 @@ import {
   isMaterializationDataset,
   type MaterializationDataset,
 } from "./materialization-sql.js";
-import { reconcileMaterializationLookups } from "./materialization-lookups.js";
+import {
+  getLookupReconciliationSources,
+  reconcileMaterializationLookups,
+} from "./materialization-lookups.js";
 import { type MutableDatasetPerformance } from "./finalizer.js";
 import { getFinalTargetTableName } from "./targets.js";
 import type {
@@ -112,6 +115,13 @@ function emitMaterializationProgress(
     committedBatches: number;
     totalBatches: number;
     elapsedMs?: number;
+    reason?: string;
+    chunkSize?: number;
+    rowsMaterialized?: number;
+    datasetRowCount?: number;
+    chunksCompleted?: number;
+    estimatedChunks?: number;
+    lastStagingId?: number;
   },
 ): void {
   listener?.({
@@ -129,6 +139,23 @@ function emitMaterializationProgress(
     committedBatches: input.committedBatches,
     totalBatches: input.totalBatches,
     ...(input.elapsedMs === undefined ? {} : { elapsedMs: input.elapsedMs }),
+    ...(input.reason === undefined ? {} : { reason: input.reason }),
+    ...(input.chunkSize === undefined ? {} : { chunkSize: input.chunkSize }),
+    ...(input.rowsMaterialized === undefined
+      ? {}
+      : { rowsMaterialized: input.rowsMaterialized }),
+    ...(input.datasetRowCount === undefined
+      ? {}
+      : { datasetRowCount: input.datasetRowCount }),
+    ...(input.chunksCompleted === undefined
+      ? {}
+      : { chunksCompleted: input.chunksCompleted }),
+    ...(input.estimatedChunks === undefined
+      ? {}
+      : { estimatedChunks: input.estimatedChunks }),
+    ...(input.lastStagingId === undefined
+      ? {}
+      : { lastStagingId: input.lastStagingId }),
   });
 }
 
@@ -223,7 +250,12 @@ async function validateStagingDatasetState(input: {
   totalDatasets: number;
   expectedRows: number | undefined;
   progressLogPath: string;
-}): Promise<{ rowCount: number; maxStagingId: number }> {
+}): Promise<{
+  rowCount: number;
+  maxStagingId: number;
+  effectiveExpectedRows: number | undefined;
+  quarantinedRows: number;
+}> {
   const stagingTable = STAGING_TABLE_BY_DATASET[input.dataset];
   const state = await readStagingState(input.client, stagingTable);
   const quarantinedRows = await readQuarantinedRowCountForPlan({
@@ -275,7 +307,11 @@ async function validateStagingDatasetState(input: {
     );
   }
 
-  return state;
+  return {
+    ...state,
+    effectiveExpectedRows,
+    quarantinedRows,
+  };
 }
 
 async function readRowCount(
@@ -296,10 +332,47 @@ async function persistCheckpoint(
   await writeMaterializationCheckpoint(client, checkpoint);
 }
 
-function resetCheckpointForReplay(
+function withValidatedStagingState(
+  checkpoint: MaterializationCheckpointRecord,
+  stagingState: { rowCount: number; maxStagingId: number },
+): MaterializationCheckpointRecord {
+  return {
+    ...checkpoint,
+    stagingRowCountVerified: stagingState.rowCount,
+    stagingMaxStagingIdVerified: stagingState.maxStagingId,
+    stagingValidatedAt: new Date(),
+  };
+}
+
+function clearLookupReconciliationState(
   checkpoint: MaterializationCheckpointRecord,
 ): MaterializationCheckpointRecord {
   return {
+    ...checkpoint,
+    lookupReconciliationStatus: "pending",
+    lookupReconciliationRowCountVerified: null,
+    lookupReconciliationMaxStagingIdVerified: null,
+    lookupReconciliationCompletedAt: null,
+  };
+}
+
+function shouldReuseLookupReconciliation(input: {
+  checkpoint: MaterializationCheckpointRecord;
+  stagingState: { rowCount: number; maxStagingId: number };
+}): boolean {
+  return (
+    input.checkpoint.lookupReconciliationStatus === "completed" &&
+    input.checkpoint.lookupReconciliationRowCountVerified ===
+      input.stagingState.rowCount &&
+    input.checkpoint.lookupReconciliationMaxStagingIdVerified ===
+      input.stagingState.maxStagingId
+  );
+}
+
+function resetCheckpointForReplay(
+  checkpoint: MaterializationCheckpointRecord,
+): MaterializationCheckpointRecord {
+  return clearLookupReconciliationState({
     ...checkpoint,
     status: "pending",
     rowsMaterialized: 0,
@@ -308,7 +381,10 @@ function resetCheckpointForReplay(
     lastError: null,
     startedAt: null,
     completedAt: null,
-  };
+    lastChunkFirstStagingId: 0,
+    lastChunkLastStagingId: 0,
+    lastChunkRows: 0,
+  });
 }
 
 async function validateDatasetCheckpoint(input: {
@@ -409,12 +485,17 @@ async function materializeDatasetByChunks(input: {
   durationMs: number;
 }> {
   const startedAt = performance.now();
+  const validationReason =
+    "Validating the live staging row count and staging cursor before resuming materialization.";
+
   emitMaterializationProgress(input.onProgress, {
     datasets: input.datasets,
     dataset: input.dataset,
     datasetIndex: input.datasetIndex,
     targetTable: input.targetTable,
     stepLabel: "Validating staging state",
+    reason: validationReason,
+    chunkSize: input.chunkSize,
     completedDatasets: input.completedDatasets,
     completedFiles: input.completedFiles,
     totalFiles: input.totalFiles,
@@ -434,7 +515,7 @@ async function materializeDatasetByChunks(input: {
     timestamp: new Date().toISOString(),
   });
 
-  await validateStagingDatasetState({
+  const stagingState = await validateStagingDatasetState({
     client: input.client,
     planId: input.planId,
     dataset: input.dataset,
@@ -443,6 +524,10 @@ async function materializeDatasetByChunks(input: {
     expectedRows: input.expectedStagedRows,
     progressLogPath: input.progressLogPath,
   });
+  const estimatedChunks = Math.max(
+    1,
+    Math.ceil(stagingState.rowCount / input.chunkSize),
+  );
 
   const validated = await validateDatasetCheckpoint({
     client: input.client,
@@ -453,7 +538,11 @@ async function materializeDatasetByChunks(input: {
       ? {}
       : { expectedRows: input.expectedRows }),
   });
-  let checkpoint = validated.checkpoint;
+  let checkpoint = withValidatedStagingState(
+    validated.checkpoint,
+    stagingState,
+  );
+  await persistCheckpoint(input.client, checkpoint);
 
   if (validated.adjusted && validated.reason) {
     emitMaterializationProgress(input.onProgress, {
@@ -462,6 +551,13 @@ async function materializeDatasetByChunks(input: {
       datasetIndex: input.datasetIndex,
       targetTable: input.targetTable,
       stepLabel: "Checkpoint reconciled — resuming safely",
+      reason: validated.reason,
+      chunkSize: input.chunkSize,
+      rowsMaterialized: checkpoint.rowsMaterialized,
+      datasetRowCount: stagingState.rowCount,
+      chunksCompleted: checkpoint.chunksCompleted,
+      estimatedChunks,
+      lastStagingId: checkpoint.lastStagingId,
       completedDatasets: input.completedDatasets,
       completedFiles: input.completedFiles,
       totalFiles: input.totalFiles,
@@ -492,6 +588,14 @@ async function materializeDatasetByChunks(input: {
       datasetIndex: input.datasetIndex,
       targetTable: input.targetTable,
       stepLabel: `Checkpoint complete — verified ${checkpoint.chunksCompleted} chunk(s)`,
+      reason:
+        "The live staging state matches the last verified materialization checkpoint.",
+      chunkSize: input.chunkSize,
+      rowsMaterialized: checkpoint.rowsMaterialized,
+      datasetRowCount: stagingState.rowCount,
+      chunksCompleted: checkpoint.chunksCompleted,
+      estimatedChunks,
+      lastStagingId: checkpoint.lastStagingId,
       completedDatasets: input.completedDatasets,
       completedFiles: input.completedFiles,
       totalFiles: input.totalFiles,
@@ -521,6 +625,115 @@ async function materializeDatasetByChunks(input: {
     };
   }
 
+  const lookupSources = getLookupReconciliationSources(input.dataset);
+  if (lookupSources.length === 0) {
+    checkpoint = {
+      ...checkpoint,
+      lookupReconciliationStatus: "completed",
+      lookupReconciliationRowCountVerified: stagingState.rowCount,
+      lookupReconciliationMaxStagingIdVerified: stagingState.maxStagingId,
+      lookupReconciliationCompletedAt:
+        checkpoint.lookupReconciliationCompletedAt ?? new Date(),
+    };
+    await persistCheckpoint(input.client, checkpoint);
+  } else if (shouldReuseLookupReconciliation({ checkpoint, stagingState })) {
+    emitMaterializationProgress(input.onProgress, {
+      datasets: input.datasets,
+      dataset: input.dataset,
+      datasetIndex: input.datasetIndex,
+      targetTable: input.targetTable,
+      stepLabel: "Reusing lookup reconciliation",
+      reason:
+        "Staging row count and staging cursor are unchanged since the last completed lookup reconciliation.",
+      chunkSize: input.chunkSize,
+      rowsMaterialized: checkpoint.rowsMaterialized,
+      datasetRowCount: stagingState.rowCount,
+      chunksCompleted: checkpoint.chunksCompleted,
+      estimatedChunks,
+      lastStagingId: checkpoint.lastStagingId,
+      completedDatasets: input.completedDatasets,
+      completedFiles: input.completedFiles,
+      totalFiles: input.totalFiles,
+      processedRows: input.processedRows,
+      totalRows: input.totalRows,
+      committedBatches: input.committedBatches,
+      totalBatches: input.totalBatches,
+    });
+
+    await appendJsonLinesLog(input.progressLogPath, {
+      kind: "materialization_lookup_reconciliation_reused",
+      dataset: input.dataset,
+      datasetIndex: input.datasetIndex,
+      totalDatasets: input.datasets.length,
+      targetTable: input.targetTable,
+      stagingRowCount: stagingState.rowCount,
+      stagingMaxId: stagingState.maxStagingId,
+      timestamp: new Date().toISOString(),
+    });
+  } else {
+    await appendJsonLinesLog(input.progressLogPath, {
+      kind: "materialization_lookup_reconciliation_started",
+      dataset: input.dataset,
+      datasetIndex: input.datasetIndex,
+      totalDatasets: input.datasets.length,
+      targetTable: input.targetTable,
+      lookupTables: lookupSources,
+      timestamp: new Date().toISOString(),
+    });
+
+    const reconciliation = await reconcileMaterializationLookups({
+      client: input.client,
+      dataset: input.dataset,
+      onLookupStart: (lookupTable, lookupIndex, lookupTotal) => {
+        emitMaterializationProgress(input.onProgress, {
+          datasets: input.datasets,
+          dataset: input.dataset,
+          datasetIndex: input.datasetIndex,
+          targetTable: input.targetTable,
+          stepLabel: `Reconciling lookup dependencies (${lookupIndex}/${lookupTotal})`,
+          reason: `Checking ${lookupTable} for missing lookup codes and placeholder rows.`,
+          chunkSize: input.chunkSize,
+          rowsMaterialized: checkpoint.rowsMaterialized,
+          datasetRowCount: stagingState.rowCount,
+          chunksCompleted: checkpoint.chunksCompleted,
+          estimatedChunks,
+          lastStagingId: checkpoint.lastStagingId,
+          completedDatasets: input.completedDatasets,
+          completedFiles: input.completedFiles,
+          totalFiles: input.totalFiles,
+          processedRows: input.processedRows,
+          totalRows: input.totalRows,
+          committedBatches: input.committedBatches,
+          totalBatches: input.totalBatches,
+        });
+      },
+    });
+
+    checkpoint = {
+      ...checkpoint,
+      lookupReconciliationStatus: "completed",
+      lookupReconciliationRowCountVerified: stagingState.rowCount,
+      lookupReconciliationMaxStagingIdVerified: stagingState.maxStagingId,
+      lookupReconciliationCompletedAt: new Date(),
+    };
+    await persistCheckpoint(input.client, checkpoint);
+
+    await appendJsonLinesLog(input.progressLogPath, {
+      kind: "materialization_lookup_reconciliation_completed",
+      dataset: input.dataset,
+      datasetIndex: input.datasetIndex,
+      totalDatasets: input.datasets.length,
+      targetTable: input.targetTable,
+      totalInsertedCodes: reconciliation.totalInsertedCodes,
+      results: reconciliation.results.map((item) => ({
+        lookupTable: item.lookupTable,
+        insertedCodes: item.insertedCodes,
+      })),
+      durationMs: reconciliation.durationMs,
+      timestamp: new Date().toISOString(),
+    });
+  }
+
   checkpoint = {
     ...checkpoint,
     status: "in_progress",
@@ -546,7 +759,8 @@ async function materializeDatasetByChunks(input: {
       dataset: input.dataset,
       datasetIndex: input.datasetIndex,
       targetTable: input.targetTable,
-      stepLabel: `Chunk ${chunksCompleted + 1} | last staging id ${checkpoint.lastStagingId}`,
+      stepLabel: `Materializing chunk ${chunksCompleted + 1}`,
+      reason: `Writing rows into ${input.targetTable} from the current staging range.`,
       completedDatasets: input.completedDatasets,
       completedFiles: input.completedFiles,
       totalFiles: input.totalFiles,
@@ -555,6 +769,12 @@ async function materializeDatasetByChunks(input: {
       committedBatches: input.committedBatches,
       totalBatches: input.totalBatches,
       elapsedMs,
+      chunkSize: input.chunkSize,
+      rowsMaterialized: affectedRows,
+      datasetRowCount: stagingState.rowCount,
+      chunksCompleted,
+      estimatedChunks,
+      lastStagingId: checkpoint.lastStagingId,
     });
 
     void appendJsonLinesLog(input.progressLogPath, {
@@ -578,7 +798,8 @@ async function materializeDatasetByChunks(input: {
         dataset: input.dataset,
         datasetIndex: input.datasetIndex,
         targetTable: input.targetTable,
-        stepLabel: `Chunk ${chunksCompleted + 1} | ${affectedRows} row(s) materialized`,
+        stepLabel: `Materializing chunk ${chunksCompleted + 1}`,
+        reason: `Writing rows into ${input.targetTable} from the current staging range.`,
         completedDatasets: input.completedDatasets,
         completedFiles: input.completedFiles,
         totalFiles: input.totalFiles,
@@ -586,6 +807,12 @@ async function materializeDatasetByChunks(input: {
         totalRows: input.totalRows,
         committedBatches: input.committedBatches,
         totalBatches: input.totalBatches,
+        chunkSize: input.chunkSize,
+        rowsMaterialized: affectedRows,
+        datasetRowCount: stagingState.rowCount,
+        chunksCompleted,
+        estimatedChunks,
+        lastStagingId: checkpoint.lastStagingId,
       });
 
       const query = buildMaterializationChunkQuery({
@@ -596,6 +823,7 @@ async function materializeDatasetByChunks(input: {
         useConflictClause,
       });
       const chunkStartedAt = performance.now();
+      const chunkFirstStagingId = checkpoint.lastStagingId + 1;
 
       let chunkResult: {
         maxStagingId: number;
@@ -630,6 +858,9 @@ async function materializeDatasetByChunks(input: {
             checkpoint.rowsMaterialized + chunkResult.affectedRows,
           chunksCompleted: checkpoint.chunksCompleted + 1,
           lastError: null,
+          lastChunkFirstStagingId: chunkFirstStagingId,
+          lastChunkLastStagingId: chunkResult.maxStagingId,
+          lastChunkRows: chunkResult.sourceRows,
         };
         await persistCheckpoint(input.client, checkpoint);
         await input.client.query("commit");
@@ -657,6 +888,7 @@ async function materializeDatasetByChunks(input: {
         targetTable: input.targetTable,
         chunkNumber: chunksCompleted,
         chunkSize: input.chunkSize,
+        chunkFirstStagingId,
         sourceRows: chunkResult.sourceRows,
         affectedRows: chunkResult.affectedRows,
         lastStagingId: checkpoint.lastStagingId,
@@ -745,50 +977,6 @@ export async function materializeStagedDatasets(input: {
     });
 
     try {
-      emitMaterializationProgress(input.onProgress, {
-        datasets: materializationDatasets,
-        dataset,
-        datasetIndex: datasetPosition,
-        targetTable,
-        stepLabel: "Reconciling lookup dependencies",
-        completedDatasets: summary.datasets.length,
-        completedFiles: input.completedFiles,
-        totalFiles: input.totalFiles,
-        processedRows: input.processedRows,
-        totalRows: input.totalRows,
-        committedBatches: input.committedBatches,
-        totalBatches: input.totalBatches,
-      });
-
-      await appendJsonLinesLog(input.progressLogPath, {
-        kind: "materialization_lookup_reconciliation_started",
-        dataset,
-        datasetIndex: datasetPosition,
-        totalDatasets: materializationDatasets.length,
-        targetTable,
-        timestamp: new Date().toISOString(),
-      });
-
-      const reconciliation = await reconcileMaterializationLookups({
-        client: input.client,
-        dataset,
-      });
-
-      await appendJsonLinesLog(input.progressLogPath, {
-        kind: "materialization_lookup_reconciliation_completed",
-        dataset,
-        datasetIndex: datasetPosition,
-        totalDatasets: materializationDatasets.length,
-        targetTable,
-        totalInsertedCodes: reconciliation.totalInsertedCodes,
-        results: reconciliation.results.map((item) => ({
-          lookupTable: item.lookupTable,
-          insertedCodes: item.insertedCodes,
-        })),
-        durationMs: reconciliation.durationMs,
-        timestamp: new Date().toISOString(),
-      });
-
       const expectedRows = input.expectedRowsByDataset.get(dataset);
       const expectedStagedRows = input.expectedStagedRowsByDataset.get(dataset);
       const result = await materializeDatasetByChunks({

@@ -238,6 +238,13 @@ export type ImportProgressEvent =
       committedBatches: number;
       totalBatches: number;
       elapsedMs?: number;
+      reason?: string;
+      chunkSize?: number;
+      rowsMaterialized?: number;
+      datasetRowCount?: number;
+      chunksCompleted?: number;
+      estimatedChunks?: number;
+      lastStagingId?: number;
     }
   | {
       kind: "materialization_finish";
