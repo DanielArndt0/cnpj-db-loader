@@ -13,7 +13,7 @@
 | `database config test`          | Test the connection using the saved or overridden URL.                                                                                                            |
 | `database config reset`         | Remove the saved PostgreSQL URL after confirmation.                                                                                                               |
 | `database cleanup staging`      | Truncate staging tables and optionally clear linked materialization checkpoints for a validated path.                                                             |
-| `database cleanup materialized` | Truncate final relational tables populated by materialization in dependency-safe order.                                                                           |
+| `database cleanup materialized` | Truncate simplified final relational tables populated by materialization in safe order for the current schema.                                                    |
 | `database cleanup checkpoints`  | Clear load checkpoints, materialization checkpoints, or both without truncating staging or final tables.                                                          |
 | `database cleanup plans`        | Delete saved import plans. Related plan files and materialization checkpoints are removed by database cascade.                                                    |
 | `import <input>`                | Run the full pipeline: plan, load validated files into staging/direct final targets, materialize staged datasets into final tables, and finalize the import plan. |

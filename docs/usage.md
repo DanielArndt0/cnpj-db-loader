@@ -52,7 +52,7 @@ cnpj-db-loader schema generate --profile staging
 - it persists the import plan in the database and reuses it on resume when the validated source files and batch size match
 - it reads files in streaming mode
 - it loads the large datasets into lightweight staging tables through PostgreSQL COPY with only light normalization in the hot path and defers heavier work to the materialization stage in dependency order
-- before each staged dataset is materialized into the final schema, the importer now reconciles missing lookup/domain codes with placeholder rows when that dependency model supports it
+- before each staged dataset is materialized into the final schema, the importer only reconciles missing lookup/domain codes when the current final schema still requires those lookup foreign keys
 - once the file import phase ends, the terminal switches to a dedicated MATERIALIZING stage and the JSONL progress log emits heartbeat entries during long staged-to-final upserts
 - it still upserts the smaller domain datasets directly into the final schema
 - it commits per load unit instead of holding one giant transaction
@@ -131,4 +131,4 @@ cnpj-db-loader database cleanup plans --validated-path ./downloads/sanitized --f
 
 Use `--force` to skip confirmation prompts. Without it, cleanup commands always ask before changing the database.
 
-- Materialization now stores lightweight staging validation markers (row count and max staging id) in the materialization checkpoint table so reruns can verify the live staging state quickly and reuse lookup reconciliation when the staging snapshot is unchanged.
+- Materialization now stores lightweight staging validation markers (row count and max staging id) in the materialization checkpoint table so reruns can verify the live staging state quickly and reuse lookup reconciliation when the staging snapshot is unchanged. The runtime validates that the required import tables already exist but no longer creates or alters them automatically.

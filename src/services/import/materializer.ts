@@ -7,6 +7,7 @@ import { appendJsonLinesLog } from "../logging.service.js";
 import {
   readMaterializationCheckpoint,
   writeMaterializationCheckpoint,
+  writeMaterializationCheckpointProgress,
   type MaterializationCheckpointRecord,
 } from "./materialization-checkpoints.js";
 import {
@@ -35,6 +36,8 @@ const MATERIALIZATION_ORDER: readonly MaterializationDataset[] = [
 
 const DEFAULT_MATERIALIZATION_CHUNK_SIZE = 50_000;
 const MATERIALIZATION_HEARTBEAT_INTERVAL_MS = 15_000;
+const MATERIALIZATION_CHECKPOINT_INTERVAL_CHUNKS = 25;
+const MATERIALIZATION_CHUNK_LOG_INTERVAL = 50;
 const EXACT_TARGET_COUNT_DATASETS: ReadonlySet<MaterializationDataset> =
   new Set(["companies", "establishments", "simples_options"]);
 
@@ -55,12 +58,12 @@ type CountRow = {
   total_count: string;
 };
 
-type MaxRow = {
+type StagingStateRow = {
+  total_count: string;
   max_staging_id: string;
 };
 
-type StagingStateRow = {
-  total_count: string;
+type StagingMaxRow = {
   max_staging_id: string;
 };
 
@@ -173,17 +176,6 @@ async function executeChunkQuery(
   };
 }
 
-async function readStagingMaxId(
-  client: Client,
-  stagingTable: string,
-): Promise<number> {
-  const result = await client.query<MaxRow>(
-    `select coalesce(max(staging_id), 0)::bigint as max_staging_id from ${stagingTable}`,
-  );
-
-  return Number.parseInt(result.rows[0]?.max_staging_id ?? "0", 10);
-}
-
 async function readStagingState(
   client: Client,
   stagingTable: string,
@@ -196,6 +188,17 @@ async function readStagingState(
     rowCount: Number.parseInt(result.rows[0]?.total_count ?? "0", 10),
     maxStagingId: Number.parseInt(result.rows[0]?.max_staging_id ?? "0", 10),
   };
+}
+
+async function readStagingMaxId(
+  client: Client,
+  stagingTable: string,
+): Promise<number> {
+  const result = await client.query<StagingMaxRow>(
+    `select coalesce(max(staging_id), 0)::bigint as max_staging_id from ${stagingTable}`,
+  );
+
+  return Number.parseInt(result.rows[0]?.max_staging_id ?? "0", 10);
 }
 
 async function readQuarantinedRowCountForPlan(input: {
@@ -255,8 +258,64 @@ async function validateStagingDatasetState(input: {
   maxStagingId: number;
   effectiveExpectedRows: number | undefined;
   quarantinedRows: number;
+  reusedValidation: boolean;
 }> {
   const stagingTable = STAGING_TABLE_BY_DATASET[input.dataset];
+  const checkpoint = await readMaterializationCheckpoint(
+    input.client,
+    input.planId,
+    input.dataset,
+    getFinalTargetTableName(input.dataset),
+  );
+
+  const canReuseValidatedStagingState =
+    checkpoint.status === "completed" &&
+    checkpoint.stagingRowCountVerified !== null &&
+    checkpoint.stagingMaxStagingIdVerified !== null;
+
+  if (canReuseValidatedStagingState) {
+    const verifiedRowCount = checkpoint.stagingRowCountVerified;
+    const verifiedMaxStagingId = checkpoint.stagingMaxStagingIdVerified;
+    const liveMaxStagingId = await readStagingMaxId(input.client, stagingTable);
+
+    await appendJsonLinesLog(input.progressLogPath, {
+      kind: "materialization_staging_validation_checked",
+      dataset: input.dataset,
+      datasetIndex: input.datasetIndex,
+      totalDatasets: input.totalDatasets,
+      stagingTable,
+      expectedRows: input.expectedRows ?? null,
+      actualRows: verifiedRowCount,
+      maxStagingId: liveMaxStagingId,
+      reusedValidation:
+        liveMaxStagingId === verifiedMaxStagingId && liveMaxStagingId > 0,
+      timestamp: new Date().toISOString(),
+    });
+
+    if (liveMaxStagingId === 0) {
+      throw new ValidationError(
+        buildEmptyStagingMessage(
+          stagingTable,
+          input.dataset,
+          verifiedRowCount ?? undefined,
+        ),
+      );
+    }
+
+    if (
+      verifiedRowCount !== null &&
+      liveMaxStagingId === verifiedMaxStagingId
+    ) {
+      return {
+        rowCount: verifiedRowCount,
+        maxStagingId: liveMaxStagingId,
+        effectiveExpectedRows: verifiedRowCount,
+        quarantinedRows: 0,
+        reusedValidation: true,
+      };
+    }
+  }
+
   const state = await readStagingState(input.client, stagingTable);
   const quarantinedRows = await readQuarantinedRowCountForPlan({
     client: input.client,
@@ -311,6 +370,7 @@ async function validateStagingDatasetState(input: {
     ...state,
     effectiveExpectedRows,
     quarantinedRows,
+    reusedValidation: false,
   };
 }
 
@@ -330,6 +390,27 @@ async function persistCheckpoint(
   checkpoint: MaterializationCheckpointRecord,
 ): Promise<void> {
   await writeMaterializationCheckpoint(client, checkpoint);
+}
+
+async function persistCheckpointProgress(
+  client: Client,
+  checkpoint: MaterializationCheckpointRecord,
+): Promise<void> {
+  await writeMaterializationCheckpointProgress(client, checkpoint);
+}
+
+function shouldFlushChunkCheckpoint(chunksCompleted: number): boolean {
+  return (
+    chunksCompleted === 1 ||
+    chunksCompleted % MATERIALIZATION_CHECKPOINT_INTERVAL_CHUNKS === 0
+  );
+}
+
+function shouldLogChunkCompletion(chunksCompleted: number): boolean {
+  return (
+    chunksCompleted === 1 ||
+    chunksCompleted % MATERIALIZATION_CHUNK_LOG_INTERVAL === 0
+  );
 }
 
 function withValidatedStagingState(
@@ -393,16 +474,16 @@ async function validateDatasetCheckpoint(input: {
   dataset: MaterializationDataset;
   targetTable: string;
   expectedRows?: number;
-  expectedStagedRows?: number;
+  stagingMaxId: number;
+  skipCompletedTargetValidation?: boolean;
 }): Promise<ValidatedCheckpoint> {
-  const stagingTable = STAGING_TABLE_BY_DATASET[input.dataset];
   let checkpoint = await readMaterializationCheckpoint(
     input.client,
     input.planId,
     input.dataset,
     input.targetTable,
   );
-  const stagingMaxId = await readStagingMaxId(input.client, stagingTable);
+  const stagingMaxId = input.stagingMaxId;
 
   let adjusted = false;
   let reason: string | null = null;
@@ -430,15 +511,14 @@ async function validateDatasetCheckpoint(input: {
 
   if (
     EXACT_TARGET_COUNT_DATASETS.has(input.dataset) &&
-    input.expectedRows !== undefined
+    input.expectedRows !== undefined &&
+    !input.skipCompletedTargetValidation &&
+    (checkpoint.status === "completed" ||
+      checkpoint.lastStagingId >= stagingMaxId)
   ) {
     targetRows = await readRowCount(input.client, input.targetTable);
 
-    if (
-      (checkpoint.status === "completed" ||
-        checkpoint.lastStagingId >= stagingMaxId) &&
-      targetRows < input.expectedRows
-    ) {
+    if (targetRows < input.expectedRows) {
       checkpoint = resetCheckpointForReplay(checkpoint);
       adjusted = true;
       reason = `The target table currently has ${targetRows} row(s), but ${input.expectedRows} row(s) are expected for ${input.dataset}. The dataset will be rematerialized from the beginning.`;
@@ -534,6 +614,8 @@ async function materializeDatasetByChunks(input: {
     planId: input.planId,
     dataset: input.dataset,
     targetTable: input.targetTable,
+    stagingMaxId: stagingState.maxStagingId,
+    skipCompletedTargetValidation: stagingState.reusedValidation,
     ...(input.expectedRows === undefined
       ? {}
       : { expectedRows: input.expectedRows }),
@@ -625,7 +707,9 @@ async function materializeDatasetByChunks(input: {
     };
   }
 
-  const lookupSources = getLookupReconciliationSources(input.dataset);
+  const lookupSources = input.schemaCapabilities.requiresLookupReconciliation
+    ? getLookupReconciliationSources(input.dataset)
+    : [];
   if (lookupSources.length === 0) {
     checkpoint = {
       ...checkpoint,
@@ -776,19 +860,6 @@ async function materializeDatasetByChunks(input: {
       estimatedChunks,
       lastStagingId: checkpoint.lastStagingId,
     });
-
-    void appendJsonLinesLog(input.progressLogPath, {
-      kind: "materialization_dataset_heartbeat",
-      dataset: input.dataset,
-      datasetIndex: input.datasetIndex,
-      totalDatasets: input.datasets.length,
-      targetTable: input.targetTable,
-      elapsedMs,
-      chunksCompleted,
-      lastStagingId: checkpoint.lastStagingId,
-      rowsMaterialized: affectedRows,
-      timestamp: new Date().toISOString(),
-    }).catch(() => undefined);
   }, MATERIALIZATION_HEARTBEAT_INTERVAL_MS);
 
   try {
@@ -862,7 +933,9 @@ async function materializeDatasetByChunks(input: {
           lastChunkLastStagingId: chunkResult.maxStagingId,
           lastChunkRows: chunkResult.sourceRows,
         };
-        await persistCheckpoint(input.client, checkpoint);
+        if (shouldFlushChunkCheckpoint(checkpoint.chunksCompleted)) {
+          await persistCheckpointProgress(input.client, checkpoint);
+        }
         await input.client.query("commit");
       } catch (error) {
         await input.client.query("rollback");
@@ -880,22 +953,24 @@ async function materializeDatasetByChunks(input: {
       sourceRows += chunkResult.sourceRows;
       chunksCompleted = checkpoint.chunksCompleted;
 
-      await appendJsonLinesLog(input.progressLogPath, {
-        kind: "materialization_chunk_completed",
-        dataset: input.dataset,
-        datasetIndex: input.datasetIndex,
-        totalDatasets: input.datasets.length,
-        targetTable: input.targetTable,
-        chunkNumber: chunksCompleted,
-        chunkSize: input.chunkSize,
-        chunkFirstStagingId,
-        sourceRows: chunkResult.sourceRows,
-        affectedRows: chunkResult.affectedRows,
-        lastStagingId: checkpoint.lastStagingId,
-        totalRowsMaterialized: affectedRows,
-        durationMs: performance.now() - chunkStartedAt,
-        timestamp: new Date().toISOString(),
-      });
+      if (shouldLogChunkCompletion(chunksCompleted)) {
+        await appendJsonLinesLog(input.progressLogPath, {
+          kind: "materialization_chunk_completed",
+          dataset: input.dataset,
+          datasetIndex: input.datasetIndex,
+          totalDatasets: input.datasets.length,
+          targetTable: input.targetTable,
+          chunkNumber: chunksCompleted,
+          chunkSize: input.chunkSize,
+          chunkFirstStagingId,
+          sourceRows: chunkResult.sourceRows,
+          affectedRows: chunkResult.affectedRows,
+          lastStagingId: checkpoint.lastStagingId,
+          totalRowsMaterialized: affectedRows,
+          durationMs: performance.now() - chunkStartedAt,
+          timestamp: new Date().toISOString(),
+        });
+      }
     }
   } finally {
     clearInterval(heartbeatTimer);

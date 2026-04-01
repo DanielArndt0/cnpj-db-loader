@@ -1,5 +1,6 @@
 import { Client } from "pg";
 
+import { ensureTableShape } from "./schema-validation.js";
 import type {
   ImportCheckpointRecord,
   ImportCheckpointStatus,
@@ -7,27 +8,22 @@ import type {
 } from "./types.js";
 
 export async function ensureCheckpointTable(client: Client): Promise<void> {
-  await client.query(`
-    create table if not exists import_checkpoints (
-      id bigserial primary key,
-      dataset text not null,
-      file_path text not null,
-      file_size bigint not null,
-      file_mtime timestamptz not null,
-      byte_offset bigint not null default 0,
-      rows_committed bigint not null default 0,
-      status text not null default 'pending',
-      last_error text,
-      updated_at timestamptz not null default now(),
-      unique (dataset, file_path)
-    )
-  `);
-  await client.query(
-    `create index if not exists idx_import_checkpoints_status on import_checkpoints (status)`,
-  );
-  await client.query(
-    `create index if not exists idx_import_checkpoints_dataset on import_checkpoints (dataset)`,
-  );
+  await ensureTableShape(client, {
+    tableName: "import_checkpoints",
+    requiredColumns: [
+      "dataset",
+      "file_path",
+      "file_size",
+      "file_mtime",
+      "byte_offset",
+      "rows_committed",
+      "status",
+      "last_error",
+      "updated_at",
+    ],
+    helpMessage:
+      'The import checkpoint schema is required. Run "cnpj-db-loader schema generate --profile full" and apply the SQL before importing.',
+  });
 }
 
 export async function readCheckpoint(

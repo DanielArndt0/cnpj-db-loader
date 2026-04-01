@@ -33,14 +33,8 @@ export type DatabaseCleanupSummary = {
 const MATERIALIZED_DATASET_TABLES: Readonly<
   Partial<Record<ImportDatasetType, readonly string[]>>
 > = {
-  companies: [
-    "simples_options",
-    "partners",
-    "establishment_secondary_cnaes",
-    "establishments",
-    "companies",
-  ],
-  establishments: ["establishment_secondary_cnaes", "establishments"],
+  companies: ["simples_options", "partners", "establishments", "companies"],
+  establishments: ["establishments"],
   partners: ["partners"],
   simples_options: ["simples_options"],
 } as const;
@@ -283,7 +277,7 @@ export async function cleanupDatabaseMaterializedTables(
   }
   summary.truncatedTables = tableNames;
   summary.notes.push(
-    "Final relational tables were truncated in dependency-safe order. Clear materialization checkpoints separately if you want the import plan to rebuild these tables from scratch.",
+    "Simplified final materialized tables were truncated in safe order for the current schema. Clear materialization checkpoints separately if you want the import plan to rebuild these tables from scratch.",
   );
 
   return summary;

@@ -1,5 +1,6 @@
 import type { Client } from "pg";
 
+import { ensureTableShape } from "./schema-validation.js";
 import type { ImportPhaseStatus } from "./types.js";
 
 export type MaterializationCheckpointRecord = {
@@ -101,72 +102,34 @@ function mapCheckpointRow(
 export async function ensureMaterializationCheckpointTable(
   client: Client,
 ): Promise<void> {
-  await client.query(`
-    create table if not exists import_materialization_checkpoints (
-      id bigserial primary key,
-      plan_id bigint not null references import_plans (id) on delete cascade,
-      dataset text not null,
-      target_table text not null,
-      status text not null default 'pending',
-      rows_materialized bigint not null default 0,
-      last_staging_id bigint not null default 0,
-      chunks_completed bigint not null default 0,
-      last_error text,
-      started_at timestamptz,
-      completed_at timestamptz,
-      updated_at timestamptz not null default now(),
-      staging_row_count_verified bigint,
-      staging_max_staging_id_verified bigint,
-      staging_validated_at timestamptz,
-      lookup_reconciliation_status text not null default 'pending',
-      lookup_reconciliation_row_count_verified bigint,
-      lookup_reconciliation_max_staging_id_verified bigint,
-      lookup_reconciliation_completed_at timestamptz,
-      last_chunk_first_staging_id bigint not null default 0,
-      last_chunk_last_staging_id bigint not null default 0,
-      last_chunk_rows bigint not null default 0,
-      unique (plan_id, dataset)
-    )
-  `);
-  await client.query(
-    `alter table import_materialization_checkpoints add column if not exists staging_row_count_verified bigint`,
-  );
-  await client.query(
-    `alter table import_materialization_checkpoints add column if not exists staging_max_staging_id_verified bigint`,
-  );
-  await client.query(
-    `alter table import_materialization_checkpoints add column if not exists staging_validated_at timestamptz`,
-  );
-  await client.query(
-    `alter table import_materialization_checkpoints add column if not exists lookup_reconciliation_status text not null default 'pending'`,
-  );
-  await client.query(
-    `alter table import_materialization_checkpoints add column if not exists lookup_reconciliation_row_count_verified bigint`,
-  );
-  await client.query(
-    `alter table import_materialization_checkpoints add column if not exists lookup_reconciliation_max_staging_id_verified bigint`,
-  );
-  await client.query(
-    `alter table import_materialization_checkpoints add column if not exists lookup_reconciliation_completed_at timestamptz`,
-  );
-  await client.query(
-    `alter table import_materialization_checkpoints add column if not exists last_chunk_first_staging_id bigint not null default 0`,
-  );
-  await client.query(
-    `alter table import_materialization_checkpoints add column if not exists last_chunk_last_staging_id bigint not null default 0`,
-  );
-  await client.query(
-    `alter table import_materialization_checkpoints add column if not exists last_chunk_rows bigint not null default 0`,
-  );
-  await client.query(
-    `create index if not exists idx_import_materialization_checkpoints_status on import_materialization_checkpoints (status)`,
-  );
-  await client.query(
-    `create index if not exists idx_import_materialization_checkpoints_plan_id on import_materialization_checkpoints (plan_id)`,
-  );
-  await client.query(
-    `create index if not exists idx_import_materialization_checkpoints_dataset on import_materialization_checkpoints (dataset)`,
-  );
+  await ensureTableShape(client, {
+    tableName: "import_materialization_checkpoints",
+    requiredColumns: [
+      "plan_id",
+      "dataset",
+      "target_table",
+      "status",
+      "rows_materialized",
+      "last_staging_id",
+      "chunks_completed",
+      "last_error",
+      "started_at",
+      "completed_at",
+      "updated_at",
+      "staging_row_count_verified",
+      "staging_max_staging_id_verified",
+      "staging_validated_at",
+      "lookup_reconciliation_status",
+      "lookup_reconciliation_row_count_verified",
+      "lookup_reconciliation_max_staging_id_verified",
+      "lookup_reconciliation_completed_at",
+      "last_chunk_first_staging_id",
+      "last_chunk_last_staging_id",
+      "last_chunk_rows",
+    ],
+    helpMessage:
+      'The materialization checkpoint schema is required. Run "cnpj-db-loader schema generate --profile full" and apply the SQL before importing.',
+  });
 }
 
 export async function readMaterializationCheckpoint(
@@ -299,6 +262,41 @@ export async function writeMaterializationCheckpoint(
       checkpoint.lookupReconciliationRowCountVerified,
       checkpoint.lookupReconciliationMaxStagingIdVerified,
       checkpoint.lookupReconciliationCompletedAt,
+      checkpoint.lastChunkFirstStagingId,
+      checkpoint.lastChunkLastStagingId,
+      checkpoint.lastChunkRows,
+    ],
+  );
+}
+
+export async function writeMaterializationCheckpointProgress(
+  client: Client,
+  checkpoint: MaterializationCheckpointRecord,
+): Promise<void> {
+  await client.query(
+    `update import_materialization_checkpoints
+        set status = $3,
+            rows_materialized = $4,
+            last_staging_id = $5,
+            chunks_completed = $6,
+            last_error = $7,
+            started_at = $8,
+            completed_at = $9,
+            updated_at = now(),
+            last_chunk_first_staging_id = $10,
+            last_chunk_last_staging_id = $11,
+            last_chunk_rows = $12
+      where plan_id = $1 and dataset = $2`,
+    [
+      checkpoint.planId,
+      checkpoint.dataset,
+      checkpoint.status,
+      checkpoint.rowsMaterialized,
+      checkpoint.lastStagingId,
+      checkpoint.chunksCompleted,
+      checkpoint.lastError,
+      checkpoint.startedAt,
+      checkpoint.completedAt,
       checkpoint.lastChunkFirstStagingId,
       checkpoint.lastChunkLastStagingId,
       checkpoint.lastChunkRows,

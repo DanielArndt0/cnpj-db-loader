@@ -107,6 +107,7 @@ export type ImportWriteTarget = "final" | "staging";
 export type ImportSchemaCapabilities = {
   includeEstablishmentCnpjFullInInsert: boolean;
   includePartnerDedupeKeyInInsert: boolean;
+  requiresLookupReconciliation: boolean;
 };
 
 export type ImportDatasetPerformanceSummary = {

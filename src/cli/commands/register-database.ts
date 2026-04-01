@@ -195,15 +195,15 @@ export function registerDatabaseCommands(program: Command): void {
     .option("--db-url <url>", "Override the default PostgreSQL connection URL.")
     .option(
       "--dataset <dataset>",
-      "Restrict the cleanup to one final materialized dataset (companies, establishments, partners, simples_options).",
+      "Restrict the cleanup to one simplified final materialized dataset (companies, establishments, partners, simples_options).",
     )
     .option("-f, --force", "Skip the confirmation prompt.")
     .description(
-      "Truncate final relational tables populated by materialization in dependency-safe order.",
+      "Truncate simplified final relational tables populated by materialization in safe order for the current schema.",
     )
     .action(async (options: DatabaseGlobalOptions) => {
       const confirmed = await confirmDatabaseAction(
-        "Truncate final materialized tables now? This removes relational data already consolidated from staging.",
+        "Truncate simplified final materialized tables now? This removes relational data already consolidated from staging.",
         options.force,
       );
       if (!confirmed) {

@@ -83,9 +83,9 @@ The final import summary now includes baseline timing and throughput metrics suc
 
 The import internals are now split into dedicated modules such as planner, source reader, parser, normalizer, checkpoint manager, quarantine writer, staging writer, materializer, and finalizer so staged bulk-load and final materialization changes can be implemented without rewriting the whole import command.
 
-The CLI now exposes a split workflow as well: `import` runs the full pipeline, `import load` stops after staging/direct writes, `import materialize` resumes from the saved plan and pushes staged rows into the final tables, and `database cleanup ...` exposes safe maintenance commands for staging tables, final materialized tables, checkpoints, and saved plans.
+The CLI now exposes a split workflow as well: `import` runs the full pipeline, `import load` stops after staging/direct writes, `import materialize` resumes from the saved plan and pushes staged rows into the final tables, and `database cleanup ...` exposes safe maintenance commands for staging tables, simplified final materialized tables, checkpoints, and saved plans.
 
-Materialization progress is now checkpointed separately from file-load checkpoints, and the materializer works in resumable chunks controlled by `--materialize-batch-size`. During long final materialization steps, the CLI keeps the live progress output on a dedicated MATERIALIZING stage and the JSONL progress log emits periodic heartbeat entries so long-running staging-to-final upserts remain visible. The simplified final schema keeps raw secondary CNAE text in establishments and derives helper fields such as partner dedupe keys during materialization only when they are still stored physically in the target schema.
+Materialization progress is now checkpointed separately from file-load checkpoints, and the materializer works in resumable chunks controlled by `--materialize-batch-size`. During long final materialization steps, the CLI keeps the live progress output on a dedicated MATERIALIZING stage while reducing per-chunk checkpoint and JSONL write overhead so resumable chunks stay fast. The simplified final schema keeps raw secondary CNAE text in establishments and derives helper fields such as partner dedupe keys during materialization only when they are still stored physically in the target schema.
 
 The generated database schema now supports three profiles:
 
@@ -103,4 +103,4 @@ The generated database schema now supports three profiles:
 - [Quarantine](./docs/quarantine.md)
 - [Sanitize](./docs/sanitize.md)
 
-- Materialization now stores lightweight staging validation markers (row count and max staging id) in the materialization checkpoint table so reruns can verify the live staging state quickly and reuse lookup reconciliation when the staging snapshot is unchanged.
+- Materialization now stores lightweight staging validation markers (row count and max staging id) in the materialization checkpoint table so reruns can verify the live staging state quickly and reuse lookup reconciliation when the staging snapshot is unchanged. The runtime validates that the required import tables already exist but no longer creates or alters them automatically.

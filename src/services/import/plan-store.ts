@@ -1,5 +1,6 @@
 import { Client } from "pg";
 
+import { ensureTableShape } from "./schema-validation.js";
 import type {
   ImportDatasetPlan,
   ImportDatasetType,
@@ -9,75 +10,49 @@ import type {
 } from "./types.js";
 
 export async function ensureImportPlanTables(client: Client): Promise<void> {
-  await client.query(`
-    create table if not exists import_plans (
-      id bigserial primary key,
-      source_fingerprint text not null unique,
-      input_path text not null,
-      validated_path text not null,
-      batch_size integer not null,
-      target_database text not null,
-      total_datasets integer not null,
-      total_files integer not null,
-      total_rows bigint not null,
-      total_batches bigint not null,
-      execution_order jsonb not null,
-      status text not null default 'planned',
-      load_status text not null default 'pending',
-      materialization_status text not null default 'pending',
-      last_phase text,
-      last_error text,
-      created_at timestamptz not null default now(),
-      updated_at timestamptz not null default now(),
-      last_used_at timestamptz not null default now()
-    )
-  `);
+  await ensureTableShape(client, {
+    tableName: "import_plans",
+    requiredColumns: [
+      "source_fingerprint",
+      "input_path",
+      "validated_path",
+      "batch_size",
+      "target_database",
+      "total_datasets",
+      "total_files",
+      "total_rows",
+      "total_batches",
+      "execution_order",
+      "status",
+      "load_status",
+      "materialization_status",
+      "last_phase",
+      "last_error",
+      "created_at",
+      "updated_at",
+      "last_used_at",
+    ],
+    helpMessage:
+      'The import plan schema is required. Run "cnpj-db-loader schema generate --profile full" and apply the SQL before importing.',
+  });
 
-  await client.query(
-    `alter table import_plans add column if not exists load_status text not null default 'pending'`,
-  );
-  await client.query(
-    `alter table import_plans add column if not exists materialization_status text not null default 'pending'`,
-  );
-  await client.query(
-    `alter table import_plans add column if not exists last_phase text`,
-  );
-  await client.query(
-    `alter table import_plans add column if not exists last_error text`,
-  );
-
-  await client.query(`
-    create table if not exists import_plan_files (
-      id bigserial primary key,
-      plan_id bigint not null references import_plans (id) on delete cascade,
-      dataset text not null,
-      dataset_index integer not null,
-      file_index integer not null,
-      file_path text not null,
-      file_display_path text not null,
-      file_size bigint not null,
-      file_mtime timestamptz not null,
-      total_rows bigint not null,
-      total_batches bigint not null,
-      unique (plan_id, file_path)
-    )
-  `);
-
-  await client.query(
-    `create index if not exists idx_import_plans_status on import_plans (status)`,
-  );
-  await client.query(
-    `create index if not exists idx_import_plans_load_status on import_plans (load_status)`,
-  );
-  await client.query(
-    `create index if not exists idx_import_plans_materialization_status on import_plans (materialization_status)`,
-  );
-  await client.query(
-    `create index if not exists idx_import_plan_files_plan_id on import_plan_files (plan_id)`,
-  );
-  await client.query(
-    `create index if not exists idx_import_plan_files_dataset on import_plan_files (dataset)`,
-  );
+  await ensureTableShape(client, {
+    tableName: "import_plan_files",
+    requiredColumns: [
+      "plan_id",
+      "dataset",
+      "dataset_index",
+      "file_index",
+      "file_path",
+      "file_display_path",
+      "file_size",
+      "file_mtime",
+      "total_rows",
+      "total_batches",
+    ],
+    helpMessage:
+      'The import plan schema is required. Run "cnpj-db-loader schema generate --profile full" and apply the SQL before importing.',
+  });
 }
 
 type ImportPlanRow = {
