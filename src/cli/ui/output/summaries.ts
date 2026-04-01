@@ -7,9 +7,12 @@ import type { ValidationSummary } from "../../../services/validate.service.js";
 import {
   formatBytes,
   formatCount,
+  formatDuration,
   formatKeyValue,
+  formatRate,
   printErrors,
   printWarnings,
+  printNotes,
   resolveLogFilePath,
 } from "./shared.js";
 
@@ -121,14 +124,89 @@ export function printValidationSummary(
   console.log(`${theme.muted("Log file:")} ${resolveLogFilePath(logFilePath)}`);
 }
 
-export function printDbConfigSummary(
+export function printDatabaseConfigSummary(
   config: { defaultDbUrl?: string },
   logFilePath: string,
 ): void {
-  console.log(theme.successLabel("DB"), "Database configuration loaded.");
+  console.log(theme.successLabel("DATABASE"), "Database configuration loaded.");
   console.log(
-    formatKeyValue("Default DB URL", config.defaultDbUrl ?? "not configured"),
+    formatKeyValue(
+      "Default database URL",
+      config.defaultDbUrl ?? "not configured",
+    ),
   );
+  console.log(`${theme.muted("Log file:")} ${resolveLogFilePath(logFilePath)}`);
+}
+
+export function printDatabaseCleanupSummary(
+  summary: {
+    scope: string;
+    targetDatabase: string;
+    dataset?: string | undefined;
+    phase?: string | undefined;
+    validatedPath?: string | undefined;
+    planId?: number | undefined;
+    truncatedTables: string[];
+    deletedLoadCheckpoints: number;
+    deletedMaterializationCheckpoints: number;
+    deletedPlans: number;
+    notes: string[];
+  },
+  logFilePath: string,
+): void {
+  console.log(
+    theme.successLabel("DATABASE"),
+    `Cleanup completed for ${summary.scope}.`,
+  );
+  console.log(formatKeyValue("Target database", summary.targetDatabase));
+  console.log(formatKeyValue("Scope", summary.scope));
+
+  if (summary.dataset) {
+    console.log(formatKeyValue("Dataset", summary.dataset));
+  }
+
+  if (summary.phase) {
+    console.log(formatKeyValue("Checkpoint phase", summary.phase));
+  }
+
+  if (summary.planId !== undefined) {
+    console.log(formatKeyValue("Plan id", summary.planId));
+  }
+
+  if (summary.validatedPath) {
+    console.log(formatKeyValue("Validated path", summary.validatedPath));
+  }
+
+  console.log(
+    formatKeyValue(
+      "Staging/final tables truncated",
+      summary.truncatedTables.length,
+    ),
+  );
+  console.log(
+    formatKeyValue(
+      "Load checkpoints deleted",
+      formatCount(summary.deletedLoadCheckpoints),
+    ),
+  );
+  console.log(
+    formatKeyValue(
+      "Materialization checkpoints deleted",
+      formatCount(summary.deletedMaterializationCheckpoints),
+    ),
+  );
+  console.log(
+    formatKeyValue("Import plans deleted", formatCount(summary.deletedPlans)),
+  );
+
+  if (summary.truncatedTables.length > 0) {
+    console.log(theme.warningLabel("TABLES"));
+    for (const tableName of summary.truncatedTables) {
+      console.log(`  ${theme.yellow("•")} ${tableName}`);
+    }
+  }
+
+  printNotes(summary.notes);
   console.log(`${theme.muted("Log file:")} ${resolveLogFilePath(logFilePath)}`);
 }
 
@@ -184,7 +262,14 @@ export function printImportSummary(
   summary: ImportSummary,
   logFilePath: string,
 ): void {
-  console.log(theme.successLabel("IMPORT"), "Database import completed.");
+  const headline =
+    summary.executionMode === "load"
+      ? "Staging/direct load completed."
+      : summary.executionMode === "materialize"
+        ? "Staged materialization completed."
+        : "Database import completed.";
+
+  console.log(theme.successLabel("IMPORT"), headline);
   console.log(formatKeyValue("Input path", summary.inputPath));
   console.log(formatKeyValue("Validated path", summary.validatedPath));
   console.log(formatKeyValue("Target database", summary.targetDatabase));
@@ -200,12 +285,6 @@ export function printImportSummary(
     formatKeyValue(
       "Batches committed",
       `${formatCount(summary.committedBatches)} / ${formatCount(summary.plannedBatches)}`,
-    ),
-  );
-  console.log(
-    formatKeyValue(
-      "Secondary CNAE rows",
-      formatCount(summary.secondaryCnaesRows),
     ),
   );
   console.log(
@@ -225,7 +304,75 @@ export function printImportSummary(
     }
   }
 
-  printWarnings(summary.warnings);
+  console.log(theme.infoLabel("PERFORMANCE"));
+  console.log(
+    formatKeyValue(
+      "Total duration",
+      formatDuration(summary.performance.totalDurationMs),
+    ),
+  );
+  console.log(
+    formatKeyValue(
+      "Preparatory scan",
+      formatDuration(summary.performance.scanDurationMs),
+    ),
+  );
+  console.log(
+    formatKeyValue(
+      "Import execution",
+      formatDuration(summary.performance.executionDurationMs),
+    ),
+  );
+  console.log(
+    formatKeyValue(
+      "Lookup loading",
+      formatDuration(summary.performance.lookupLoadDurationMs),
+    ),
+  );
+  console.log(
+    formatKeyValue(
+      "Insert path",
+      formatDuration(summary.performance.insertDurationMs),
+    ),
+  );
+  console.log(
+    formatKeyValue(
+      "Retry path",
+      formatDuration(summary.performance.retryDurationMs),
+    ),
+  );
+  console.log(
+    formatKeyValue(
+      "Quarantine path",
+      formatDuration(summary.performance.quarantineDurationMs),
+    ),
+  );
+  console.log(
+    formatKeyValue(
+      "Materialization",
+      formatDuration(summary.performance.materializationDurationMs),
+    ),
+  );
+  console.log(
+    formatKeyValue(
+      "Throughput",
+      `${formatRate(summary.performance.rowsPerSecond, "rows/s")} | ${formatRate(summary.performance.batchesPerMinute, "batches/min")}`,
+    ),
+  );
+
+  if (summary.performance.datasets.length > 0) {
+    console.log(theme.infoLabel("DATASET PERFORMANCE"));
+    for (const datasetPerformance of summary.performance.datasets) {
+      console.log(
+        `  ${theme.blue("•")} ${datasetPerformance.dataset}: ${formatCount(datasetPerformance.importedRows)} row(s), ${formatCount(datasetPerformance.committedBatches)} batch(es), ${formatDuration(datasetPerformance.importDurationMs)}, ${formatRate(datasetPerformance.rowsPerSecond, "rows/s")}`,
+      );
+      console.log(
+        `    scan ${formatDuration(datasetPerformance.scanDurationMs)} | insert ${formatDuration(datasetPerformance.insertDurationMs)} | materialize ${formatDuration(datasetPerformance.materializationDurationMs)} | retry ${formatDuration(datasetPerformance.retryDurationMs)} | quarantine ${formatDuration(datasetPerformance.quarantineDurationMs)} | resumed ${formatCount(datasetPerformance.resumedFiles)} | skipped ${formatCount(datasetPerformance.skippedCompletedFiles)}`,
+      );
+    }
+  }
+
+  printNotes(summary.warnings);
   console.log(`${theme.muted("Log file:")} ${resolveLogFilePath(logFilePath)}`);
   console.log(
     `${theme.muted("Progress log:")} ${resolveLogFilePath(summary.progressLogPath)}`,

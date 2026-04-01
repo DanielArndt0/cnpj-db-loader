@@ -74,6 +74,12 @@ export type ImportPlanStatus =
   | "failed"
   | "cancelled";
 
+export type ImportPhaseStatus =
+  | "pending"
+  | "in_progress"
+  | "completed"
+  | "failed";
+
 export type ImportPlanRecord = {
   id: number;
   sourceFingerprint: string;
@@ -87,13 +93,58 @@ export type ImportPlanRecord = {
   totalBatches: number;
   executionOrder: ImportDatasetType[];
   status: ImportPlanStatus;
+  loadStatus: ImportPhaseStatus;
+  materializationStatus: ImportPhaseStatus;
+  lastPhase: string | null;
+  lastError: string | null;
   createdAt: Date;
   updatedAt: Date;
   lastUsedAt: Date;
 };
 
+export type ImportWriteTarget = "final" | "staging";
+
 export type ImportSchemaCapabilities = {
+  includeEstablishmentCnpjFullInInsert: boolean;
   includePartnerDedupeKeyInInsert: boolean;
+  requiresLookupReconciliation: boolean;
+};
+
+export type ImportDatasetPerformanceSummary = {
+  dataset: ImportDatasetType;
+  files: number;
+  plannedRows: number;
+  importedRows: number;
+  plannedBatches: number;
+  committedBatches: number;
+  resumedFiles: number;
+  skippedCompletedFiles: number;
+  retriedRows: number;
+  retriedBatches: number;
+  quarantinedRows: number;
+  scanDurationMs: number;
+  importDurationMs: number;
+  insertDurationMs: number;
+  retryDurationMs: number;
+  quarantineDurationMs: number;
+  materializationDurationMs: number;
+  rowsPerSecond: number;
+  batchesPerMinute: number;
+};
+
+export type ImportPerformanceSummary = {
+  planReused: boolean;
+  totalDurationMs: number;
+  scanDurationMs: number;
+  executionDurationMs: number;
+  lookupLoadDurationMs: number;
+  insertDurationMs: number;
+  retryDurationMs: number;
+  quarantineDurationMs: number;
+  materializationDurationMs: number;
+  rowsPerSecond: number;
+  batchesPerMinute: number;
+  datasets: ImportDatasetPerformanceSummary[];
 };
 
 export type ImportProgressEvent =
@@ -104,6 +155,8 @@ export type ImportProgressEvent =
       totalDatasets: number;
       totalFiles: number;
       batchSize: number;
+      loadBatchSize?: number;
+      materializeBatchSize?: number;
       targetDatabase: string;
     }
   | {
@@ -118,6 +171,8 @@ export type ImportProgressEvent =
       totalDatasets: number;
       totalFiles: number;
       batchSize: number;
+      loadBatchSize?: number;
+      materializeBatchSize?: number;
       totalRows: number;
       totalBatches: number;
       targetDatabase: string;
@@ -159,6 +214,45 @@ export type ImportProgressEvent =
       verboseProgress: boolean;
     }
   | {
+      kind: "materialization_start";
+      totalDatasets: number;
+      datasets: ImportDatasetType[];
+      completedFiles: number;
+      totalFiles: number;
+      processedRows: number;
+      totalRows: number;
+      committedBatches: number;
+      totalBatches: number;
+    }
+  | {
+      kind: "materialization_progress";
+      dataset: ImportDatasetType;
+      datasetIndex: number;
+      totalDatasets: number;
+      completedDatasets: number;
+      targetTable: string;
+      stepLabel: string;
+      completedFiles: number;
+      totalFiles: number;
+      processedRows: number;
+      totalRows: number;
+      committedBatches: number;
+      totalBatches: number;
+      elapsedMs?: number;
+      reason?: string;
+      chunkSize?: number;
+      rowsMaterialized?: number;
+      datasetRowCount?: number;
+      chunksCompleted?: number;
+      estimatedChunks?: number;
+      lastStagingId?: number;
+    }
+  | {
+      kind: "materialization_finish";
+      totalDatasets: number;
+      completedDatasets: number;
+    }
+  | {
       kind: "finish";
       totalDatasets: number;
       totalFiles: number;
@@ -167,7 +261,6 @@ export type ImportProgressEvent =
       totalRows: number;
       committedBatches: number;
       totalBatches: number;
-      secondaryCnaesRows: number;
       quarantinedRows: number;
     };
 
@@ -177,11 +270,16 @@ export type ImportOptions = {
   dbUrl?: string;
   dataset?: ImportDatasetType | undefined;
   batchSize?: number | undefined;
+  loadBatchSize?: number | undefined;
+  materializeBatchSize?: number | undefined;
   verboseProgress?: boolean | undefined;
   onProgress?: ImportProgressListener | undefined;
 };
 
+export type ImportExecutionMode = "full" | "load" | "materialize";
+
 export type ImportSummary = {
+  executionMode: ImportExecutionMode;
   inputPath: string;
   validatedPath: string;
   targetDatabase: string;
@@ -193,7 +291,6 @@ export type ImportSummary = {
   plannedRows: number;
   committedBatches: number;
   plannedBatches: number;
-  secondaryCnaesRows: number;
   quarantinedRows: number;
   resumedFiles: number;
   skippedCompletedFiles: number;
@@ -202,6 +299,7 @@ export type ImportSummary = {
     files: number;
     rows: number;
   }>;
+  performance: ImportPerformanceSummary;
   warnings: string[];
   progressLogPath: string;
 };

@@ -1,6 +1,9 @@
 import { access } from "node:fs/promises";
 
-import { resolveDbUrl, testDatabaseConnection } from "./db.service.js";
+import {
+  resolveDatabaseUrl,
+  testDatabaseConnection,
+} from "./database.service.js";
 
 export async function runDoctor(
   inputPath?: string,
@@ -18,7 +21,7 @@ export async function runDoctor(
   }
 
   try {
-    const resolvedDbUrl = await resolveDbUrl(dbUrl);
+    const resolvedDbUrl = await resolveDatabaseUrl(dbUrl);
     await testDatabaseConnection(resolvedDbUrl);
     report.push("Database connection succeeded.");
   } catch (error) {

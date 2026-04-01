@@ -10,15 +10,15 @@ This version focuses on the real loading workflow:
 - extract Receita Federal ZIP archives
 - validate an extracted tree
 - sanitize validated files before import to remove known low-level byte issues
-- print or generate the SQL schema
+- print or generate final, staging, or combined SQL schemas
 - configure and test the default PostgreSQL URL
 - import validated dataset files into PostgreSQL with:
-  - streaming batches
-  - conflict-safe deduplication
-  - checkpoint-based resume by file and byte offset
-- row quarantine for invalid or constraint-breaking records without stopping the import
   - exact preparatory scanning for total rows and total batches before import starts
   - persisted import plans reused on resume for the same validated input and batch size
+  - staged bulk loads for the large datasets through PostgreSQL COPY
+  - direct final-schema upserts for the smaller domain datasets
+  - checkpoint-based resume by file and byte offset
+  - row quarantine for invalid or constraint-breaking records without stopping the import
 - quarantine inspection commands for analyzing rows stored in `import_quarantine`
 
 ## Installation
@@ -40,9 +40,9 @@ cnpj-db-loader inspect ./downloads
 cnpj-db-loader extract ./downloads
 cnpj-db-loader validate ./downloads/extracted
 cnpj-db-loader sanitize ./downloads/extracted
-cnpj-db-loader db set "postgresql://user:password@localhost:5432/cnpj"
-cnpj-db-loader schema generate
-cnpj-db-loader import ./downloads/sanitized --batch-size 500 --verbose-progress
+cnpj-db-loader database config set "postgresql://user:password@localhost:5432/cnpj"
+cnpj-db-loader schema generate --profile full
+cnpj-db-loader import ./downloads/sanitized --load-batch-size 500 --materialize-batch-size 50000 --verbose-progress
 ```
 
 ## Stable commands
@@ -52,13 +52,19 @@ cnpj-db-loader inspect <input>
 cnpj-db-loader extract <input> [--output <path>]
 cnpj-db-loader validate <input>
 cnpj-db-loader sanitize <input> [--output <path>] [--dataset <name>] [-f]
-cnpj-db-loader schema print
-cnpj-db-loader schema generate [--name <name>] [--output <path>]
-cnpj-db-loader db set <url>
-cnpj-db-loader db show
-cnpj-db-loader db test [--db-url <url>]
-cnpj-db-loader db reset [--yes]
-cnpj-db-loader import <input> [--db-url <url>] [--dataset <name>] [--batch-size <size>] [--verbose-progress] [-f]
+cnpj-db-loader schema print [--profile <profile>]
+cnpj-db-loader schema generate [--name <name>] [--output <path>] [--profile <profile>]
+cnpj-db-loader database config set <url>
+cnpj-db-loader database config show
+cnpj-db-loader database config test [--db-url <url>]
+cnpj-db-loader database config reset [--force]
+cnpj-db-loader database cleanup staging [--db-url <url>] [--dataset <name>] [--validated-path <path>] [--force]
+cnpj-db-loader database cleanup materialized [--db-url <url>] [--dataset <name>] [--force]
+cnpj-db-loader database cleanup checkpoints [--db-url <url>] [--phase <phase>] [--dataset <name>] [--validated-path <path>] [--plan-id <id>] [--force]
+cnpj-db-loader database cleanup plans [--db-url <url>] [--validated-path <path>] [--plan-id <id>] [--force]
+cnpj-db-loader import <input> [--db-url <url>] [--dataset <name>] [--load-batch-size <size>] [--materialize-batch-size <size>] [--verbose-progress] [-f]
+cnpj-db-loader import load <input> [--db-url <url>] [--dataset <name>] [--load-batch-size <size>] [--verbose-progress] [-f]
+cnpj-db-loader import materialize <input> [--db-url <url>] [--dataset <name>] [--materialize-batch-size <size>] [--verbose-progress] [-f]
 cnpj-db-loader doctor [--input <path>] [--db-url <url>]
 cnpj-db-loader quarantine stats [--dataset <name>] [--category <name>] [--stage <name>] [--retryable] [--terminal]
 cnpj-db-loader quarantine list [--dataset <name>] [--category <name>] [--stage <name>] [--retryable] [--terminal] [--limit <number>] [--after-id <id>]
@@ -67,9 +73,25 @@ cnpj-db-loader quarantine show <id> [--db-url <url>]
 
 ## Logs
 
-JSON execution logs are written to `./logs` in the current working directory.
+JSON execution logs are written inside the user home directory at `~/.cnpjdbloader/logs`.
 
-For `import`, the CLI now also writes an incremental JSONL progress log with one event per committed batch, file failure, and final completion summary.
+Every JSON and JSONL log entry now includes a structured envelope with fields such as `timestamp`, `level`, `severity`, `event`, and `kind`. Command success logs are written with `status: "success"`, command failures are written with `status: "failure"`, and incremental import progress events are classified with levels such as `debug`, `info`, `warning`, and `error`.
+
+For `import`, the CLI now also writes an incremental JSONL progress log with one event per committed batch, retry fallback, dataset metrics, file metrics, file failure, final completion summary, and top-level import failure when execution aborts early.
+
+The final import summary now includes baseline timing and throughput metrics such as preparatory scan duration, execution duration, insert time, retry time, quarantine time, rows per second, and batches per minute.
+
+The import internals are now split into dedicated modules such as planner, source reader, parser, normalizer, checkpoint manager, quarantine writer, staging writer, materializer, and finalizer so staged bulk-load and final materialization changes can be implemented without rewriting the whole import command.
+
+The CLI now exposes a split workflow as well: `import` runs the full pipeline, `import load` stops after staging/direct writes, `import materialize` resumes from the saved plan and pushes staged rows into the final tables, and `database cleanup ...` exposes safe maintenance commands for staging tables, simplified final materialized tables, checkpoints, and saved plans.
+
+Materialization progress is now checkpointed separately from file-load checkpoints, and the materializer works in resumable chunks controlled by `--materialize-batch-size`. During long final materialization steps, the CLI keeps the live progress output on a dedicated MATERIALIZING stage while reducing per-chunk checkpoint and JSONL write overhead so resumable chunks stay fast. The simplified final schema keeps raw secondary CNAE text in establishments and derives helper fields such as partner dedupe keys during materialization only when they are still stored physically in the target schema.
+
+The generated database schema now supports three profiles:
+
+- `full`: final relational tables, import control tables, and staging tables
+- `final`: only the final relational and control tables
+- `staging`: only the lightweight staging tables used by the staged bulk-load flow
 
 `import --verbose-progress` shows a fixed multi-line status block instead of spamming the terminal with a new line on every progress update.
 
@@ -80,3 +102,5 @@ For `import`, the CLI now also writes an incremental JSONL progress log with one
 - [Commands](./docs/commands.md)
 - [Quarantine](./docs/quarantine.md)
 - [Sanitize](./docs/sanitize.md)
+
+- Materialization now stores lightweight staging validation markers (row count and max staging id) in the materialization checkpoint table so reruns can verify the live staging state quickly and reuse lookup reconciliation when the staging snapshot is unchanged. The runtime validates that the required import tables already exist but no longer creates or alters them automatically.

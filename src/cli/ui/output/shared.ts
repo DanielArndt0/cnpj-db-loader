@@ -10,6 +10,17 @@ export function formatKeyValue(label: string, value: string | number): string {
   return `${theme.muted(`- ${label}:`)} ${value}`;
 }
 
+export function printNotes(notes: string[]): void {
+  if (notes.length === 0) {
+    return;
+  }
+
+  console.log(theme.infoLabel("NOTES"));
+  for (const note of notes) {
+    console.log(`  ${theme.blue("•")} ${note}`);
+  }
+}
+
 export function printWarnings(warnings: string[]): void {
   if (warnings.length === 0) {
     return;
@@ -51,6 +62,42 @@ export function formatBytes(value: number): string {
 
 export function formatCount(value: number): string {
   return new Intl.NumberFormat("en-US").format(value);
+}
+
+export function formatDecimal(value: number, fractionDigits = 2): string {
+  return new Intl.NumberFormat("en-US", {
+    maximumFractionDigits: fractionDigits,
+    minimumFractionDigits: 0,
+  }).format(value);
+}
+
+export function formatDuration(valueMs: number): string {
+  if (valueMs < 1000) {
+    return `${Math.round(valueMs)} ms`;
+  }
+
+  const seconds = valueMs / 1000;
+  if (seconds < 60) {
+    return `${formatDecimal(seconds)} s`;
+  }
+
+  const minutes = Math.floor(seconds / 60);
+  const remainingSeconds = seconds - minutes * 60;
+
+  if (minutes < 60) {
+    return `${minutes}m ${formatDecimal(remainingSeconds)}s`;
+  }
+
+  const hours = Math.floor(minutes / 60);
+  const remainingMinutes = minutes % 60;
+  return `${hours}h ${remainingMinutes}m ${formatDecimal(remainingSeconds)}s`;
+}
+
+export function formatRate(
+  value: number,
+  unit: "rows/s" | "batches/min",
+): string {
+  return `${formatDecimal(value)} ${unit}`;
 }
 
 export function truncateMiddle(value: string, maxLength: number): string {

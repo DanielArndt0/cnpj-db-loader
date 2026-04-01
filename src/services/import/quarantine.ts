@@ -1,5 +1,6 @@
 import { Client } from "pg";
 
+import { ensureTableShape } from "./schema-validation.js";
 import type { ImportDatasetType } from "./types.js";
 
 function classifyQuarantineError(error: unknown): {
@@ -63,53 +64,27 @@ function classifyQuarantineError(error: unknown): {
 }
 
 export async function ensureQuarantineTable(client: Client): Promise<void> {
-  await client.query(`
-    create table if not exists import_quarantine (
-      id bigserial primary key,
-      dataset text not null,
-      file_path text not null,
-      row_number bigint,
-      checkpoint_offset bigint,
-      error_code text,
-      error_category text,
-      error_stage text,
-      error_message text not null,
-      raw_line text not null,
-      parsed_payload jsonb,
-      sanitizations_applied jsonb,
-      retry_count integer not null default 0,
-      can_retry_later boolean not null default false,
-      created_at timestamptz not null default now()
-    )
-  `);
-
-  await client.query(
-    `alter table import_quarantine add column if not exists error_category text`,
-  );
-  await client.query(
-    `alter table import_quarantine add column if not exists error_stage text`,
-  );
-  await client.query(
-    `alter table import_quarantine add column if not exists sanitizations_applied jsonb`,
-  );
-  await client.query(
-    `alter table import_quarantine add column if not exists retry_count integer not null default 0`,
-  );
-  await client.query(
-    `alter table import_quarantine add column if not exists can_retry_later boolean not null default false`,
-  );
-  await client.query(
-    `create index if not exists idx_import_quarantine_dataset on import_quarantine (dataset)`,
-  );
-  await client.query(
-    `create index if not exists idx_import_quarantine_file_path on import_quarantine (file_path)`,
-  );
-  await client.query(
-    `create index if not exists idx_import_quarantine_error_category on import_quarantine (error_category)`,
-  );
-  await client.query(
-    `create index if not exists idx_import_quarantine_can_retry_later on import_quarantine (can_retry_later)`,
-  );
+  await ensureTableShape(client, {
+    tableName: "import_quarantine",
+    requiredColumns: [
+      "dataset",
+      "file_path",
+      "row_number",
+      "checkpoint_offset",
+      "error_code",
+      "error_category",
+      "error_stage",
+      "error_message",
+      "raw_line",
+      "parsed_payload",
+      "sanitizations_applied",
+      "retry_count",
+      "can_retry_later",
+      "created_at",
+    ],
+    helpMessage:
+      'The import quarantine schema is required. Run "cnpj-db-loader schema generate --profile full" and apply the SQL before importing.',
+  });
 }
 
 export type QuarantineInput = {

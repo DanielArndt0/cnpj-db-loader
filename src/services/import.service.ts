@@ -1,39 +1,17 @@
-import path from "node:path";
-
-import { Client } from "pg";
-
 import { ValidationError } from "../core/errors/index.js";
-import { resolveDbUrl } from "./db.service.js";
+import { resolveDatabaseUrl } from "./database.service.js";
 import { inspectFiles } from "./inspect.service.js";
-import { appendJsonLinesLog, createJsonLinesLog } from "./logging.service.js";
 import { validateInputDirectory } from "./validate.service.js";
 import {
-  ensureCheckpointTable,
-  hydratePlanWithCheckpoints,
-} from "./import/checkpoints.js";
-import { importDatasetFile } from "./import/file-import.js";
-import { loadLookupCaches } from "./import/lookups.js";
+  runImportLoadPipeline,
+  runImportMaterializationPipeline,
+  runImportPipeline,
+} from "./import/runner.js";
 import {
-  buildImportPlan,
-  buildImportPlanFingerprint,
-  collectImportSourceFiles,
-} from "./import/planning.js";
-import { ensureQuarantineTable } from "./import/quarantine.js";
-import { detectImportSchemaCapabilities } from "./import/schema-capabilities.js";
-import {
-  ensureImportPlanTables,
-  readSavedImportPlan,
-  saveImportPlan,
-  updateImportPlanStatus,
-} from "./import/plan-store.js";
-import {
-  IMPORT_ORDER,
-  isImportDatasetType,
   maskDatabaseLabel,
-  type ImportDatasetType,
+  isImportDatasetType,
   type ImportOptions,
   type ImportSummary,
-  type ImportDatasetPlan,
 } from "./import/types.js";
 
 export type {
@@ -43,19 +21,33 @@ export type {
   ImportDatasetType,
   ImportFilePlan,
   ImportOptions,
+  ImportPerformanceSummary,
+  ImportPlanRecord,
+  ImportPhaseStatus,
   ImportProgressEvent,
   ImportProgressListener,
   ImportSchemaCapabilities,
   ImportSummary,
 } from "./import/types.js";
 
-export async function importDataToDatabase(
-  inputPath: string,
-  options: ImportOptions = {},
-): Promise<ImportSummary> {
-  if (options.dataset && !isImportDatasetType(options.dataset)) {
-    throw new ValidationError(`Unsupported dataset type: ${options.dataset}.`);
+function validateRequestedDataset(dataset: string | undefined): void {
+  if (dataset && !isImportDatasetType(dataset)) {
+    throw new ValidationError(`Unsupported dataset type: ${dataset}.`);
   }
+}
+
+async function prepareImportInput(
+  inputPath: string,
+  options: ImportOptions,
+): Promise<{
+  inputPath: string;
+  validatedPath: string;
+  inspection: Awaited<ReturnType<typeof inspectFiles>>;
+  dbUrl: string;
+  targetDatabase: string;
+  options: ImportOptions;
+}> {
+  validateRequestedDataset(options.dataset);
 
   const validation = await validateInputDirectory(inputPath);
   if (!validation.ok) {
@@ -64,321 +56,39 @@ export async function importDataToDatabase(
     );
   }
 
-  const validatedInspection = await inspectFiles(validation.validatedPath);
-  const selectedDatasets = options.dataset
-    ? IMPORT_ORDER.filter((dataset) => dataset === options.dataset)
-    : IMPORT_ORDER;
-
-  const datasetEntries = selectedDatasets.map((dataset) => ({
-    dataset,
-    files: validatedInspection.entries.filter(
-      (entry) => entry.entryKind === "file" && entry.inferredType === dataset,
-    ),
-  }));
-
-  const plannedEntries = datasetEntries.filter((item) => item.files.length > 0);
-
-  if (plannedEntries.length === 0) {
-    throw new ValidationError(
-      "No validated dataset files were found for the requested import.",
-    );
-  }
-
-  const dbUrl = await resolveDbUrl(options.dbUrl);
-  const targetDatabase = maskDatabaseLabel(dbUrl);
-  const batchSize = Math.max(1, options.batchSize ?? 500);
-  const progressLogPath = await createJsonLinesLog("import-progress");
-  let planId: number | null = null;
-  let planReused = false;
-  let plan: {
-    datasets: ImportDatasetPlan[];
-    totalFiles: number;
-    totalRows: number;
-    totalBatches: number;
-  } | null = null;
-
-  const sourceFiles = await collectImportSourceFiles(
-    validation.validatedPath,
-    plannedEntries,
-  );
-  const sourceFingerprint = buildImportPlanFingerprint(
-    validation.validatedPath,
-    batchSize,
-    sourceFiles,
-  );
-
-  const client = new Client({ connectionString: dbUrl });
-  let clientConnected = false;
-  const datasetSummaries: Array<{
-    dataset: ImportDatasetType;
-    files: number;
-    rows: number;
-  }> = [];
-
-  const counters = {
-    committedRows: 0,
-    committedBatches: 0,
-    completedFiles: 0,
-    secondaryCnaesRows: 0,
-    quarantinedRows: 0,
-    resumedFiles: 0,
-    skippedCompletedFiles: 0,
-  };
-
-  try {
-    await client.connect();
-    clientConnected = true;
-    await ensureCheckpointTable(client);
-    await ensureQuarantineTable(client);
-    await ensureImportPlanTables(client);
-
-    const savedPlan = await readSavedImportPlan(client, sourceFingerprint);
-
-    if (savedPlan) {
-      planReused = true;
-      planId = savedPlan.plan.id;
-      plan = {
-        datasets: savedPlan.datasets,
-        totalFiles: savedPlan.plan.totalFiles,
-        totalRows: savedPlan.plan.totalRows,
-        totalBatches: savedPlan.plan.totalBatches,
-      };
-
-      if (!plan) {
-        throw new ValidationError(
-          "Import plan was not available after import execution.",
-        );
-      }
-
-      options.onProgress?.({
-        kind: "plan_ready",
-        totalDatasets: plan.datasets.length,
-        totalFiles: plan.totalFiles,
-        batchSize,
-        totalRows: plan.totalRows,
-        totalBatches: plan.totalBatches,
-        targetDatabase,
-        executionOrder: plan.datasets.map((item) => item.dataset),
-        reused: true,
-        planId,
-      });
-
-      await appendJsonLinesLog(progressLogPath, {
-        kind: "import_plan_reused",
-        planId,
-        sourceFingerprint,
-        inputPath: path.resolve(inputPath),
-        validatedPath: validation.validatedPath,
-        targetDatabase,
-        totalDatasets: plan.datasets.length,
-        totalFiles: plan.totalFiles,
-        totalRows: plan.totalRows,
-        totalBatches: plan.totalBatches,
-        batchSize,
-        executionOrder: plan.datasets.map((item) => item.dataset),
-        timestamp: new Date().toISOString(),
-      });
-    } else {
-      plan = await buildImportPlan(
-        inputPath,
-        validation.validatedPath,
-        sourceFiles,
-        batchSize,
-        options.onProgress,
-        targetDatabase,
-      );
-      const persistedPlan = await saveImportPlan(client, {
-        sourceFingerprint,
-        inputPath: path.resolve(inputPath),
-        validatedPath: validation.validatedPath,
-        batchSize,
-        targetDatabase,
-        datasets: plan.datasets,
-        totalFiles: plan.totalFiles,
-        totalRows: plan.totalRows,
-        totalBatches: plan.totalBatches,
-      });
-      planId = persistedPlan.id;
-
-      options.onProgress?.({
-        kind: "plan_ready",
-        totalDatasets: plan.datasets.length,
-        totalFiles: plan.totalFiles,
-        batchSize,
-        totalRows: plan.totalRows,
-        totalBatches: plan.totalBatches,
-        targetDatabase,
-        executionOrder: plan.datasets.map((item) => item.dataset),
-        reused: false,
-        planId,
-      });
-
-      await appendJsonLinesLog(progressLogPath, {
-        kind: "import_plan_ready",
-        planId,
-        sourceFingerprint,
-        inputPath: path.resolve(inputPath),
-        validatedPath: validation.validatedPath,
-        targetDatabase,
-        totalDatasets: plan.datasets.length,
-        totalFiles: plan.totalFiles,
-        totalRows: plan.totalRows,
-        totalBatches: plan.totalBatches,
-        batchSize,
-        executionOrder: plan.datasets.map((item) => item.dataset),
-        timestamp: new Date().toISOString(),
-      });
-    }
-
-    const schemaCapabilities = await detectImportSchemaCapabilities(client);
-    const checkpointTotals = await hydratePlanWithCheckpoints(
-      client,
-      plan.datasets,
-      batchSize,
-    );
-
-    counters.committedRows = checkpointTotals.committedRows;
-    counters.committedBatches = checkpointTotals.committedBatches;
-    counters.completedFiles = checkpointTotals.completedFiles;
-    counters.resumedFiles = checkpointTotals.resumedFiles;
-    counters.skippedCompletedFiles = checkpointTotals.skippedCompletedFiles;
-
-    if (planId !== null) {
-      await updateImportPlanStatus(client, planId, "in_progress");
-    }
-
-    options.onProgress?.({
-      kind: "start",
-      inputPath: path.resolve(inputPath),
-      validatedPath: validation.validatedPath,
-      totalDatasets: plan.datasets.length,
-      totalFiles: plan.totalFiles,
-      targetDatabase,
-      totalRows: plan.totalRows,
-      totalBatches: plan.totalBatches,
-      committedRows: counters.committedRows,
-      committedBatches: counters.committedBatches,
-    });
-
-    await appendJsonLinesLog(progressLogPath, {
-      kind: "import_started",
-      planId,
-      sourceFingerprint,
-      inputPath: path.resolve(inputPath),
-      validatedPath: validation.validatedPath,
-      targetDatabase,
-      totalDatasets: plan.datasets.length,
-      totalFiles: plan.totalFiles,
-      totalRows: plan.totalRows,
-      totalBatches: plan.totalBatches,
-      batchSize,
-      resumedFiles: counters.resumedFiles,
-      skippedCompletedFiles: counters.skippedCompletedFiles,
-      committedRows: counters.committedRows,
-      committedBatches: counters.committedBatches,
-      timestamp: new Date().toISOString(),
-    });
-
-    const lookupCache = await loadLookupCaches(client);
-
-    let globalFileIndex = 0;
-    for (const [datasetIndex, datasetPlan] of plan.datasets.entries()) {
-      for (const filePlan of datasetPlan.files) {
-        globalFileIndex += 1;
-        await importDatasetFile(
-          client,
-          lookupCache,
-          filePlan,
-          schemaCapabilities,
-          counters,
-          {
-            datasetIndex: datasetIndex + 1,
-            totalDatasets: plan.datasets.length,
-            totalFiles: plan.totalFiles,
-            totalBatches: plan.totalBatches,
-            fileIndex: globalFileIndex,
-            onProgress: options.onProgress,
-            progressLogPath,
-            batchSize,
-            verboseProgress: options.verboseProgress ?? false,
-          },
-        );
-      }
-
-      datasetSummaries.push({
-        dataset: datasetPlan.dataset,
-        files: datasetPlan.files.length,
-        rows: datasetPlan.totalRows,
-      });
-    }
-
-    if (planId !== null) {
-      await updateImportPlanStatus(client, planId, "completed");
-    }
-  } catch (error) {
-    if (clientConnected && planId !== null) {
-      await updateImportPlanStatus(client, planId, "failed").catch(
-        () => undefined,
-      );
-    }
-    throw error;
-  } finally {
-    await client.end().catch(() => undefined);
-  }
-
-  options.onProgress?.({
-    kind: "finish",
-    totalDatasets: plan.datasets.length,
-    totalFiles: plan.totalFiles,
-    completedFiles: counters.completedFiles,
-    processedRows: counters.committedRows,
-    totalRows: plan.totalRows,
-    committedBatches: counters.committedBatches,
-    totalBatches: plan.totalBatches,
-    secondaryCnaesRows: counters.secondaryCnaesRows,
-    quarantinedRows: counters.quarantinedRows,
-  });
-
-  await appendJsonLinesLog(progressLogPath, {
-    kind: "import_finished",
-    totalDatasets: plan.datasets.length,
-    totalFiles: plan.totalFiles,
-    completedFiles: counters.completedFiles,
-    processedRows: counters.committedRows,
-    totalRows: plan.totalRows,
-    committedBatches: counters.committedBatches,
-    totalBatches: plan.totalBatches,
-    secondaryCnaesRows: counters.secondaryCnaesRows,
-    quarantinedRows: counters.quarantinedRows,
-    resumedFiles: counters.resumedFiles,
-    skippedCompletedFiles: counters.skippedCompletedFiles,
-    timestamp: new Date().toISOString(),
-  });
+  const inspection = await inspectFiles(validation.validatedPath);
+  const dbUrl = await resolveDatabaseUrl(options.dbUrl);
 
   return {
-    inputPath: path.resolve(inputPath),
+    inputPath,
     validatedPath: validation.validatedPath,
-    targetDatabase,
-    importPlanId: planId,
-    reusedImportPlan: planReused,
-    importedDatasets: datasetSummaries.map((item) => item.dataset),
-    importedFiles: counters.completedFiles,
-    processedRows: counters.committedRows,
-    plannedRows: plan.totalRows,
-    committedBatches: counters.committedBatches,
-    plannedBatches: plan.totalBatches,
-    secondaryCnaesRows: counters.secondaryCnaesRows,
-    quarantinedRows: counters.quarantinedRows,
-    resumedFiles: counters.resumedFiles,
-    skippedCompletedFiles: counters.skippedCompletedFiles,
-    datasetSummaries,
-    warnings: [
-      "The importer uses exact file planning, checkpointed batch commits, and byte-offset resume. If a batch fails, rerunning the same command resumes from the last committed checkpoint instead of restarting the full load.",
-      "Import plans are persisted in the database and reused for the same validated input, source files, and batch size so resumed imports do not recount rows unnecessarily.",
-      "The importer remains idempotent for the current schema: rerunning the same validated files updates existing rows instead of duplicating them.",
-      "Rows that fail validation or database constraints are moved to import_quarantine and the import continues from the next row.",
-      "The default batch size is conservative to reduce RAM pressure during long PostgreSQL imports. Increase --batch-size only after validating RAM usage and PostgreSQL stability in your environment.",
-    ],
-    progressLogPath,
+    inspection,
+    dbUrl,
+    options,
+    targetDatabase: maskDatabaseLabel(dbUrl),
   };
+}
+
+export async function importDataToDatabase(
+  inputPath: string,
+  options: ImportOptions = {},
+): Promise<ImportSummary> {
+  const prepared = await prepareImportInput(inputPath, options);
+  return runImportPipeline(prepared);
+}
+
+export async function loadImportDataToStaging(
+  inputPath: string,
+  options: ImportOptions = {},
+): Promise<ImportSummary> {
+  const prepared = await prepareImportInput(inputPath, options);
+  return runImportLoadPipeline(prepared);
+}
+
+export async function materializeImportedData(
+  inputPath: string,
+  options: ImportOptions = {},
+): Promise<ImportSummary> {
+  const prepared = await prepareImportInput(inputPath, options);
+  return runImportMaterializationPipeline(prepared);
 }

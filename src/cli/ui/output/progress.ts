@@ -5,6 +5,7 @@ import type { SanitizeProgressEvent } from "../../../services/sanitize.service.j
 import {
   formatBytes,
   formatCount,
+  formatDuration,
   formatKeyValue,
   truncateMiddle,
 } from "./shared.js";
@@ -178,6 +179,27 @@ export function createImportProgressReporter(): (
   const shortPath = (value: string, maxLength = 68): string =>
     truncateMiddle(value, maxLength);
 
+  const formatPlanBatchLine = (event: {
+    totalDatasets: number;
+    totalFiles: number;
+    batchSize: number;
+    loadBatchSize?: number;
+    materializeBatchSize?: number;
+  }): string => {
+    if (
+      typeof event.loadBatchSize === "number" &&
+      typeof event.materializeBatchSize === "number"
+    ) {
+      return `Datasets: ${formatCount(event.totalDatasets)} | Files: ${formatCount(event.totalFiles)} | Load batch: ${formatCount(event.loadBatchSize)} | Materialize batch: ${formatCount(event.materializeBatchSize)}`;
+    }
+
+    if (typeof event.loadBatchSize === "number") {
+      return `Datasets: ${formatCount(event.totalDatasets)} | Files: ${formatCount(event.totalFiles)} | Batch size: ${formatCount(event.loadBatchSize)}`;
+    }
+
+    return `Datasets: ${formatCount(event.totalDatasets)} | Files: ${formatCount(event.totalFiles)} | Batch size: ${formatCount(event.batchSize)}`;
+  };
+
   const renderBlock = (lines: string[]): void => {
     const block = lines.join("\n");
 
@@ -260,7 +282,7 @@ export function createImportProgressReporter(): (
         `${theme.infoLabel("PREPARING")} __SPINNER__ import plan`,
         `Input: ${shortPath(event.validatedPath)}`,
         `Target: ${event.targetDatabase}`,
-        `Datasets: ${formatCount(event.totalDatasets)} | Files: ${formatCount(event.totalFiles)} | Batch size: ${formatCount(event.batchSize)}`,
+        formatPlanBatchLine(event),
         `Scanning: 0/${formatCount(event.totalFiles)} files`,
         `Rows counted: ${formatCount(0)}`,
         `Current: waiting...`,
@@ -298,7 +320,7 @@ export function createImportProgressReporter(): (
       renderBlock([
         `${theme.successLabel("PREPARING")} ${event.reused ? "Saved import plan reused." : "Import plan ready."}`,
         `Target: ${event.targetDatabase}${event.planId === null ? "" : ` | Plan #${formatCount(event.planId)}`}`,
-        `Datasets: ${formatCount(event.totalDatasets)} | Files: ${formatCount(event.totalFiles)} | Batch size: ${formatCount(event.batchSize)}`,
+        formatPlanBatchLine(event),
         `Rows counted exactly: ${formatCount(event.totalRows)}`,
         `Batches planned exactly: ${formatCount(event.totalBatches)}`,
         `Order: ${event.executionOrder.join(" > ")}`,
@@ -357,6 +379,69 @@ export function createImportProgressReporter(): (
       return;
     }
 
+    if (event.kind === "materialization_start") {
+      currentLines = [
+        `${theme.infoLabel("MATERIALIZING")} __SPINNER__ staging -> final`,
+        `Datasets: ${event.datasets.join(" > ")}`,
+        `Files imported: ${formatCount(event.completedFiles)}/${formatCount(event.totalFiles)} | Rows: ${formatCount(event.processedRows)}/${formatCount(event.totalRows)}`,
+        `Batches committed: ${formatCount(event.committedBatches)}/${formatCount(event.totalBatches)}`,
+        `Current: waiting for final materialization...`,
+      ];
+      renderBlock([
+        currentLines[0]!.replace(
+          "__SPINNER__",
+          theme.blue(frames[frameIndex % frames.length] ?? "⠋"),
+        ),
+        ...currentLines.slice(1),
+      ]);
+      startSpinner();
+      return;
+    }
+
+    if (event.kind === "materialization_progress") {
+      const rowsLine =
+        typeof event.rowsMaterialized === "number"
+          ? `Rows materialized: ${formatCount(event.rowsMaterialized)}${typeof event.datasetRowCount === "number" ? ` / ${formatCount(event.datasetRowCount)}` : ""}`
+          : `Rows materialized: waiting...`;
+      const chunksLine =
+        typeof event.chunksCompleted === "number"
+          ? `Chunks: ${formatCount(event.chunksCompleted)}${typeof event.estimatedChunks === "number" ? ` / ${formatCount(event.estimatedChunks)}` : ""}${typeof event.chunkSize === "number" ? ` | size ${formatCount(event.chunkSize)}` : ""}`
+          : `Chunks: waiting...${typeof event.chunkSize === "number" ? ` | size ${formatCount(event.chunkSize)}` : ""}`;
+      const cursorLine =
+        typeof event.lastStagingId === "number"
+          ? `Last staging id: ${formatCount(event.lastStagingId)}`
+          : `Last staging id: waiting...`;
+
+      currentLines = [
+        `${theme.infoLabel("MATERIALIZING")} __SPINNER__ status`,
+        `Dataset: ${event.dataset} (${formatCount(event.datasetIndex)}/${formatCount(event.totalDatasets)}) | completed ${formatCount(event.completedDatasets)}/${formatCount(event.totalDatasets)}`,
+        `Target table: ${event.targetTable}`,
+        rowsLine,
+        chunksLine,
+        cursorLine,
+        `Step: ${event.stepLabel}${event.elapsedMs === undefined ? "" : ` | elapsed ${formatDuration(event.elapsedMs)}`}`,
+        `Reason: ${event.reason ?? "Running the next materialization step for this dataset."}`,
+      ];
+      renderBlock([
+        currentLines[0]!.replace(
+          "__SPINNER__",
+          theme.blue(frames[frameIndex % frames.length] ?? "⠋"),
+        ),
+        ...currentLines.slice(1),
+      ]);
+      startSpinner();
+      return;
+    }
+
+    if (event.kind === "materialization_finish") {
+      finalizeDynamicOutput();
+      console.log(
+        theme.successLabel("MATERIALIZING"),
+        `Completed ${formatCount(event.completedDatasets)}/${formatCount(event.totalDatasets)} staged dataset(s).`,
+      );
+      return;
+    }
+
     finalizeDynamicOutput();
     console.log(
       theme.successLabel("IMPORT"),
@@ -366,12 +451,6 @@ export function createImportProgressReporter(): (
       formatKeyValue(
         "Batches committed",
         `${formatCount(event.committedBatches)} / ${formatCount(event.totalBatches)}`,
-      ),
-    );
-    console.log(
-      formatKeyValue(
-        "Secondary CNAE rows",
-        formatCount(event.secondaryCnaesRows),
       ),
     );
     console.log(

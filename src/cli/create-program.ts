@@ -1,6 +1,6 @@
 import { Command } from "commander";
 
-import { registerDbCommands } from "./commands/register-db.js";
+import { registerDatabaseCommands } from "./commands/register-database.js";
 import { registerExtractCommands } from "./commands/register-extract.js";
 import { registerDoctorCommands } from "./commands/register-doctor.js";
 import { registerInspectCommands } from "./commands/register-inspect.js";
@@ -31,7 +31,7 @@ export function buildProgram(): Command {
   registerValidateCommands(program);
   registerSanitizeCommands(program);
   registerSchemaCommands(program);
-  registerDbCommands(program);
+  registerDatabaseCommands(program);
   registerImportCommands(program);
   registerQuarantineCommands(program);
   registerDoctorCommands(program);

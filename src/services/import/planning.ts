@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { createReadStream } from "node:fs";
 import { stat } from "node:fs/promises";
+import { performance } from "node:perf_hooks";
 import path from "node:path";
 
 import type { FileInspection } from "../inspect.service.js";
@@ -14,6 +15,15 @@ import type { ImportDatasetType } from "./types.js";
 export type IteratedLine = {
   line: string;
   nextOffset: number;
+};
+
+export type ImportPlanBuildResult = {
+  datasets: ImportDatasetPlan[];
+  totalFiles: number;
+  totalRows: number;
+  totalBatches: number;
+  scanDurationMs: number;
+  datasetScanDurationsMs: Partial<Record<ImportDatasetType, number>>;
 };
 
 export function resolveAbsolutePath(
@@ -180,18 +190,14 @@ export async function buildImportPlan(
   batchSize: number,
   onProgress: ImportProgressListener | undefined,
   targetDatabase: string,
-): Promise<{
-  datasets: ImportDatasetPlan[];
-  totalFiles: number;
-  totalRows: number;
-  totalBatches: number;
-}> {
+): Promise<ImportPlanBuildResult> {
   const totalFiles = datasetEntries.reduce(
     (sum, item) => sum + item.files.length,
     0,
   );
   let scannedFiles = 0;
   let countedRows = 0;
+  const planBuildStartedAt = performance.now();
 
   onProgress?.({
     kind: "preparing_start",
@@ -200,15 +206,18 @@ export async function buildImportPlan(
     totalDatasets: datasetEntries.length,
     totalFiles,
     batchSize,
+    loadBatchSize: batchSize,
     targetDatabase,
   });
 
   const datasets: ImportDatasetPlan[] = [];
+  const datasetScanDurationsMs: Partial<Record<ImportDatasetType, number>> = {};
 
   for (const item of datasetEntries) {
     const files = [];
     let datasetRows = 0;
     let datasetBatches = 0;
+    const datasetScanStartedAt = performance.now();
 
     for (const sourceFile of item.files) {
       const totalRows = await countFileRowsExact(sourceFile.absolutePath);
@@ -239,6 +248,9 @@ export async function buildImportPlan(
       });
     }
 
+    datasetScanDurationsMs[item.dataset] =
+      performance.now() - datasetScanStartedAt;
+
     datasets.push({
       dataset: item.dataset,
       files,
@@ -253,5 +265,12 @@ export async function buildImportPlan(
     0,
   );
 
-  return { datasets, totalFiles, totalRows, totalBatches };
+  return {
+    datasets,
+    totalFiles,
+    totalRows,
+    totalBatches,
+    scanDurationMs: performance.now() - planBuildStartedAt,
+    datasetScanDurationsMs,
+  };
 }
