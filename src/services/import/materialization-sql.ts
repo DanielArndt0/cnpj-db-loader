@@ -93,6 +93,62 @@ function buildChunkInsertSql(input: {
   };
 }
 
+function buildPartnersChunkInsertSql(input: {
+  insertColumns: readonly string[];
+  lastStagingId: number;
+  chunkSize: number;
+  includePartnerDedupeKeyInInsert: boolean;
+  schemaCapabilities: ImportSchemaCapabilities;
+}): MaterializationChunkQuery {
+  const baseColumns = MATERIALIZATION_COLUMNS.partners;
+  const chunkSelectList = [
+    "source.staging_id",
+    ...baseColumns.map((column) => `source.${column}`),
+    ...(input.includePartnerDedupeKeyInInsert
+      ? [`${buildPartnerDedupeExpression("source")} as partner_dedupe_key`]
+      : []),
+  ].join(",\n    ");
+  const insertSelectList = input.insertColumns.join(", ");
+  const conflictClause = getConflictClause(
+    "partners",
+    [...input.insertColumns],
+    input.schemaCapabilities,
+  );
+
+  return {
+    text: [
+      "with chunked as (",
+      `  select\n    ${chunkSelectList}`,
+      "  from staging_partners source",
+      "  where source.staging_id > $1",
+      "  order by source.staging_id asc",
+      "  limit $2",
+      "),",
+      "deduped as (",
+      "  select *",
+      "  from (",
+      "    select",
+      "      chunked.*,",
+      "      row_number() over (partition by partner_dedupe_key order by staging_id asc) as dedupe_rank",
+      "    from chunked",
+      "  ) ranked",
+      "  where dedupe_rank = 1",
+      "),",
+      "inserted as (",
+      `  insert into partners (${input.insertColumns.join(", ")})`,
+      `  select ${insertSelectList}`,
+      "  from deduped",
+      conflictClause,
+      ")",
+      "select",
+      "  coalesce((select max(staging_id) from chunked), $1::bigint)::bigint as max_staging_id,",
+      "  coalesce((select count(*) from chunked), 0)::bigint as source_rows,",
+      "  coalesce((select count(*) from deduped), 0)::bigint as affected_rows;",
+    ].join("\n"),
+    values: [input.lastStagingId, input.chunkSize],
+  };
+}
+
 export function buildMaterializationChunkQuery(input: {
   dataset: MaterializationDataset;
   schemaCapabilities: ImportSchemaCapabilities;
@@ -109,23 +165,13 @@ export function buildMaterializationChunkQuery(input: {
         .includePartnerDedupeKeyInInsert
         ? [...baseColumns, "partner_dedupe_key"]
         : [...baseColumns];
-      return buildChunkInsertSql({
-        stagingTable: "staging_partners",
-        targetTable: "partners",
+      return buildPartnersChunkInsertSql({
         insertColumns,
-        selectColumns: baseColumns,
-        conflictClause: useConflictClause
-          ? getConflictClause(
-              "partners",
-              [...insertColumns],
-              input.schemaCapabilities,
-            )
-          : "",
         lastStagingId: input.lastStagingId,
         chunkSize: input.chunkSize,
-        extraSelects: input.schemaCapabilities.includePartnerDedupeKeyInInsert
-          ? [`${buildPartnerDedupeExpression("source")} as partner_dedupe_key`]
-          : [],
+        includePartnerDedupeKeyInInsert:
+          input.schemaCapabilities.includePartnerDedupeKeyInInsert,
+        schemaCapabilities: input.schemaCapabilities,
       });
     }
     case "companies":

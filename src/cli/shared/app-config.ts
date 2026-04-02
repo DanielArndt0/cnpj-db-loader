@@ -2,7 +2,7 @@ import type { AppConfig } from "../../core/types/index.js";
 
 export const APP_CONFIG: AppConfig = {
   appName: "cnpj-db-loader",
-  version: "2.0.0",
+  version: "2.0.1",
   environment: (process.env.APP_ENV ??
     "development") as AppConfig["environment"],
   description:

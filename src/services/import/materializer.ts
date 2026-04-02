@@ -834,7 +834,7 @@ async function materializeDatasetByChunks(input: {
   const targetHasRows =
     checkpoint.rowsMaterialized > 0 ||
     (await readRowCount(input.client, input.targetTable)) > 0;
-  const useConflictClause = targetHasRows;
+  const useConflictClause = targetHasRows || input.dataset === "partners";
 
   const heartbeatTimer = setInterval(() => {
     const elapsedMs = performance.now() - startedAt;
