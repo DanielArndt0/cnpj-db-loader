@@ -144,3 +144,4 @@ logs/
 
 # Schemas
 *.sql
+!/sql/*.sql
