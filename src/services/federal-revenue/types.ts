@@ -51,6 +51,47 @@ export type FederalRevenueCheckSummary = {
 
 export type FederalRevenueDownloadStatus = "downloaded" | "skipped" | "failed";
 
+export type FederalRevenueLocalFileStatus =
+  | "downloaded"
+  | "failed"
+  | "partial"
+  | "missing";
+
+export type FederalRevenueManifestLastCommand = "download" | "sync" | "retry";
+
+export type FederalRevenueManifestLastStatus =
+  | "running"
+  | "completed"
+  | "failed";
+
+export type FederalRevenueManifestFile = {
+  fileName: string;
+  filePath: string;
+  partialFilePath: string;
+  href: string;
+  downloadUrl: string;
+  status: FederalRevenueLocalFileStatus;
+  updatedAt: string;
+  remoteSizeInBytes?: number | undefined;
+  localSizeInBytes?: number | undefined;
+  lastModified?: string | undefined;
+  etag?: string | undefined;
+  downloadedAt?: string | undefined;
+  errorMessage?: string | undefined;
+};
+
+export type FederalRevenueManifest = {
+  version: 1;
+  reference: string;
+  remoteBaseUrl: string;
+  outputPath: string;
+  createdAt: string;
+  updatedAt: string;
+  lastCommand: FederalRevenueManifestLastCommand;
+  lastStatus: FederalRevenueManifestLastStatus;
+  files: FederalRevenueManifestFile[];
+};
+
 export type FederalRevenueDownloadEntry = {
   fileName: string;
   filePath: string;
@@ -64,11 +105,14 @@ export type FederalRevenueDownloadSummary = {
   reference: string;
   selectionMode: FederalRevenueReferenceMode;
   outputPath: string;
+  manifestPath: string;
   remoteBaseUrl: string;
   filesFound: number;
   downloadedFiles: number;
   skippedFiles: number;
   failedFiles: number;
+  partialFiles: number;
+  missingFiles: number;
   totalBytes: number;
   downloadedBytes: number;
   entries: FederalRevenueDownloadEntry[];
@@ -151,20 +195,27 @@ export type FederalRevenueDownloadOptions = FederalRevenueCheckOptions & {
   outputPath?: string | undefined;
   retries?: number | undefined;
   overwrite?: boolean | undefined;
+  incompleteOnly?: boolean | undefined;
+  manifestCommand?: FederalRevenueManifestLastCommand | undefined;
   onProgress?: FederalRevenueDownloadProgressListener | undefined;
 };
 
-export type FederalRevenueSyncOptions = FederalRevenueDownloadOptions & {
-  extractOutputPath?: string | undefined;
-  sanitizeOutputPath?: string | undefined;
-  sanitizeOptions?:
-    | Omit<SanitizeOptions, "outputPath" | "onProgress">
-    | undefined;
-  importOptions?: Omit<ImportOptions, "onProgress"> | undefined;
-  onExtractProgress?: ExtractionProgressListener | undefined;
-  onSanitizeProgress?: SanitizeOptions["onProgress"] | undefined;
-  onImportProgress?: ImportOptions["onProgress"] | undefined;
+export type FederalRevenueSyncLockOptions = {
+  forceLock?: boolean | undefined;
 };
+
+export type FederalRevenueSyncOptions = FederalRevenueDownloadOptions &
+  FederalRevenueSyncLockOptions & {
+    extractOutputPath?: string | undefined;
+    sanitizeOutputPath?: string | undefined;
+    sanitizeOptions?:
+      | Omit<SanitizeOptions, "outputPath" | "onProgress">
+      | undefined;
+    importOptions?: Omit<ImportOptions, "onProgress"> | undefined;
+    onExtractProgress?: ExtractionProgressListener | undefined;
+    onSanitizeProgress?: SanitizeOptions["onProgress"] | undefined;
+    onImportProgress?: ImportOptions["onProgress"] | undefined;
+  };
 
 export type FederalRevenueSyncSummary = {
   reference: string;
@@ -176,4 +227,73 @@ export type FederalRevenueSyncSummary = {
   startedAt: string;
   finishedAt: string;
   warnings: string[];
+};
+
+export type FederalRevenueLocalStatusEntry = {
+  fileName: string;
+  filePath: string;
+  partialFilePath: string;
+  status: FederalRevenueLocalFileStatus;
+  remoteSizeInBytes?: number | undefined;
+  localSizeInBytes?: number | undefined;
+  errorMessage?: string | undefined;
+};
+
+export type FederalRevenueStatusOptions = FederalRevenueCheckOptions & {
+  outputPath?: string | undefined;
+};
+
+export type FederalRevenueStatusSummary = {
+  reference: string;
+  selectionMode: FederalRevenueReferenceMode;
+  outputPath: string;
+  manifestPath: string;
+  manifestFound: boolean;
+  filesFound: number;
+  downloadedFiles: number;
+  failedFiles: number;
+  partialFiles: number;
+  missingFiles: number;
+  totalBytes: number;
+  localBytes: number;
+  isComplete: boolean;
+  entries: FederalRevenueLocalStatusEntry[];
+  warnings: string[];
+  updatedAt?: string | undefined;
+  lastCommand?: FederalRevenueManifestLastCommand | undefined;
+  lastStatus?: FederalRevenueManifestLastStatus | undefined;
+};
+
+export type FederalRevenueRetryOptions = FederalRevenueDownloadOptions;
+
+export type FederalRevenueCleanMode = "partials" | "failed" | "all";
+
+export type FederalRevenueCleanOptions = FederalRevenueCheckOptions & {
+  outputPath?: string | undefined;
+  partials?: boolean | undefined;
+  failed?: boolean | undefined;
+  all?: boolean | undefined;
+};
+
+export type FederalRevenueCleanSummary = {
+  reference: string;
+  selectionMode: FederalRevenueReferenceMode;
+  outputPath: string;
+  manifestPath: string;
+  mode: FederalRevenueCleanMode;
+  removedFiles: number;
+  removedBytes: number;
+  removedPaths: string[];
+  warnings: string[];
+  startedAt: string;
+  finishedAt: string;
+};
+
+export type FederalRevenueLockFile = {
+  reference: string;
+  outputPath: string;
+  lockPath: string;
+  pid: number;
+  token: string;
+  startedAt: string;
 };

@@ -5,7 +5,10 @@
 ```bash
 cnpj-db-loader federal-revenue check [reference] [--reference <yyyy-mm>] [--current]
 cnpj-db-loader federal-revenue download [reference] [--reference <yyyy-mm>] [--current] [--output <path>] [--retries <number>] [--overwrite] [-f]
-cnpj-db-loader federal-revenue sync [reference] [--reference <yyyy-mm>] [--current] [--output <path>] [--extract-output <path>] [--sanitize-output <path>] [--db-url <url>] [--dataset <name>] [--load-batch-size <size>] [--materialize-batch-size <size>] [--verbose-progress] [-f]
+cnpj-db-loader federal-revenue status [reference] [--reference <yyyy-mm>] [--current] [--output <path>]
+cnpj-db-loader federal-revenue retry [reference] [--reference <yyyy-mm>] [--current] [--output <path>] [--retries <number>] [--overwrite] [-f]
+cnpj-db-loader federal-revenue clean [reference] [--reference <yyyy-mm>] [--current] [--output <path>] [--partials | --failed | --all] [-f]
+cnpj-db-loader federal-revenue sync [reference] [--reference <yyyy-mm>] [--current] [--output <path>] [--extract-output <path>] [--sanitize-output <path>] [--db-url <url>] [--dataset <name>] [--load-batch-size <size>] [--materialize-batch-size <size>] [--verbose-progress] [--force-lock] [-f]
 cnpj-db-loader inspect <input>
 cnpj-db-loader extract <input> [--output <path>]
 cnpj-db-loader validate <input>
@@ -39,3 +42,5 @@ cnpj-db-loader quarantine show <id> [--db-url <url>]
 
 - `federal-revenue` (alias `revenue`) is additive: it only automates the remote monthly CNPJ download phase and then reuses the existing extract, validate, sanitize, and import services.
 - Federal Revenue downloads keep completed files by default and write incomplete transfers as `.part` files until the file is fully validated.
+- `status`, `retry`, and `clean` use the local reference manifest so a future external runner can inspect and resume the workflow without duplicating loader rules.
+- `sync` creates a local lock file to prevent two full sync operations from using the same reference folder at the same time.

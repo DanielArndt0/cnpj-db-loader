@@ -31,7 +31,7 @@ The import pipeline now uses:
 - a dedicated `quarantine` service to inspect quarantine rows without touching the import pipeline
 - conservative load units to reduce memory pressure and prevent giant rollbacks
 - compatibility with simplified final schemas that keep derived identifiers as regular columns when needed
-- remote Federal Revenue WebDAV checks/downloads as an additive pre-pipeline service
+- remote Federal Revenue WebDAV checks/downloads plus local manifest, retry, cleanup, status, and sync locking as an additive pre-pipeline service
 
 ## Import modules
 
@@ -72,6 +72,9 @@ The Federal Revenue integration is intentionally kept as a pre-pipeline module. 
 - selecting the latest, current, or explicit monthly reference
 - listing only `.zip` files inside the selected reference
 - downloading files with `.part` temporary files, retry attempts, and skip-on-existing behavior
+- writing a local reference manifest with downloaded, failed, partial, and missing file state
+- exposing `status`, `retry`, and `clean` so automation can inspect and repair local references safely
+- using a local sync lock so two full sync processes do not use the same reference folder at the same time
 - handing the completed download folder to the existing extraction, validation, sanitization, and import services during `federal-revenue sync`
 
 Redis, background workers, and schedulers are not part of this CLI module. Those concerns should remain outside the loader if an external runner/orchestrator is added later.
@@ -79,7 +82,7 @@ Redis, background workers, and schedulers are not part of this CLI module. Those
 ## Current execution flow
 
 ```text
-federal-revenue check/download -> inspect -> extract -> validate -> sanitize -> db/schema -> import
+federal-revenue check/download/status/retry/clean/sync -> inspect -> extract -> validate -> sanitize -> db/schema -> import
 ```
 
 ## Internal import flow

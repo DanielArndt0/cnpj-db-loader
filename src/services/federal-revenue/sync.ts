@@ -3,26 +3,58 @@ import { extractArchives } from "../extract.service.js";
 import { importDataToDatabase } from "../import.service.js";
 import { sanitizeInputDirectory } from "../sanitize.service.js";
 import { validateInputDirectory } from "../validate.service.js";
-import { downloadFederalRevenueDataset } from "./download.js";
+import {
+  checkFederalRevenueDataset,
+  downloadFederalRevenueDataset,
+} from "./download.js";
+import { withFederalRevenueSyncLock } from "./lock.js";
+import { buildFederalRevenueReferenceOutputPath } from "./manifest.js";
 import type {
+  FederalRevenueDownloadOptions,
   FederalRevenueSyncOptions,
   FederalRevenueSyncSummary,
 } from "./types.js";
 
-export async function syncFederalRevenueDataset(
-  options: FederalRevenueSyncOptions = {},
+function buildLockedDownloadOptions(
+  options: FederalRevenueSyncOptions,
+  reference: string,
+): FederalRevenueDownloadOptions {
+  const { current, forceLock, ...downloadOptions } = options;
+  void current;
+  void forceLock;
+
+  return {
+    ...downloadOptions,
+    reference,
+    manifestCommand: "sync",
+  };
+}
+
+async function runFederalRevenueSyncPipeline(
+  options: FederalRevenueSyncOptions,
+  reference: string,
 ): Promise<FederalRevenueSyncSummary> {
   const startedAt = new Date().toISOString();
-
-  const download = await downloadFederalRevenueDataset({
-    ...options,
-    onProgress: options.onProgress,
-  });
+  const download = await downloadFederalRevenueDataset(
+    buildLockedDownloadOptions(options, reference),
+  );
 
   if (download.failedFiles > 0) {
     throw new ValidationError(
-      `Federal Revenue sync cannot continue because ${download.failedFiles} file(s) failed to download.`,
+      `Federal Revenue sync cannot continue because ${download.failedFiles} file(s) failed to download. Run federal-revenue retry ${download.reference} after fixing the cause.`,
       { reference: download.reference, outputPath: download.outputPath },
+    );
+  }
+
+  if (download.partialFiles > 0 || download.missingFiles > 0) {
+    throw new ValidationError(
+      `Federal Revenue sync cannot continue because the local reference is incomplete. Partial files: ${download.partialFiles}. Missing files: ${download.missingFiles}.`,
+      {
+        reference: download.reference,
+        outputPath: download.outputPath,
+        partialFiles: download.partialFiles,
+        missingFiles: download.missingFiles,
+      },
     );
   }
 
@@ -78,4 +110,23 @@ export async function syncFederalRevenueDataset(
       ...importSummary.warnings,
     ],
   };
+}
+
+export async function syncFederalRevenueDataset(
+  options: FederalRevenueSyncOptions = {},
+): Promise<FederalRevenueSyncSummary> {
+  const check = await checkFederalRevenueDataset(options);
+  const outputPath = buildFederalRevenueReferenceOutputPath(
+    check.selectedReference,
+    options.outputPath,
+  );
+
+  return withFederalRevenueSyncLock(
+    {
+      reference: check.selectedReference,
+      outputPath,
+      options: { forceLock: options.forceLock },
+    },
+    () => runFederalRevenueSyncPipeline(options, check.selectedReference),
+  );
 }

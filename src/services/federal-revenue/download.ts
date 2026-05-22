@@ -11,6 +11,15 @@ import {
   listFederalRevenueFiles,
   resolveFederalRevenueReference,
 } from "./client.js";
+import {
+  buildFederalRevenueReferenceOutputPath,
+  createFederalRevenueManifest,
+  evaluateFederalRevenueManifestFiles,
+  finalizeFederalRevenueManifest,
+  getFederalRevenueManifestPath,
+  readFederalRevenueManifest,
+  updateFederalRevenueManifestFile,
+} from "./manifest.js";
 import type {
   FederalRevenueCheckOptions,
   FederalRevenueCheckSummary,
@@ -18,13 +27,9 @@ import type {
   FederalRevenueDownloadOptions,
   FederalRevenueDownloadSummary,
   FederalRevenueFile,
+  FederalRevenueLocalFileStatus,
 } from "./types.js";
 
-const DEFAULT_DOWNLOAD_ROOT = path.join(
-  process.cwd(),
-  "downloads",
-  "federal-revenue",
-);
 const DEFAULT_DOWNLOAD_RETRIES = 3;
 
 function resolveRetryCount(value: number | undefined): number {
@@ -33,13 +38,6 @@ function resolveRetryCount(value: number | undefined): number {
   }
 
   return Math.max(1, Math.floor(value));
-}
-
-function buildReferenceOutputPath(
-  reference: string,
-  outputPath?: string,
-): string {
-  return path.resolve(outputPath ?? DEFAULT_DOWNLOAD_ROOT, reference);
 }
 
 async function safeStat(filePath: string): Promise<{
@@ -74,6 +72,16 @@ function isCompletedLocalFile(localSize: number, remoteSize?: number): boolean {
   }
 
   return localSize === remoteSize;
+}
+
+function toLocalStatus(
+  entry: FederalRevenueDownloadEntry,
+): FederalRevenueLocalFileStatus {
+  if (entry.status === "failed") {
+    return "failed";
+  }
+
+  return "downloaded";
 }
 
 async function downloadSingleFile(
@@ -113,7 +121,7 @@ async function downloadSingleFile(
 
       if (!response.ok) {
         throw new ValidationError(
-          `Download failed with status ${response.status} ${response.statusText}.`,
+          `Federal Revenue download failed for ${file.name}: HTTP ${response.status} ${response.statusText}.`,
           {
             fileName: file.name,
             status: response.status,
@@ -124,10 +132,13 @@ async function downloadSingleFile(
       }
 
       if (!response.body) {
-        throw new ValidationError("Download response did not include a body.", {
-          fileName: file.name,
-          attempt,
-        });
+        throw new ValidationError(
+          `Federal Revenue download failed for ${file.name}: response body is empty.`,
+          {
+            fileName: file.name,
+            attempt,
+          },
+        );
       }
 
       await pipeline(
@@ -141,7 +152,7 @@ async function downloadSingleFile(
         downloadedFile.size !== file.sizeInBytes
       ) {
         throw new ValidationError(
-          `Downloaded file size does not match the remote size for ${file.name}.`,
+          `Federal Revenue download failed for ${file.name}: local size does not match the remote size.`,
           {
             fileName: file.name,
             expectedSize: file.sizeInBytes,
@@ -151,6 +162,7 @@ async function downloadSingleFile(
         );
       }
 
+      await safeUnlink(filePath);
       await rename(partialFilePath, filePath);
 
       return {
@@ -165,8 +177,6 @@ async function downloadSingleFile(
     }
   }
 
-  await safeUnlink(partialFilePath);
-
   return {
     fileName: file.name,
     filePath,
@@ -175,6 +185,17 @@ async function downloadSingleFile(
     errorMessage:
       lastError instanceof Error ? lastError.message : String(lastError),
   };
+}
+
+function shouldDownloadFile(
+  file: FederalRevenueFile,
+  incompleteFileNames: Set<string> | undefined,
+): boolean {
+  if (!incompleteFileNames) {
+    return true;
+  }
+
+  return incompleteFileNames.has(file.name);
 }
 
 export async function checkFederalRevenueDataset(
@@ -206,18 +227,41 @@ export async function downloadFederalRevenueDataset(
 ): Promise<FederalRevenueDownloadSummary> {
   const startedAt = new Date().toISOString();
   const check = await checkFederalRevenueDataset(options);
-  const outputPath = buildReferenceOutputPath(
+  const outputPath = buildFederalRevenueReferenceOutputPath(
     check.selectedReference,
     options.outputPath,
   );
+  const manifestPath = getFederalRevenueManifestPath(outputPath);
 
   await mkdir(outputPath, { recursive: true });
+  await createFederalRevenueManifest({
+    reference: check.selectedReference,
+    outputPath,
+    remoteBaseUrl: check.remoteBaseUrl,
+    files: check.files,
+    lastCommand: options.manifestCommand ?? "download",
+  });
+
+  const manifest = await readFederalRevenueManifest(outputPath);
+  const evaluatedFiles = manifest
+    ? await evaluateFederalRevenueManifestFiles(manifest.files)
+    : [];
+  const incompleteFileNames = options.incompleteOnly
+    ? new Set(
+        evaluatedFiles
+          .filter((entry) => entry.status !== "downloaded")
+          .map((entry) => entry.fileName),
+      )
+    : undefined;
+  const filesToProcess = check.files.filter((file) =>
+    shouldDownloadFile(file, incompleteFileNames),
+  );
 
   options.onProgress?.({
     kind: "start",
     reference: check.selectedReference,
     outputPath,
-    totalFiles: check.totalFiles,
+    totalFiles: filesToProcess.length,
     totalBytes: check.totalBytes,
   });
 
@@ -227,13 +271,13 @@ export async function downloadFederalRevenueDataset(
   let skippedFiles = 0;
   let failedFiles = 0;
 
-  for (const [index, file] of check.files.entries()) {
+  for (const [index, file] of filesToProcess.entries()) {
     options.onProgress?.({
       kind: "file-start",
       reference: check.selectedReference,
       fileName: file.name,
       fileIndex: index + 1,
-      totalFiles: check.totalFiles,
+      totalFiles: filesToProcess.length,
       completedFiles: entries.length,
       downloadedBytes,
       totalBytes: check.totalBytes,
@@ -243,6 +287,17 @@ export async function downloadFederalRevenueDataset(
     const entry = await downloadSingleFile(file, outputPath, options);
     entries.push(entry);
 
+    await updateFederalRevenueManifestFile(outputPath, {
+      fileName: entry.fileName,
+      status: toLocalStatus(entry),
+      localSizeInBytes: entry.sizeInBytes,
+      errorMessage: entry.errorMessage,
+      downloadedAt:
+        entry.status === "downloaded" || entry.status === "skipped"
+          ? new Date().toISOString()
+          : undefined,
+    });
+
     if (entry.status === "downloaded") {
       downloadedFiles += 1;
       downloadedBytes += entry.sizeInBytes ?? file.sizeInBytes ?? 0;
@@ -251,7 +306,7 @@ export async function downloadFederalRevenueDataset(
         reference: check.selectedReference,
         fileName: file.name,
         fileIndex: index + 1,
-        totalFiles: check.totalFiles,
+        totalFiles: filesToProcess.length,
         completedFiles: entries.length,
         downloadedBytes,
         totalBytes: check.totalBytes,
@@ -268,7 +323,7 @@ export async function downloadFederalRevenueDataset(
         reference: check.selectedReference,
         fileName: file.name,
         fileIndex: index + 1,
-        totalFiles: check.totalFiles,
+        totalFiles: filesToProcess.length,
         completedFiles: entries.length,
         downloadedBytes,
         totalBytes: check.totalBytes,
@@ -283,7 +338,7 @@ export async function downloadFederalRevenueDataset(
       reference: check.selectedReference,
       fileName: file.name,
       fileIndex: index + 1,
-      totalFiles: check.totalFiles,
+      totalFiles: filesToProcess.length,
       completedFiles: entries.length,
       downloadedBytes,
       totalBytes: check.totalBytes,
@@ -292,11 +347,27 @@ export async function downloadFederalRevenueDataset(
     });
   }
 
+  await finalizeFederalRevenueManifest(
+    outputPath,
+    failedFiles > 0 ? "failed" : "completed",
+  );
+
+  const finalManifest = await readFederalRevenueManifest(outputPath);
+  const finalFiles = finalManifest
+    ? await evaluateFederalRevenueManifestFiles(finalManifest.files)
+    : [];
+  const partialFiles = finalFiles.filter(
+    (entry) => entry.status === "partial",
+  ).length;
+  const missingFiles = finalFiles.filter(
+    (entry) => entry.status === "missing",
+  ).length;
+
   options.onProgress?.({
     kind: "finish",
     reference: check.selectedReference,
     outputPath,
-    totalFiles: check.totalFiles,
+    totalFiles: filesToProcess.length,
     downloadedFiles,
     skippedFiles,
     failedFiles,
@@ -304,22 +375,30 @@ export async function downloadFederalRevenueDataset(
     totalBytes: check.totalBytes,
   });
 
-  const warnings =
-    failedFiles > 0
-      ? [
-          "Some Federal Revenue files could not be downloaded. Check the log file for details.",
-        ]
-      : [];
+  const warnings: string[] = [];
+
+  if (options.incompleteOnly && filesToProcess.length === 0) {
+    warnings.push("No incomplete Federal Revenue files were found for retry.");
+  }
+
+  if (failedFiles > 0) {
+    warnings.push(
+      "Some Federal Revenue files could not be downloaded. Check the log file and use retry after fixing the cause.",
+    );
+  }
 
   return {
     reference: check.selectedReference,
     selectionMode: check.selectionMode,
     outputPath,
+    manifestPath,
     remoteBaseUrl: check.remoteBaseUrl,
     filesFound: check.totalFiles,
     downloadedFiles,
     skippedFiles,
     failedFiles,
+    partialFiles,
+    missingFiles,
     totalBytes: check.totalBytes,
     downloadedBytes,
     entries,
@@ -328,4 +407,14 @@ export async function downloadFederalRevenueDataset(
     warnings,
     nextStep: `cnpj-db-loader extract ${outputPath.replace(/\\/g, "/")}`,
   };
+}
+
+export async function retryFederalRevenueDataset(
+  options: FederalRevenueDownloadOptions = {},
+): Promise<FederalRevenueDownloadSummary> {
+  return downloadFederalRevenueDataset({
+    ...options,
+    incompleteOnly: true,
+    manifestCommand: "retry",
+  });
 }

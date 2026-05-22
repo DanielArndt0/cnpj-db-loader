@@ -4,7 +4,10 @@
 | ------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `federal-revenue check`         | Check the selected or latest Federal Revenue monthly CNPJ reference and list the remote ZIP files.                                                                |
 | `federal-revenue download`      | Download the selected Federal Revenue monthly CNPJ ZIP files with retries, `.part` files, and skip-on-existing behavior.                                          |
-| `federal-revenue sync`          | Download, extract, validate, sanitize, and import the selected monthly CNPJ reference using the existing loader pipeline.                                         |
+| `federal-revenue status`        | Read the local Federal Revenue manifest and report downloaded, failed, partial, and missing files.                                                                |
+| `federal-revenue retry`         | Retry incomplete Federal Revenue files without redownloading completed files.                                                                                     |
+| `federal-revenue clean`         | Clean local Federal Revenue `.part` files, failed/partial files, or a whole reference folder.                                                                     |
+| `federal-revenue sync`          | Download, extract, validate, sanitize, and import the selected monthly CNPJ reference using the existing loader pipeline with a local sync lock.                  |
 | `inspect <input>`               | Detect whether the input is zipped, extracted, mixed, or empty.                                                                                                   |
 | `extract <input>`               | Extract every ZIP archive found inside the input directory.                                                                                                       |
 | `validate <input>`              | Validate an extracted dataset tree.                                                                                                                               |

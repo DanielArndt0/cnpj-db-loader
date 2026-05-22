@@ -21,25 +21,27 @@ The `federal-revenue` command group automates only the remote monthly dataset ph
 ```bash
 cnpj-db-loader federal-revenue check
 cnpj-db-loader federal-revenue download --output ./downloads --force
+cnpj-db-loader federal-revenue status --output ./downloads
+cnpj-db-loader federal-revenue retry --output ./downloads --force
 cnpj-db-loader federal-revenue sync --output ./downloads --db-url "postgresql://user:password@localhost:5432/cnpj" --force
 ```
 
-By default, the latest published `YYYY-MM` folder is selected from the Federal Revenue public share. Use `--current` to target the current calendar month, `--reference 2026-05`, or the positional shorthand `federal-revenue check 2026-05` to force a specific reference. Downloads are written to `<output>/<reference>`, completed local files are skipped, and in-progress transfers use `.part` files.
+By default, the latest published `YYYY-MM` folder is selected from the Federal Revenue public share. Use `--current` to target the current calendar month, `--reference 2026-05`, or the positional shorthand `federal-revenue check 2026-05` to force a specific reference. Downloads are written to `<output>/<reference>`, completed local files are skipped, in-progress transfers use `.part` files, and local state is stored in `<output>/<reference>/.cnpj-db-loader/federal-revenue/manifest.json`.
 
 ## What each step does
 
-| Step | Command                                              | Purpose                                                                                         |
-| ---- | ---------------------------------------------------- | ----------------------------------------------------------------------------------------------- |
-| 0    | `federal-revenue check/download/sync`                | Optionally check/download the latest monthly CNPJ files before the local processing flow        |
-| 1    | `inspect <input>`                                    | Detect whether the folder contains ZIP archives, extracted content, or both                     |
-| 2    | `extract <input>`                                    | Extract every Receita ZIP archive into `./extracted` by default                                 |
-| 3    | `validate <input>`                                   | Validate the extracted dataset tree and confirm that the required dataset blocks are present    |
-| 4    | `sanitize <input>`                                   | Prepare a sanitized dataset tree by removing known low-level byte issues before import          |
-| 5    | `database config show` / `database config set <url>` | Review or configure the PostgreSQL connection                                                   |
-| 6    | `schema generate --profile full`                     | Generate the combined SQL schema with final, control, and staging tables                        |
-| 7    | `import <input>`                                     | Run the full pipeline: staged/direct load, staged materialization, and final summary generation |
-| 8    | `import load <input>`                                | Stop after the load phase when you want staging populated without immediately materializing it  |
-| 9    | `import materialize <input>`                         | Resume from the saved plan and materialize staged datasets into the final schema in chunks      |
+| Step | Command                                                  | Purpose                                                                                                                   |
+| ---- | -------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
+| 0    | `federal-revenue check/download/status/retry/clean/sync` | Optionally check, download, inspect, retry, clean, or sync the latest monthly CNPJ files before the local processing flow |
+| 1    | `inspect <input>`                                        | Detect whether the folder contains ZIP archives, extracted content, or both                                               |
+| 2    | `extract <input>`                                        | Extract every Receita ZIP archive into `./extracted` by default                                                           |
+| 3    | `validate <input>`                                       | Validate the extracted dataset tree and confirm that the required dataset blocks are present                              |
+| 4    | `sanitize <input>`                                       | Prepare a sanitized dataset tree by removing known low-level byte issues before import                                    |
+| 5    | `database config show` / `database config set <url>`     | Review or configure the PostgreSQL connection                                                                             |
+| 6    | `schema generate --profile full`                         | Generate the combined SQL schema with final, control, and staging tables                                                  |
+| 7    | `import <input>`                                         | Run the full pipeline: staged/direct load, staged materialization, and final summary generation                           |
+| 8    | `import load <input>`                                    | Stop after the load phase when you want staging populated without immediately materializing it                            |
+| 9    | `import materialize <input>`                             | Resume from the saved plan and materialize staged datasets into the final schema in chunks                                |
 
 ## Schema profiles
 

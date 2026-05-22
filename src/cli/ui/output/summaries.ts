@@ -2,7 +2,9 @@ import { theme } from "../theme.js";
 import type { ExtractionSummary } from "../../../services/extract.service.js";
 import type {
   FederalRevenueCheckSummary,
+  FederalRevenueCleanSummary,
   FederalRevenueDownloadSummary,
+  FederalRevenueStatusSummary,
   FederalRevenueSyncSummary,
 } from "../../../services/federal-revenue/index.js";
 import type { InspectSummary } from "../../../services/inspect.service.js";
@@ -434,10 +436,13 @@ export function printFederalRevenueDownloadSummary(
   console.log(formatKeyValue("Reference", summary.reference));
   console.log(formatKeyValue("Selection mode", summary.selectionMode));
   console.log(formatKeyValue("Output path", summary.outputPath));
+  console.log(formatKeyValue("Manifest", summary.manifestPath));
   console.log(formatKeyValue("ZIP files found", summary.filesFound));
   console.log(formatKeyValue("Downloaded files", summary.downloadedFiles));
   console.log(formatKeyValue("Skipped files", summary.skippedFiles));
   console.log(formatKeyValue("Failed files", summary.failedFiles));
+  console.log(formatKeyValue("Partial files", summary.partialFiles));
+  console.log(formatKeyValue("Missing files", summary.missingFiles));
   console.log(
     formatKeyValue(
       "Processed bytes",
@@ -450,6 +455,107 @@ export function printFederalRevenueDownloadSummary(
     console.log(`${theme.infoLabel("NEXT")} ${summary.nextStep}`);
   }
 
+  console.log(`${theme.muted("Log file:")} ${resolveLogFilePath(logFilePath)}`);
+}
+
+export function printFederalRevenueStatusSummary(
+  summary: FederalRevenueStatusSummary,
+  logFilePath: string,
+): void {
+  console.log(
+    summary.isComplete
+      ? theme.successLabel("FEDERAL REVENUE")
+      : theme.warningLabel("FEDERAL REVENUE"),
+    summary.isComplete
+      ? "Local reference is complete."
+      : "Local reference is incomplete.",
+  );
+  console.log(formatKeyValue("Reference", summary.reference));
+  console.log(formatKeyValue("Selection mode", summary.selectionMode));
+  console.log(formatKeyValue("Output path", summary.outputPath));
+  console.log(formatKeyValue("Manifest", summary.manifestPath));
+  console.log(
+    formatKeyValue("Manifest found", summary.manifestFound ? "yes" : "no"),
+  );
+  console.log(formatKeyValue("ZIP files", summary.filesFound));
+  console.log(formatKeyValue("Downloaded files", summary.downloadedFiles));
+  console.log(formatKeyValue("Failed files", summary.failedFiles));
+  console.log(formatKeyValue("Partial files", summary.partialFiles));
+  console.log(formatKeyValue("Missing files", summary.missingFiles));
+  console.log(
+    formatKeyValue(
+      "Local bytes",
+      `${formatBytes(summary.localBytes)} / ${formatBytes(summary.totalBytes)}`,
+    ),
+  );
+
+  if (summary.lastCommand) {
+    console.log(formatKeyValue("Last command", summary.lastCommand));
+  }
+
+  if (summary.lastStatus) {
+    console.log(formatKeyValue("Last status", summary.lastStatus));
+  }
+
+  if (summary.updatedAt) {
+    console.log(formatKeyValue("Updated at", summary.updatedAt));
+  }
+
+  const problematicEntries = summary.entries.filter(
+    (entry) => entry.status !== "downloaded",
+  );
+  if (problematicEntries.length > 0) {
+    console.log(theme.warningLabel("FILES"));
+    for (const entry of problematicEntries.slice(0, 20)) {
+      const sizeLabel =
+        entry.localSizeInBytes === undefined
+          ? "no local bytes"
+          : formatBytes(entry.localSizeInBytes);
+      console.log(
+        `  ${theme.yellow("•")} ${entry.fileName} (${entry.status}, ${sizeLabel})`,
+      );
+    }
+
+    if (problematicEntries.length > 20) {
+      console.log(
+        `  ${theme.muted(`... ${problematicEntries.length - 20} additional incomplete file(s) omitted from terminal output`)}`,
+      );
+    }
+  }
+
+  printWarnings(summary.warnings);
+  console.log(`${theme.muted("Log file:")} ${resolveLogFilePath(logFilePath)}`);
+}
+
+export function printFederalRevenueCleanSummary(
+  summary: FederalRevenueCleanSummary,
+  logFilePath: string,
+): void {
+  console.log(theme.successLabel("FEDERAL REVENUE"), "Cleanup completed.");
+  console.log(formatKeyValue("Reference", summary.reference));
+  console.log(formatKeyValue("Selection mode", summary.selectionMode));
+  console.log(formatKeyValue("Mode", summary.mode));
+  console.log(formatKeyValue("Output path", summary.outputPath));
+  console.log(formatKeyValue("Manifest", summary.manifestPath));
+  console.log(formatKeyValue("Removed files", summary.removedFiles));
+  console.log(
+    formatKeyValue("Removed bytes", formatBytes(summary.removedBytes)),
+  );
+
+  if (summary.removedPaths.length > 0) {
+    console.log(theme.infoLabel("REMOVED"));
+    for (const removedPath of summary.removedPaths.slice(0, 20)) {
+      console.log(`  ${theme.blue("•")} ${removedPath}`);
+    }
+
+    if (summary.removedPaths.length > 20) {
+      console.log(
+        `  ${theme.muted(`... ${summary.removedPaths.length - 20} additional path(s) omitted from terminal output`)}`,
+      );
+    }
+  }
+
+  printWarnings(summary.warnings);
   console.log(`${theme.muted("Log file:")} ${resolveLogFilePath(logFilePath)}`);
 }
 

@@ -4,13 +4,18 @@ import { ValidationError } from "../../core/errors/index.js";
 import { confirm } from "../../core/prompts/confirm.js";
 import type {
   FederalRevenueCheckOptions,
+  FederalRevenueCleanOptions,
   FederalRevenueDownloadOptions,
+  FederalRevenueStatusOptions,
   FederalRevenueSyncOptions,
   ImportOptions,
 } from "../../services/index.js";
 import {
   checkFederalRevenueDataset,
+  cleanFederalRevenueDataset,
   downloadFederalRevenueDataset,
+  getFederalRevenueStatus,
+  retryFederalRevenueDataset,
   syncFederalRevenueDataset,
   writeCommandLog,
 } from "../../services/index.js";
@@ -20,7 +25,9 @@ import {
   createImportProgressReporter,
   createSanitizeProgressReporter,
   printFederalRevenueCheckSummary,
+  printFederalRevenueCleanSummary,
   printFederalRevenueDownloadSummary,
+  printFederalRevenueStatusSummary,
   printFederalRevenueSyncSummary,
 } from "../ui/output.js";
 
@@ -38,6 +45,20 @@ type FederalRevenueDownloadCommandOptions = FederalRevenueSharedOptions & {
   force?: boolean;
 };
 
+type FederalRevenueStatusCommandOptions = FederalRevenueSharedOptions & {
+  output?: string;
+};
+
+type FederalRevenueRetryCommandOptions = FederalRevenueDownloadCommandOptions;
+
+type FederalRevenueCleanCommandOptions = FederalRevenueSharedOptions & {
+  output?: string;
+  partials?: boolean;
+  failed?: boolean;
+  all?: boolean;
+  force?: boolean;
+};
+
 type FederalRevenueSyncCommandOptions = FederalRevenueDownloadCommandOptions & {
   extractOutput?: string;
   sanitizeOutput?: string;
@@ -46,6 +67,7 @@ type FederalRevenueSyncCommandOptions = FederalRevenueDownloadCommandOptions & {
   loadBatchSize?: number;
   materializeBatchSize?: number;
   verboseProgress?: boolean;
+  forceLock?: boolean;
 };
 
 function mergeSharedOptions(
@@ -58,7 +80,7 @@ function mergeSharedOptions(
     referenceArgument !== options.reference
   ) {
     throw new ValidationError(
-      `Conflicting Federal Revenue references received: ${referenceArgument} and ${options.reference}. Use only one reference value.`,
+      `Federal Revenue reference conflict: received ${referenceArgument} and ${options.reference}. Use only one reference value.`,
     );
   }
 
@@ -66,7 +88,7 @@ function mergeSharedOptions(
 
   if (reference && options.current) {
     throw new ValidationError(
-      "Use either a Federal Revenue reference or --current, not both.",
+      "Federal Revenue reference conflict: use either a reference or --current, not both.",
     );
   }
 
@@ -120,6 +142,48 @@ function buildDownloadOptions(
   }
 
   return downloadOptions;
+}
+
+function buildStatusOptions(
+  options: FederalRevenueStatusCommandOptions,
+): FederalRevenueStatusOptions {
+  const statusOptions = applySharedOptions<FederalRevenueStatusOptions>(
+    options,
+    {},
+  );
+
+  if (options.output) {
+    statusOptions.outputPath = options.output;
+  }
+
+  return statusOptions;
+}
+
+function buildCleanOptions(
+  options: FederalRevenueCleanCommandOptions,
+): FederalRevenueCleanOptions {
+  const cleanOptions = applySharedOptions<FederalRevenueCleanOptions>(
+    options,
+    {},
+  );
+
+  if (options.output) {
+    cleanOptions.outputPath = options.output;
+  }
+
+  if (options.partials) {
+    cleanOptions.partials = true;
+  }
+
+  if (options.failed) {
+    cleanOptions.failed = true;
+  }
+
+  if (options.all) {
+    cleanOptions.all = true;
+  }
+
+  return cleanOptions;
 }
 
 function buildImportOptions(
@@ -206,12 +270,33 @@ function registerDownloadOptions(command: Command): Command {
     .option("-f, --force", "Skip the confirmation prompt.");
 }
 
+function registerStatusOptions(command: Command): Command {
+  return registerSharedOptions(command).option(
+    "--output <path>",
+    "Download root directory where the selected reference folder is stored.",
+  );
+}
+
+function registerCleanOptions(command: Command): Command {
+  return registerStatusOptions(command)
+    .option("--partials", "Remove only .part files for the selected reference.")
+    .option(
+      "--failed",
+      "Remove failed and partial files tracked by the local manifest.",
+    )
+    .option(
+      "--all",
+      "Remove the entire local reference folder, including ZIP files and manifest state.",
+    )
+    .option("-f, --force", "Skip the confirmation prompt.");
+}
+
 export function registerFederalRevenueCommands(program: Command): void {
   const federalRevenue = program
     .command("federal-revenue")
     .alias("revenue")
     .description(
-      "Check, download, and sync CNPJ monthly files from the Federal Revenue public share.",
+      "Check, download, sync, and maintain CNPJ monthly files from the Federal Revenue public share.",
     );
 
   registerSharedOptions(
@@ -249,7 +334,7 @@ export function registerFederalRevenueCommands(program: Command): void {
         "Optional monthly reference in YYYY-MM format. Same as --reference.",
       )
       .description(
-        "Download the selected Federal Revenue monthly CNPJ ZIP files with safe .part files and retries.",
+        "Download the selected Federal Revenue monthly CNPJ ZIP files with safe .part files, manifest state, and retries.",
       ),
   ).action(
     async (
@@ -280,6 +365,124 @@ export function registerFederalRevenueCommands(program: Command): void {
       if (summary.failedFiles > 0) {
         process.exitCode = 1;
       }
+    },
+  );
+
+  registerStatusOptions(
+    federalRevenue
+      .command("status")
+      .argument(
+        "[reference]",
+        "Optional monthly reference in YYYY-MM format. Same as --reference.",
+      )
+      .description(
+        "Read the local Federal Revenue manifest and report downloaded, failed, partial, and missing files.",
+      ),
+  ).action(
+    async (
+      referenceArgument: string | undefined,
+      options: FederalRevenueStatusCommandOptions,
+    ) => {
+      const resolvedOptions = mergeSharedOptions(referenceArgument, options);
+      const summary = await getFederalRevenueStatus(
+        buildStatusOptions({ ...options, ...resolvedOptions }),
+      );
+      const logFilePath = await writeCommandLog(
+        "federal-revenue-status",
+        summary,
+      );
+      printFederalRevenueStatusSummary(summary, logFilePath);
+
+      if (!summary.isComplete) {
+        process.exitCode = 1;
+      }
+    },
+  );
+
+  registerDownloadOptions(
+    federalRevenue
+      .command("retry")
+      .argument(
+        "[reference]",
+        "Optional monthly reference in YYYY-MM format. Same as --reference.",
+      )
+      .description(
+        "Retry only incomplete Federal Revenue files tracked by the local manifest.",
+      ),
+  ).action(
+    async (
+      referenceArgument: string | undefined,
+      options: FederalRevenueRetryCommandOptions,
+    ) => {
+      const resolvedOptions = mergeSharedOptions(referenceArgument, options);
+      const confirmed = await confirmFederalRevenueAction(
+        "Retry incomplete Federal Revenue files now? Completed files are kept.",
+        options.force,
+      );
+      if (!confirmed) {
+        console.log("Federal Revenue retry cancelled.");
+        return;
+      }
+
+      const progress = createFederalRevenueDownloadProgressReporter();
+      const summary = await retryFederalRevenueDataset({
+        ...buildDownloadOptions({ ...options, ...resolvedOptions }),
+        onProgress: progress,
+      });
+      const logFilePath = await writeCommandLog(
+        "federal-revenue-retry",
+        summary,
+      );
+      printFederalRevenueDownloadSummary(summary, logFilePath);
+
+      if (
+        summary.failedFiles > 0 ||
+        summary.partialFiles > 0 ||
+        summary.missingFiles > 0
+      ) {
+        process.exitCode = 1;
+      }
+    },
+  );
+
+  registerCleanOptions(
+    federalRevenue
+      .command("clean")
+      .argument(
+        "[reference]",
+        "Optional monthly reference in YYYY-MM format. Same as --reference.",
+      )
+      .description(
+        "Clean local Federal Revenue partial files, failed files, or an entire reference folder.",
+      ),
+  ).action(
+    async (
+      referenceArgument: string | undefined,
+      options: FederalRevenueCleanCommandOptions,
+    ) => {
+      const resolvedOptions = mergeSharedOptions(referenceArgument, options);
+      const actionLabel = options.all
+        ? "remove the entire selected Federal Revenue reference folder"
+        : options.failed
+          ? "remove failed and partial Federal Revenue files"
+          : "remove Federal Revenue .part files";
+      const confirmed = await confirmFederalRevenueAction(
+        `This will ${actionLabel}. Continue?`,
+        options.force,
+      );
+      if (!confirmed) {
+        console.log("Federal Revenue cleanup cancelled.");
+        return;
+      }
+
+      const summary = await cleanFederalRevenueDataset(
+        buildCleanOptions({ ...options, ...resolvedOptions }),
+      );
+      const logFilePath = await writeCommandLog(
+        "federal-revenue-clean",
+        summary,
+      );
+      printFederalRevenueCleanSummary(summary, logFilePath);
     },
   );
 
@@ -320,6 +523,10 @@ export function registerFederalRevenueCommands(program: Command): void {
         "--verbose-progress",
         "Show checkpoint offset and batch details in the live import progress output.",
       )
+      .option(
+        "--force-lock",
+        "Remove an existing local sync lock before starting. Use only after confirming the previous process stopped.",
+      )
       .description(
         "Download, extract, validate, sanitize, and import the selected Federal Revenue monthly CNPJ dataset.",
       ),
@@ -359,6 +566,10 @@ export function registerFederalRevenueCommands(program: Command): void {
 
       if (options.sanitizeOutput) {
         syncOptions.sanitizeOutputPath = options.sanitizeOutput;
+      }
+
+      if (options.forceLock) {
+        syncOptions.forceLock = true;
       }
 
       const summary = await syncFederalRevenueDataset(syncOptions);

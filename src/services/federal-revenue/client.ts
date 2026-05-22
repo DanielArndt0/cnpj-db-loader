@@ -164,7 +164,7 @@ async function propfind(
 export function validateFederalRevenueReference(reference: string): void {
   if (!REFERENCE_PATTERN.test(reference)) {
     throw new ValidationError(
-      `Invalid Federal Revenue reference: ${reference}. Expected YYYY-MM.`,
+      `Federal Revenue reference is invalid: ${reference}. Expected YYYY-MM.`,
     );
   }
 }
@@ -205,7 +205,7 @@ export async function resolveFederalRevenueReference(
 
   if (!latest) {
     throw new ValidationError(
-      "No Federal Revenue monthly references were found in the public share.",
+      "Federal Revenue reference discovery failed: no monthly references were found in the public share.",
     );
   }
 
@@ -214,7 +214,7 @@ export async function resolveFederalRevenueReference(
 
     if (!availableReferences.includes(input.reference)) {
       throw new ValidationError(
-        `Federal Revenue reference ${input.reference} was not found in the public share. Latest available reference is ${latest}.`,
+        `Federal Revenue reference not found: ${input.reference}. Latest available reference is ${latest}.`,
         {
           requestedReference: input.reference,
           latestAvailableReference: latest,
@@ -235,7 +235,7 @@ export async function resolveFederalRevenueReference(
 
     if (!availableReferences.includes(currentReference)) {
       throw new ValidationError(
-        `Federal Revenue current reference ${currentReference} is not available yet. Latest available reference is ${latest}.`,
+        `Federal Revenue current reference is not available yet: ${currentReference}. Latest available reference is ${latest}.`,
         {
           requestedReference: currentReference,
           latestAvailableReference: latest,
