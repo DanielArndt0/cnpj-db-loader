@@ -31,6 +31,7 @@ The import pipeline now uses:
 - a dedicated `quarantine` service to inspect quarantine rows without touching the import pipeline
 - conservative load units to reduce memory pressure and prevent giant rollbacks
 - compatibility with simplified final schemas that keep derived identifiers as regular columns when needed
+- remote Federal Revenue WebDAV checks/downloads as an additive pre-pipeline service
 
 ## Import modules
 
@@ -63,10 +64,22 @@ These staging tables are intentionally:
 - shaped to mirror the validated dataset rows with minimal insert overhead
 - equipped with `staging_id` so the materializer can checkpoint chunk progress safely
 
+## Federal Revenue pre-pipeline
+
+The Federal Revenue integration is intentionally kept as a pre-pipeline module. It lives under `src/services/federal-revenue` and is exposed by `src/cli/commands/register-federal-revenue.ts`. The module is responsible for:
+
+- listing monthly `YYYY-MM` references from the public WebDAV share
+- selecting the latest, current, or explicit monthly reference
+- listing only `.zip` files inside the selected reference
+- downloading files with `.part` temporary files, retry attempts, and skip-on-existing behavior
+- handing the completed download folder to the existing extraction, validation, sanitization, and import services during `federal-revenue sync`
+
+Redis, background workers, and schedulers are not part of this CLI module. Those concerns should remain outside the loader if an external runner/orchestrator is added later.
+
 ## Current execution flow
 
 ```text
-inspect -> extract -> validate -> sanitize -> db/schema -> import
+federal-revenue check/download -> inspect -> extract -> validate -> sanitize -> db/schema -> import
 ```
 
 ## Internal import flow

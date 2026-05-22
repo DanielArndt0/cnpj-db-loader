@@ -2,6 +2,7 @@ import { Command } from "commander";
 
 import { registerDatabaseCommands } from "./commands/register-database.js";
 import { registerExtractCommands } from "./commands/register-extract.js";
+import { registerFederalRevenueCommands } from "./commands/register-federal-revenue.js";
 import { registerDoctorCommands } from "./commands/register-doctor.js";
 import { registerInspectCommands } from "./commands/register-inspect.js";
 import { registerImportCommands } from "./commands/register-import.js";
@@ -31,6 +32,7 @@ export function buildProgram(): Command {
   registerValidateCommands(program);
   registerSanitizeCommands(program);
   registerSchemaCommands(program);
+  registerFederalRevenueCommands(program);
   registerDatabaseCommands(program);
   registerImportCommands(program);
   registerQuarantineCommands(program);

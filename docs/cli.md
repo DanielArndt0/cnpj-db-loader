@@ -3,6 +3,9 @@
 ## Public command surface
 
 ```bash
+cnpj-db-loader federal-revenue check [--reference <yyyy-mm>] [--current]
+cnpj-db-loader federal-revenue download [--reference <yyyy-mm>] [--current] [--output <path>] [--retries <number>] [--overwrite] [-f]
+cnpj-db-loader federal-revenue sync [--reference <yyyy-mm>] [--current] [--output <path>] [--extract-output <path>] [--sanitize-output <path>] [--db-url <url>] [--dataset <name>] [--load-batch-size <size>] [--materialize-batch-size <size>] [--verbose-progress] [-f]
 cnpj-db-loader inspect <input>
 cnpj-db-loader extract <input> [--output <path>]
 cnpj-db-loader validate <input>
@@ -33,3 +36,6 @@ cnpj-db-loader quarantine show <id> [--db-url <url>]
 - Placeholder commands are not exposed.
 - Positional arguments are preferred when they make commands easier to type.
 - Destructive database maintenance actions ask for confirmation unless `--force` is provided.
+
+- `federal-revenue` (alias `revenue`) is additive: it only automates the remote monthly CNPJ download phase and then reuses the existing extract, validate, sanitize, and import services.
+- Federal Revenue downloads keep completed files by default and write incomplete transfers as `.part` files until the file is fully validated.

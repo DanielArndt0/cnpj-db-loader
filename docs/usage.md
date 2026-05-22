@@ -14,10 +14,23 @@ cnpj-db-loader import load ./downloads/sanitized --load-batch-size 20000
 cnpj-db-loader import materialize ./downloads/sanitized --materialize-batch-size 50000
 ```
 
+## Federal Revenue monthly download
+
+The `federal-revenue` command group automates only the remote monthly dataset phase. It does not replace the existing loader pipeline; `sync` reuses the same extract, validate, sanitize, and import services that the manual flow uses.
+
+```bash
+cnpj-db-loader federal-revenue check
+cnpj-db-loader federal-revenue download --output ./downloads --force
+cnpj-db-loader federal-revenue sync --output ./downloads --db-url "postgresql://user:password@localhost:5432/cnpj" --force
+```
+
+By default, the latest published `YYYY-MM` folder is selected from the Federal Revenue public share. Use `--current` to target the current calendar month or `--reference 2026-05` to force a specific reference. Downloads are written to `<output>/<reference>`, completed local files are skipped, and in-progress transfers use `.part` files.
+
 ## What each step does
 
 | Step | Command                                              | Purpose                                                                                         |
 | ---- | ---------------------------------------------------- | ----------------------------------------------------------------------------------------------- |
+| 0    | `federal-revenue check/download/sync`                | Optionally check/download the latest monthly CNPJ files before the local processing flow        |
 | 1    | `inspect <input>`                                    | Detect whether the folder contains ZIP archives, extracted content, or both                     |
 | 2    | `extract <input>`                                    | Extract every Receita ZIP archive into `./extracted` by default                                 |
 | 3    | `validate <input>`                                   | Validate the extracted dataset tree and confirm that the required dataset blocks are present    |

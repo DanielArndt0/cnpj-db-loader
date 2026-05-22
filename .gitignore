@@ -145,3 +145,6 @@ logs/
 # Schemas
 *.sql
 !/sql/*.sql
+
+# VSCode settings
+.vscode

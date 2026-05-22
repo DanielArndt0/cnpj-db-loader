@@ -1,5 +1,6 @@
 import { theme } from "../theme.js";
 import type { ExtractionProgressEvent } from "../../../services/extract.service.js";
+import type { FederalRevenueDownloadProgressEvent } from "../../../services/federal-revenue/index.js";
 import type { ImportProgressEvent } from "../../../services/import.service.js";
 import type { SanitizeProgressEvent } from "../../../services/sanitize.service.js";
 import {
@@ -590,6 +591,164 @@ export function createSanitizeProgressReporter(): (
     );
     console.log(
       formatKeyValue("Processed bytes", formatBytes(event.totalBytes)),
+    );
+  };
+}
+
+export function createFederalRevenueDownloadProgressReporter(): (
+  event: FederalRevenueDownloadProgressEvent,
+) => void {
+  const frames = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
+  let frameIndex = 0;
+  let spinnerTimer: NodeJS.Timeout | undefined;
+  let currentLines: string[] = [];
+  let renderedLines = 0;
+  let lastRenderedBlock = "";
+
+  const shortPath = (value: string, maxLength = 68): string =>
+    truncateMiddle(value, maxLength);
+
+  const renderBlock = (lines: string[]): void => {
+    const block = lines.join("\n");
+
+    if (!process.stdout.isTTY) {
+      if (block !== lastRenderedBlock) {
+        console.log(block);
+        lastRenderedBlock = block;
+      }
+      return;
+    }
+
+    const width = process.stdout.columns || 120;
+
+    if (renderedLines > 1) {
+      process.stdout.write(`\u001B[${renderedLines - 1}F`);
+    } else if (renderedLines === 1) {
+      process.stdout.write("\r");
+    }
+
+    for (let index = 0; index < lines.length; index += 1) {
+      process.stdout.write("\u001B[2K");
+      process.stdout.write(lines[index]!.padEnd(width));
+      if (index < lines.length - 1) {
+        process.stdout.write("\n");
+      }
+    }
+
+    renderedLines = lines.length;
+    lastRenderedBlock = block;
+  };
+
+  const stopSpinner = (): void => {
+    if (spinnerTimer) {
+      clearInterval(spinnerTimer);
+      spinnerTimer = undefined;
+    }
+  };
+
+  const finalizeDynamicOutput = (): void => {
+    stopSpinner();
+    if (process.stdout.isTTY && renderedLines > 0) {
+      process.stdout.write("\n");
+    }
+    currentLines = [];
+    renderedLines = 0;
+    lastRenderedBlock = "";
+  };
+
+  const startSpinner = (): void => {
+    if (spinnerTimer) {
+      return;
+    }
+
+    spinnerTimer = setInterval(() => {
+      if (currentLines.length === 0) {
+        return;
+      }
+      frameIndex += 1;
+      const spinner = frames[frameIndex % frames.length] ?? "⠋";
+      const nextLines = [...currentLines];
+      nextLines[0] = nextLines[0]!.replace("__SPINNER__", theme.blue(spinner));
+      renderBlock(nextLines);
+    }, 220);
+  };
+
+  return (event: FederalRevenueDownloadProgressEvent): void => {
+    if (event.kind === "start") {
+      frameIndex = 0;
+      currentLines = [
+        `${theme.infoLabel("FEDERAL REVENUE")} __SPINNER__ downloading ${event.reference}`,
+        `Output: ${shortPath(event.outputPath)}`,
+        `Files: 0/${formatCount(event.totalFiles)}`,
+        `Bytes: ${formatBytes(0)} / ${formatBytes(event.totalBytes)}`,
+        `Current: waiting...`,
+      ];
+      renderBlock([
+        currentLines[0]!.replace("__SPINNER__", theme.blue(frames[0]!)),
+        ...currentLines.slice(1),
+      ]);
+      startSpinner();
+      return;
+    }
+
+    if (event.kind === "file-start") {
+      currentLines = [
+        `${theme.infoLabel("FEDERAL REVENUE")} __SPINNER__ downloading ${event.reference}`,
+        currentLines[1] ?? "",
+        `Files: ${formatCount(event.completedFiles)}/${formatCount(event.totalFiles)}`,
+        `Bytes: ${formatBytes(event.downloadedBytes)} / ${formatBytes(event.totalBytes)}`,
+        `Current: ${shortPath(event.fileName)}`,
+      ];
+      renderBlock([
+        currentLines[0]!.replace(
+          "__SPINNER__",
+          theme.blue(frames[frameIndex % frames.length] ?? "⠋"),
+        ),
+        ...currentLines.slice(1),
+      ]);
+      startSpinner();
+      return;
+    }
+
+    if (event.kind === "file-failed") {
+      finalizeDynamicOutput();
+      console.log(
+        `${theme.warningLabel("WARNING")} Failed to download ${event.fileName}: ${event.errorMessage}`,
+      );
+      return;
+    }
+
+    if (event.kind === "file-complete" || event.kind === "file-skipped") {
+      currentLines = [
+        `${theme.infoLabel("FEDERAL REVENUE")} __SPINNER__ downloading ${event.reference}`,
+        currentLines[1] ?? "",
+        `Files: ${formatCount(event.completedFiles)}/${formatCount(event.totalFiles)}`,
+        `Bytes: ${formatBytes(event.downloadedBytes)} / ${formatBytes(event.totalBytes)}`,
+        `Current: ${event.kind === "file-skipped" ? "skipped" : "downloaded"} ${shortPath(event.fileName)}`,
+      ];
+      renderBlock([
+        currentLines[0]!.replace(
+          "__SPINNER__",
+          theme.blue(frames[frameIndex % frames.length] ?? "⠋"),
+        ),
+        ...currentLines.slice(1),
+      ]);
+      return;
+    }
+
+    finalizeDynamicOutput();
+    console.log(
+      theme.successLabel("FEDERAL REVENUE"),
+      `Processed ${formatCount(event.totalFiles)} file(s) for ${event.reference}.`,
+    );
+    console.log(formatKeyValue("Downloaded files", event.downloadedFiles));
+    console.log(formatKeyValue("Skipped files", event.skippedFiles));
+    console.log(formatKeyValue("Failed files", event.failedFiles));
+    console.log(
+      formatKeyValue(
+        "Processed bytes",
+        `${formatBytes(event.downloadedBytes)} / ${formatBytes(event.totalBytes)}`,
+      ),
     );
   };
 }

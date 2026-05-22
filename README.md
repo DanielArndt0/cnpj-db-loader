@@ -7,6 +7,7 @@ CNPJ DB Loader is a practical CLI for preparing Brazilian Federal Revenue CNPJ d
 This version focuses on the real loading workflow:
 
 - inspect a downloaded directory
+- check and download the latest Federal Revenue CNPJ monthly ZIP archives from the public share
 - extract Receita Federal ZIP archives
 - validate an extracted tree
 - sanitize validated files before import to remove known low-level byte issues
@@ -36,18 +37,23 @@ npm run cli -- --help
 ## Quick start
 
 ```bash
-cnpj-db-loader inspect ./downloads
-cnpj-db-loader extract ./downloads
-cnpj-db-loader validate ./downloads/extracted
-cnpj-db-loader sanitize ./downloads/extracted
+cnpj-db-loader federal-revenue check
+cnpj-db-loader federal-revenue download --output ./downloads
+cnpj-db-loader inspect ./downloads/<reference>
+cnpj-db-loader extract ./downloads/<reference>
+cnpj-db-loader validate ./downloads/<reference>/extracted
+cnpj-db-loader sanitize ./downloads/<reference>/extracted
 cnpj-db-loader database config set "postgresql://user:password@localhost:5432/cnpj"
 cnpj-db-loader schema generate --profile full
-cnpj-db-loader import ./downloads/sanitized --load-batch-size 500 --materialize-batch-size 50000 --verbose-progress
+cnpj-db-loader import ./downloads/<reference>/sanitized --load-batch-size 500 --materialize-batch-size 50000 --verbose-progress
 ```
 
 ## Stable commands
 
 ```bash
+cnpj-db-loader federal-revenue check [--reference <yyyy-mm>] [--current]
+cnpj-db-loader federal-revenue download [--reference <yyyy-mm>] [--current] [--output <path>] [--retries <number>] [--overwrite] [-f]
+cnpj-db-loader federal-revenue sync [--reference <yyyy-mm>] [--current] [--output <path>] [--extract-output <path>] [--sanitize-output <path>] [--db-url <url>] [--dataset <name>] [--load-batch-size <size>] [--materialize-batch-size <size>] [--verbose-progress] [-f]
 cnpj-db-loader inspect <input>
 cnpj-db-loader extract <input> [--output <path>]
 cnpj-db-loader validate <input>
@@ -87,6 +93,8 @@ The CLI now exposes a split workflow as well: `import` runs the full pipeline, `
 
 Materialization progress is now checkpointed separately from file-load checkpoints, and the materializer works in resumable chunks controlled by `--materialize-batch-size`. During long final materialization steps, the CLI keeps the live progress output on a dedicated MATERIALIZING stage while reducing per-chunk checkpoint and JSONL write overhead so resumable chunks stay fast. The simplified final schema keeps raw secondary CNAE text in establishments and derives helper fields such as partner dedupe keys during materialization only when they are still stored physically in the target schema.
 
+The Federal Revenue commands write the same structured command logs and keep the new remote-download phase outside the import internals. Existing completed ZIP files are skipped by default and temporary `.part` files are used while downloads are still in progress.
+
 The generated database schema now supports three profiles:
 
 - `full`: final relational tables, import control tables, and staging tables
@@ -102,5 +110,6 @@ The generated database schema now supports three profiles:
 - [Commands](./docs/commands.md)
 - [Quarantine](./docs/quarantine.md)
 - [Sanitize](./docs/sanitize.md)
+- [Federal Revenue](./docs/federal-revenue.md)
 
 - Materialization now stores lightweight staging validation markers (row count and max staging id) in the materialization checkpoint table so reruns can verify the live staging state quickly and reuse lookup reconciliation when the staging snapshot is unchanged. The runtime validates that the required import tables already exist but no longer creates or alters them automatically.

@@ -1,5 +1,10 @@
 import { theme } from "../theme.js";
 import type { ExtractionSummary } from "../../../services/extract.service.js";
+import type {
+  FederalRevenueCheckSummary,
+  FederalRevenueDownloadSummary,
+  FederalRevenueSyncSummary,
+} from "../../../services/federal-revenue/index.js";
 import type { InspectSummary } from "../../../services/inspect.service.js";
 import type { ImportSummary } from "../../../services/import.service.js";
 import type { SanitizeSummary } from "../../../services/sanitize.service.js";
@@ -376,5 +381,117 @@ export function printImportSummary(
   console.log(`${theme.muted("Log file:")} ${resolveLogFilePath(logFilePath)}`);
   console.log(
     `${theme.muted("Progress log:")} ${resolveLogFilePath(summary.progressLogPath)}`,
+  );
+}
+
+export function printFederalRevenueCheckSummary(
+  summary: FederalRevenueCheckSummary,
+  logFilePath: string,
+): void {
+  console.log(
+    theme.successLabel("FEDERAL REVENUE"),
+    "Remote dataset check completed.",
+  );
+  console.log(formatKeyValue("Remote base URL", summary.remoteBaseUrl));
+  console.log(formatKeyValue("Selected reference", summary.selectedReference));
+  console.log(formatKeyValue("Selection mode", summary.selectionMode));
+  console.log(
+    formatKeyValue("Available references", summary.availableReferences.length),
+  );
+  console.log(formatKeyValue("ZIP files", summary.totalFiles));
+  console.log(formatKeyValue("Remote bytes", formatBytes(summary.totalBytes)));
+
+  if (summary.files.length > 0) {
+    console.log(theme.infoLabel("FILES"));
+    for (const file of summary.files.slice(0, 20)) {
+      const sizeLabel =
+        file.sizeInBytes === undefined
+          ? "unknown size"
+          : formatBytes(file.sizeInBytes);
+      console.log(`  ${theme.blue("•")} ${file.name} (${sizeLabel})`);
+    }
+
+    if (summary.files.length > 20) {
+      console.log(
+        `  ${theme.muted(`... ${summary.files.length - 20} additional file(s) omitted from terminal output`)}`,
+      );
+    }
+  }
+
+  console.log(`${theme.muted("Log file:")} ${resolveLogFilePath(logFilePath)}`);
+}
+
+export function printFederalRevenueDownloadSummary(
+  summary: FederalRevenueDownloadSummary,
+  logFilePath: string,
+): void {
+  console.log(
+    theme.successLabel("FEDERAL REVENUE"),
+    summary.failedFiles > 0
+      ? "Download completed with errors."
+      : "Download completed.",
+  );
+  console.log(formatKeyValue("Reference", summary.reference));
+  console.log(formatKeyValue("Selection mode", summary.selectionMode));
+  console.log(formatKeyValue("Output path", summary.outputPath));
+  console.log(formatKeyValue("ZIP files found", summary.filesFound));
+  console.log(formatKeyValue("Downloaded files", summary.downloadedFiles));
+  console.log(formatKeyValue("Skipped files", summary.skippedFiles));
+  console.log(formatKeyValue("Failed files", summary.failedFiles));
+  console.log(
+    formatKeyValue(
+      "Processed bytes",
+      `${formatBytes(summary.downloadedBytes)} / ${formatBytes(summary.totalBytes)}`,
+    ),
+  );
+
+  printWarnings(summary.warnings);
+  if (summary.nextStep) {
+    console.log(`${theme.infoLabel("NEXT")} ${summary.nextStep}`);
+  }
+
+  console.log(`${theme.muted("Log file:")} ${resolveLogFilePath(logFilePath)}`);
+}
+
+export function printFederalRevenueSyncSummary(
+  summary: FederalRevenueSyncSummary,
+  logFilePath: string,
+): void {
+  console.log(
+    theme.successLabel("FEDERAL REVENUE"),
+    "Full remote sync completed.",
+  );
+  console.log(formatKeyValue("Reference", summary.reference));
+  console.log(formatKeyValue("Download path", summary.download.outputPath));
+  console.log(formatKeyValue("Extracted path", summary.extraction.outputPath));
+  console.log(
+    formatKeyValue("Sanitized path", summary.sanitization.outputPath),
+  );
+  console.log(formatKeyValue("Target database", summary.import.targetDatabase));
+  console.log(formatKeyValue("ZIP files", summary.download.filesFound));
+  console.log(
+    formatKeyValue(
+      "Extracted archives",
+      summary.extraction.extractedArchives.length,
+    ),
+  );
+  console.log(
+    formatKeyValue("Sanitized files", summary.sanitization.processedFiles),
+  );
+  console.log(formatKeyValue("Imported files", summary.import.importedFiles));
+  console.log(
+    formatKeyValue("Rows committed", formatCount(summary.import.processedRows)),
+  );
+  console.log(
+    formatKeyValue(
+      "Quarantined rows",
+      formatCount(summary.import.quarantinedRows),
+    ),
+  );
+
+  printNotes(summary.warnings);
+  console.log(`${theme.muted("Log file:")} ${resolveLogFilePath(logFilePath)}`);
+  console.log(
+    `${theme.muted("Import progress log:")} ${resolveLogFilePath(summary.import.progressLogPath)}`,
   );
 }

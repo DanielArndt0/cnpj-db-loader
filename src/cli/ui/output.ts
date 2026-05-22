@@ -4,6 +4,9 @@ export {
   printDatabaseCleanupSummary,
   printDatabaseConfigSummary,
   printExtractionSummary,
+  printFederalRevenueCheckSummary,
+  printFederalRevenueDownloadSummary,
+  printFederalRevenueSyncSummary,
   printImportSummary,
   printSanitizeSummary,
   printInfoWithLog,
@@ -12,6 +15,7 @@ export {
 } from "./output/summaries.js";
 export {
   createExtractionProgressReporter,
+  createFederalRevenueDownloadProgressReporter,
   createImportProgressReporter,
   createSanitizeProgressReporter,
 } from "./output/progress.js";

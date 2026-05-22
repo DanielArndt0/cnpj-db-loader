@@ -2,6 +2,9 @@
 
 | Command                         | Purpose                                                                                                                                                           |
 | ------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `federal-revenue check`         | Check the selected or latest Federal Revenue monthly CNPJ reference and list the remote ZIP files.                                                                |
+| `federal-revenue download`      | Download the selected Federal Revenue monthly CNPJ ZIP files with retries, `.part` files, and skip-on-existing behavior.                                          |
+| `federal-revenue sync`          | Download, extract, validate, sanitize, and import the selected monthly CNPJ reference using the existing loader pipeline.                                         |
 | `inspect <input>`               | Detect whether the input is zipped, extracted, mixed, or empty.                                                                                                   |
 | `extract <input>`               | Extract every ZIP archive found inside the input directory.                                                                                                       |
 | `validate <input>`              | Validate an extracted dataset tree.                                                                                                                               |
@@ -27,6 +30,9 @@
 ## Examples
 
 ```bash
+cnpj-db-loader federal-revenue check
+cnpj-db-loader federal-revenue download --output ./downloads --force
+cnpj-db-loader federal-revenue sync --output ./downloads --db-url "postgresql://user:password@localhost:5432/cnpj" --force
 cnpj-db-loader inspect ./downloads
 cnpj-db-loader extract ./downloads
 cnpj-db-loader validate ./downloads/extracted
