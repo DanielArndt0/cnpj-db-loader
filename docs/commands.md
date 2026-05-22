@@ -31,6 +31,7 @@
 
 ```bash
 cnpj-db-loader federal-revenue check
+cnpj-db-loader federal-revenue check 2026-05
 cnpj-db-loader federal-revenue download --output ./downloads --force
 cnpj-db-loader federal-revenue sync --output ./downloads --db-url "postgresql://user:password@localhost:5432/cnpj" --force
 cnpj-db-loader inspect ./downloads

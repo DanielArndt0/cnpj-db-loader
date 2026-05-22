@@ -33,7 +33,9 @@ Use an explicit reference when you need a deterministic month:
 
 ```bash
 cnpj-db-loader federal-revenue check --reference 2026-05
+cnpj-db-loader federal-revenue check 2026-05
 cnpj-db-loader federal-revenue download --reference 2026-05 --output ./downloads --force
+cnpj-db-loader federal-revenue download 2026-05 --output ./downloads --force
 ```
 
 Use the current calendar month when you want the command to fail if that month has not been published yet:
@@ -41,6 +43,8 @@ Use the current calendar month when you want the command to fail if that month h
 ```bash
 cnpj-db-loader federal-revenue check --current
 ```
+
+If an explicit or current reference does not exist in the public share, the command fails before listing or downloading files and reports the latest available reference. Running without `--reference`, without `[reference]`, and without `--current` keeps the default behavior of selecting the latest published reference.
 
 ## Download behavior
 
@@ -93,23 +97,23 @@ cnpj-db-loader federal-revenue sync \
 
 ## Options
 
-| Option                            | Applies to                  | Purpose                                                             |
-| --------------------------------- | --------------------------- | ------------------------------------------------------------------- |
-| `--reference <yyyy-mm>`           | `check`, `download`, `sync` | Select a specific monthly reference.                                |
-| `--current`                       | `check`, `download`, `sync` | Select the current calendar month.                                  |
-| `--output <path>`                 | `download`, `sync`          | Download root directory. The reference folder is created inside it. |
-| `--retries <number>`              | `download`, `sync`          | Retry attempts per file. Defaults to 3.                             |
-| `--overwrite`                     | `download`, `sync`          | Redownload files even when a completed local copy already exists.   |
-| `--extract-output <path>`         | `sync`                      | Custom extraction output directory.                                 |
-| `--sanitize-output <path>`        | `sync`                      | Custom sanitized output directory.                                  |
-| `--db-url <url>`                  | `sync`                      | Override the saved PostgreSQL URL for the import phase.             |
-| `--dataset <dataset>`             | `sync`                      | Restrict the import phase to one dataset.                           |
-| `--load-batch-size <size>`        | `sync`                      | Import load batch size.                                             |
-| `--materialize-batch-size <size>` | `sync`                      | Materialization chunk size.                                         |
-| `--verbose-progress`              | `sync`                      | Show detailed import progress.                                      |
-| `--base-url <url>`                | `check`, `download`, `sync` | Override the WebDAV base URL.                                       |
-| `--share-token <token>`           | `check`, `download`, `sync` | Override the public share token.                                    |
-| `--force`                         | `download`, `sync`          | Skip confirmation prompts.                                          |
+| Option                                  | Applies to                  | Purpose                                                             |
+| --------------------------------------- | --------------------------- | ------------------------------------------------------------------- |
+| `[reference]` / `--reference <yyyy-mm>` | `check`, `download`, `sync` | Select a specific monthly reference.                                |
+| `--current`                             | `check`, `download`, `sync` | Select the current calendar month.                                  |
+| `--output <path>`                       | `download`, `sync`          | Download root directory. The reference folder is created inside it. |
+| `--retries <number>`                    | `download`, `sync`          | Retry attempts per file. Defaults to 3.                             |
+| `--overwrite`                           | `download`, `sync`          | Redownload files even when a completed local copy already exists.   |
+| `--extract-output <path>`               | `sync`                      | Custom extraction output directory.                                 |
+| `--sanitize-output <path>`              | `sync`                      | Custom sanitized output directory.                                  |
+| `--db-url <url>`                        | `sync`                      | Override the saved PostgreSQL URL for the import phase.             |
+| `--dataset <dataset>`                   | `sync`                      | Restrict the import phase to one dataset.                           |
+| `--load-batch-size <size>`              | `sync`                      | Import load batch size.                                             |
+| `--materialize-batch-size <size>`       | `sync`                      | Materialization chunk size.                                         |
+| `--verbose-progress`                    | `sync`                      | Show detailed import progress.                                      |
+| `--base-url <url>`                      | `check`, `download`, `sync` | Override the WebDAV base URL.                                       |
+| `--share-token <token>`                 | `check`, `download`, `sync` | Override the public share token.                                    |
+| `--force`                               | `download`, `sync`          | Skip confirmation prompts.                                          |
 
 ## Notes
 

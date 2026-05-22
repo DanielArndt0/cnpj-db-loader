@@ -1,5 +1,6 @@
 import type { Command } from "commander";
 
+import { ValidationError } from "../../core/errors/index.js";
 import { confirm } from "../../core/prompts/confirm.js";
 import type {
   FederalRevenueCheckOptions,
@@ -46,6 +47,34 @@ type FederalRevenueSyncCommandOptions = FederalRevenueDownloadCommandOptions & {
   materializeBatchSize?: number;
   verboseProgress?: boolean;
 };
+
+function mergeSharedOptions(
+  referenceArgument: string | undefined,
+  options: FederalRevenueSharedOptions,
+): FederalRevenueSharedOptions {
+  if (
+    referenceArgument &&
+    options.reference &&
+    referenceArgument !== options.reference
+  ) {
+    throw new ValidationError(
+      `Conflicting Federal Revenue references received: ${referenceArgument} and ${options.reference}. Use only one reference value.`,
+    );
+  }
+
+  const reference = options.reference ?? referenceArgument;
+
+  if (reference && options.current) {
+    throw new ValidationError(
+      "Use either a Federal Revenue reference or --current, not both.",
+    );
+  }
+
+  return {
+    ...options,
+    ...(reference ? { reference } : {}),
+  };
+}
 
 function applySharedOptions<T extends FederalRevenueCheckOptions>(
   options: FederalRevenueSharedOptions,
@@ -188,52 +217,79 @@ export function registerFederalRevenueCommands(program: Command): void {
   registerSharedOptions(
     federalRevenue
       .command("check")
+      .argument(
+        "[reference]",
+        "Optional monthly reference in YYYY-MM format. Same as --reference.",
+      )
       .description(
         "Check the latest available Federal Revenue monthly CNPJ reference and list its ZIP files.",
       ),
-  ).action(async (options: FederalRevenueSharedOptions) => {
-    const summary = await checkFederalRevenueDataset(
-      applySharedOptions<FederalRevenueCheckOptions>(options, {}),
-    );
-    const logFilePath = await writeCommandLog("federal-revenue-check", summary);
-    printFederalRevenueCheckSummary(summary, logFilePath);
-  });
+  ).action(
+    async (
+      referenceArgument: string | undefined,
+      options: FederalRevenueSharedOptions,
+    ) => {
+      const resolvedOptions = mergeSharedOptions(referenceArgument, options);
+      const summary = await checkFederalRevenueDataset(
+        applySharedOptions<FederalRevenueCheckOptions>(resolvedOptions, {}),
+      );
+      const logFilePath = await writeCommandLog(
+        "federal-revenue-check",
+        summary,
+      );
+      printFederalRevenueCheckSummary(summary, logFilePath);
+    },
+  );
 
   registerDownloadOptions(
     federalRevenue
       .command("download")
+      .argument(
+        "[reference]",
+        "Optional monthly reference in YYYY-MM format. Same as --reference.",
+      )
       .description(
         "Download the selected Federal Revenue monthly CNPJ ZIP files with safe .part files and retries.",
       ),
-  ).action(async (options: FederalRevenueDownloadCommandOptions) => {
-    const confirmed = await confirmFederalRevenueAction(
-      "Download Federal Revenue CNPJ ZIP files now? Existing completed files are skipped unless --overwrite is used.",
-      options.force,
-    );
-    if (!confirmed) {
-      console.log("Federal Revenue download cancelled.");
-      return;
-    }
+  ).action(
+    async (
+      referenceArgument: string | undefined,
+      options: FederalRevenueDownloadCommandOptions,
+    ) => {
+      const resolvedOptions = mergeSharedOptions(referenceArgument, options);
+      const confirmed = await confirmFederalRevenueAction(
+        "Download Federal Revenue CNPJ ZIP files now? Existing completed files are skipped unless --overwrite is used.",
+        options.force,
+      );
+      if (!confirmed) {
+        console.log("Federal Revenue download cancelled.");
+        return;
+      }
 
-    const progress = createFederalRevenueDownloadProgressReporter();
-    const summary = await downloadFederalRevenueDataset({
-      ...buildDownloadOptions(options),
-      onProgress: progress,
-    });
-    const logFilePath = await writeCommandLog(
-      "federal-revenue-download",
-      summary,
-    );
-    printFederalRevenueDownloadSummary(summary, logFilePath);
+      const progress = createFederalRevenueDownloadProgressReporter();
+      const summary = await downloadFederalRevenueDataset({
+        ...buildDownloadOptions({ ...options, ...resolvedOptions }),
+        onProgress: progress,
+      });
+      const logFilePath = await writeCommandLog(
+        "federal-revenue-download",
+        summary,
+      );
+      printFederalRevenueDownloadSummary(summary, logFilePath);
 
-    if (summary.failedFiles > 0) {
-      process.exitCode = 1;
-    }
-  });
+      if (summary.failedFiles > 0) {
+        process.exitCode = 1;
+      }
+    },
+  );
 
   registerDownloadOptions(
     federalRevenue
       .command("sync")
+      .argument(
+        "[reference]",
+        "Optional monthly reference in YYYY-MM format. Same as --reference.",
+      )
       .option(
         "--extract-output <path>",
         "Custom extraction output directory. Defaults to <download-reference>/extracted.",
@@ -267,40 +323,50 @@ export function registerFederalRevenueCommands(program: Command): void {
       .description(
         "Download, extract, validate, sanitize, and import the selected Federal Revenue monthly CNPJ dataset.",
       ),
-  ).action(async (options: FederalRevenueSyncCommandOptions) => {
-    const confirmed = await confirmFederalRevenueAction(
-      "Run the full Federal Revenue sync now? This downloads files, extracts archives, sanitizes the dataset, and imports it into PostgreSQL.",
-      options.force,
-    );
-    if (!confirmed) {
-      console.log("Federal Revenue sync cancelled.");
-      return;
-    }
+  ).action(
+    async (
+      referenceArgument: string | undefined,
+      options: FederalRevenueSyncCommandOptions,
+    ) => {
+      const resolvedOptions = mergeSharedOptions(referenceArgument, options);
+      const confirmed = await confirmFederalRevenueAction(
+        "Run the full Federal Revenue sync now? This downloads files, extracts archives, sanitizes the dataset, and imports it into PostgreSQL.",
+        options.force,
+      );
+      if (!confirmed) {
+        console.log("Federal Revenue sync cancelled.");
+        return;
+      }
 
-    const downloadProgress = createFederalRevenueDownloadProgressReporter();
-    const extractProgress = createExtractionProgressReporter();
-    const sanitizeProgress = createSanitizeProgressReporter();
-    const importProgress = createImportProgressReporter();
+      const downloadProgress = createFederalRevenueDownloadProgressReporter();
+      const extractProgress = createExtractionProgressReporter();
+      const sanitizeProgress = createSanitizeProgressReporter();
+      const importProgress = createImportProgressReporter();
 
-    const syncOptions: FederalRevenueSyncOptions = {
-      ...buildDownloadOptions(options),
-      onProgress: downloadProgress,
-      onExtractProgress: extractProgress,
-      onSanitizeProgress: sanitizeProgress,
-      onImportProgress: importProgress,
-      importOptions: buildImportOptions(options),
-    };
+      const commandOptions = { ...options, ...resolvedOptions };
+      const syncOptions: FederalRevenueSyncOptions = {
+        ...buildDownloadOptions(commandOptions),
+        onProgress: downloadProgress,
+        onExtractProgress: extractProgress,
+        onSanitizeProgress: sanitizeProgress,
+        onImportProgress: importProgress,
+        importOptions: buildImportOptions(commandOptions),
+      };
 
-    if (options.extractOutput) {
-      syncOptions.extractOutputPath = options.extractOutput;
-    }
+      if (options.extractOutput) {
+        syncOptions.extractOutputPath = options.extractOutput;
+      }
 
-    if (options.sanitizeOutput) {
-      syncOptions.sanitizeOutputPath = options.sanitizeOutput;
-    }
+      if (options.sanitizeOutput) {
+        syncOptions.sanitizeOutputPath = options.sanitizeOutput;
+      }
 
-    const summary = await syncFederalRevenueDataset(syncOptions);
-    const logFilePath = await writeCommandLog("federal-revenue-sync", summary);
-    printFederalRevenueSyncSummary(summary, logFilePath);
-  });
+      const summary = await syncFederalRevenueDataset(syncOptions);
+      const logFilePath = await writeCommandLog(
+        "federal-revenue-sync",
+        summary,
+      );
+      printFederalRevenueSyncSummary(summary, logFilePath);
+    },
+  );
 }

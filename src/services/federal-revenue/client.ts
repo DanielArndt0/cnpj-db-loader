@@ -201,9 +201,28 @@ export async function resolveFederalRevenueReference(
 ): Promise<FederalRevenueReferenceSelection> {
   const { references } = await listFederalRevenueReferences(input);
   const availableReferences = references.map((item) => item.reference);
+  const latest = availableReferences.at(-1);
+
+  if (!latest) {
+    throw new ValidationError(
+      "No Federal Revenue monthly references were found in the public share.",
+    );
+  }
 
   if (input.reference) {
     validateFederalRevenueReference(input.reference);
+
+    if (!availableReferences.includes(input.reference)) {
+      throw new ValidationError(
+        `Federal Revenue reference ${input.reference} was not found in the public share. Latest available reference is ${latest}.`,
+        {
+          requestedReference: input.reference,
+          latestAvailableReference: latest,
+          availableReferences,
+        },
+      );
+    }
+
     return {
       mode: "explicit",
       selectedReference: input.reference,
@@ -212,18 +231,24 @@ export async function resolveFederalRevenueReference(
   }
 
   if (input.current) {
+    const currentReference = getCurrentFederalRevenueReference();
+
+    if (!availableReferences.includes(currentReference)) {
+      throw new ValidationError(
+        `Federal Revenue current reference ${currentReference} is not available yet. Latest available reference is ${latest}.`,
+        {
+          requestedReference: currentReference,
+          latestAvailableReference: latest,
+          availableReferences,
+        },
+      );
+    }
+
     return {
       mode: "current",
-      selectedReference: getCurrentFederalRevenueReference(),
+      selectedReference: currentReference,
       availableReferences,
     };
-  }
-
-  const latest = availableReferences.at(-1);
-  if (!latest) {
-    throw new ValidationError(
-      "No Federal Revenue monthly references were found in the public share.",
-    );
   }
 
   return {

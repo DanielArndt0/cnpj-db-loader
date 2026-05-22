@@ -24,7 +24,7 @@ cnpj-db-loader federal-revenue download --output ./downloads --force
 cnpj-db-loader federal-revenue sync --output ./downloads --db-url "postgresql://user:password@localhost:5432/cnpj" --force
 ```
 
-By default, the latest published `YYYY-MM` folder is selected from the Federal Revenue public share. Use `--current` to target the current calendar month or `--reference 2026-05` to force a specific reference. Downloads are written to `<output>/<reference>`, completed local files are skipped, and in-progress transfers use `.part` files.
+By default, the latest published `YYYY-MM` folder is selected from the Federal Revenue public share. Use `--current` to target the current calendar month, `--reference 2026-05`, or the positional shorthand `federal-revenue check 2026-05` to force a specific reference. Downloads are written to `<output>/<reference>`, completed local files are skipped, and in-progress transfers use `.part` files.
 
 ## What each step does
 
