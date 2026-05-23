@@ -1,4 +1,4 @@
-name: Release and Publish Package
+name: Release and Publish Package to npm
 
 on:
   release:
@@ -22,8 +22,7 @@ jobs:
     runs-on: ubuntu-latest
 
     permissions:
-      contents: write
-      packages: write
+      contents: read
 
     steps:
       - name: Resolve release metadata
@@ -49,12 +48,11 @@ jobs:
         with:
           ref: ${{ steps.release.outputs.tag_name }}
 
-      - name: Setup Node for GitHub Packages
+      - name: Setup Node for npm
         uses: actions/setup-node@v4
         with:
           node-version: 20
-          registry-url: https://npm.pkg.github.com
-          scope: "@danielarndt0"
+          registry-url: https://registry.npmjs.org
           cache: npm
 
       - name: Install dependencies
@@ -77,24 +75,13 @@ jobs:
       - name: Pack npm tarball
         run: npm pack
 
-      - name: Publish package to GitHub Packages
+      - name: Publish package to npm
         shell: bash
         run: |
           if [ "${{ steps.release.outputs.prerelease }}" = "true" ]; then
-            npm publish --tag next --registry=https://npm.pkg.github.com
+            npm publish --access public --tag next --registry=https://registry.npmjs.org
           else
-            npm publish --registry=https://npm.pkg.github.com
+            npm publish --access public --registry=https://registry.npmjs.org
           fi
         env:
-          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Create source zip
-        run: git archive --format=zip --output=cnpjdb-loader-${{ steps.release.outputs.tag_name }}.zip HEAD
-
-      - name: Upload artifacts to GitHub Release
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: ${{ steps.release.outputs.tag_name }}
-          files: |
-            *.tgz
-            cnpjdb-loader-${{ steps.release.outputs.tag_name }}.zip
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
