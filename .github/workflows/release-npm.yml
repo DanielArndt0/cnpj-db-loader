@@ -43,6 +43,27 @@ jobs:
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
           echo "prerelease=$PRERELEASE" >> "$GITHUB_OUTPUT"
 
+      - name: Validate release tag
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG_NAME="${{ steps.release.outputs.tag_name }}"
+
+          if [[ ! "$TAG_NAME" =~ ^v[0-9]+\.[0-9]+\.[0-9]+([.-][0-9A-Za-z.-]+)?$ ]]; then
+            echo "Invalid release tag format: '$TAG_NAME'"
+            echo "Expected format: v1.2.3, v1.2.3-beta.1, etc."
+            exit 1
+          fi
+
+          if ! gh api "repos/${{ github.repository }}/git/ref/tags/$TAG_NAME" --silent; then
+            echo "Release tag '$TAG_NAME' does not exist in this repository."
+            echo "Create the tag first or provide an existing tag."
+            exit 1
+          fi
+
+          echo "Release tag '$TAG_NAME' exists and is valid."
+
       - name: Checkout
         uses: actions/checkout@v4
         with:
