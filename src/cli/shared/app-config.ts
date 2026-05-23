@@ -6,7 +6,7 @@ import type { AppConfig } from "../../core/types/index.js";
 
 function getPackageVersion(): string {
   const currentDir = dirname(fileURLToPath(import.meta.url));
-  const packageJsonPath = resolve(currentDir, "../../../package.json");
+  const packageJsonPath = resolve(currentDir, "../package.json");
 
   const packageJson = JSON.parse(readFileSync(packageJsonPath, "utf-8")) as {
     version?: string;
@@ -21,5 +21,5 @@ export const APP_CONFIG: AppConfig = {
   environment: (process.env.APP_ENV ??
     "development") as AppConfig["environment"],
   description:
-    "Practical CLI for preparing Brazilian Federal Revenue CNPJ open data for PostgreSQL.",
+    "CLI for inspecting, extracting, validating, and importing Brazilian Federal Revenue CNPJ datasets.",
 };
