@@ -1,10 +1,25 @@
+import { readFileSync } from "node:fs";
+import { dirname, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
+
 import type { AppConfig } from "../../core/types/index.js";
+
+function getPackageVersion(): string {
+  const currentDir = dirname(fileURLToPath(import.meta.url));
+  const packageJsonPath = resolve(currentDir, "../../../package.json");
+
+  const packageJson = JSON.parse(readFileSync(packageJsonPath, "utf-8")) as {
+    version?: string;
+  };
+
+  return packageJson.version ?? "0.0.0";
+}
 
 export const APP_CONFIG: AppConfig = {
   appName: "cnpj-db-loader",
-  version: "2.2.0",
+  version: getPackageVersion(),
   environment: (process.env.APP_ENV ??
     "development") as AppConfig["environment"],
   description:
-    "CLI for inspecting, extracting, validating, and modeling Brazilian Federal Revenue CNPJ datasets for PostgreSQL.",
+    "Practical CLI for preparing Brazilian Federal Revenue CNPJ open data for PostgreSQL.",
 };
