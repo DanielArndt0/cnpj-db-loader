@@ -67,6 +67,7 @@ cnpj-db-loader schema generate --profile staging
 - it persists the import plan in the database and reuses it on resume when the validated source files and batch size match
 - it reads files in streaming mode
 - it loads the large datasets into lightweight staging tables through PostgreSQL COPY with only light normalization in the hot path and defers heavier work to the materialization stage in dependency order
+- during establishment materialization, it also populates `establishment_secondary_cnaes` from `secondary_cnaes_raw`, replacing the previous need for a separate API-side backfill script
 - before each staged dataset is materialized into the final schema, the importer only reconciles missing lookup/domain codes when the current final schema still requires those lookup foreign keys
 - once the file import phase ends, the terminal switches to a dedicated MATERIALIZING stage and the JSONL progress log emits heartbeat entries during long staged-to-final upserts
 - it still upserts the smaller domain datasets directly into the final schema

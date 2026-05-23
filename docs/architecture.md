@@ -50,7 +50,7 @@ The importer is now split into focused modules so future performance work can re
 - `quarantine-writer`: stores bad rows without stopping long imports
 - `runner`: orchestrates the current import flow while keeping the service entry point small
 
-The project now also generates dedicated staging tables for large datasets. The CLI exposes both a one-shot command (`import`) and split commands (`import load`, `import materialize`). Staging cleanup is handled explicitly through `database cleanup staging`. The write path sends the heavy datasets to staging tables first with only light normalization, then consolidates them into a simplified final schema in dependency order while keeping the smaller catalog datasets on the final schema directly. The final schema now stays closer to the Receita layout so the API can derive richer views later without forcing every first load to pay that cost inside PostgreSQL.
+The project now also generates dedicated staging tables for large datasets. The CLI exposes both a one-shot command (`import`) and split commands (`import load`, `import materialize`). Staging cleanup is handled explicitly through `database cleanup staging`. The write path sends the heavy datasets to staging tables first with only light normalization, then consolidates them into a simplified final schema in dependency order while keeping the smaller catalog datasets on the final schema directly. The final schema stays close to the Receita layout while also exposing `establishment_secondary_cnaes`, a normalized helper table that lets CNPJ API query one row per establishment secondary CNAE without requiring an external backfill after each load.
 
 ## Staging schema
 

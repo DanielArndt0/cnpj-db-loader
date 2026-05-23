@@ -1,12 +1,12 @@
--- Esquema PostgreSQL do CNPJ DB Loader
+-- CNPJ DB Loader PostgreSQL schema
 
--- Perfil: full
+-- Profile: full
 
--- Gerado a partir do modelo interno da Receita Federal.
+-- Generated from the internal Receita Federal model.
 
 begin;
 
--- Tabelas de domínio
+-- Domain tables
 
 create table if not exists countries (
   code text not null,
@@ -74,7 +74,7 @@ create table if not exists age_groups (
   primary key (code)
 );
 
--- Tabelas operacionais finais (simplificadas para materialização inicial mais rápida)
+-- Final operational tables (simplified for fast first-load materialization)
 
 create table if not exists companies (
   cnpj_root text not null,
@@ -126,6 +126,12 @@ create table if not exists establishments (
   primary key (cnpj_full)
 );
 
+create table if not exists establishment_secondary_cnaes (
+  cnpj_full text not null,
+  cnae_code text not null,
+  primary key (cnpj_full, cnae_code)
+);
+
 create table if not exists partners (
   id bigserial primary key,
   cnpj_root text not null,
@@ -160,7 +166,7 @@ create table if not exists simples_options (
   constraint chk_mei_flag check (mei_option_flag in ('S', 'N') or mei_option_flag is null or mei_option_flag = '')
 );
 
--- Tabelas de controle de importação
+-- Import control tables
 
 create table if not exists import_plans (
   id bigserial primary key,
@@ -257,7 +263,7 @@ create table if not exists import_quarantine (
   created_at timestamp with time zone not null default now()
 );
 
--- Tabelas de staging para importações em lote
+-- Staging tables for bulk-oriented imports
 
 create unlogged table if not exists staging_companies (
   staging_id bigserial primary key,
@@ -330,7 +336,7 @@ create unlogged table if not exists staging_simples_options (
   mei_exclusion_date date
 );
 
--- Dados iniciais de domínio
+-- Domain seed data
 
 insert into company_sizes (code, description) values
   ('00', 'Not informed'),
@@ -370,5 +376,24 @@ insert into age_groups (code, description) values
   ('8', '71 to 80 years'),
   ('9', 'Over 80 years')
 on conflict (code) do update set description = excluded.description;
+
+-- Operational indexes
+create index if not exists idx_establishments_cnpj_root on establishments (cnpj_root);
+create index if not exists idx_establishment_secondary_cnaes_cnae_code on establishment_secondary_cnaes (cnae_code);
+create index if not exists idx_partners_cnpj_root on partners (cnpj_root);
+create index if not exists idx_import_plans_status on import_plans (status);
+create index if not exists idx_import_plans_load_status on import_plans (load_status);
+create index if not exists idx_import_plans_materialization_status on import_plans (materialization_status);
+create index if not exists idx_import_plan_files_plan_id on import_plan_files (plan_id);
+create index if not exists idx_import_plan_files_dataset on import_plan_files (dataset);
+create index if not exists idx_import_checkpoints_status on import_checkpoints (status);
+create index if not exists idx_import_materialization_checkpoints_status on import_materialization_checkpoints (status);
+create index if not exists idx_import_materialization_checkpoints_plan_id on import_materialization_checkpoints (plan_id);
+create index if not exists idx_import_materialization_checkpoints_dataset on import_materialization_checkpoints (dataset);
+create index if not exists idx_import_checkpoints_dataset on import_checkpoints (dataset);
+create index if not exists idx_import_quarantine_dataset on import_quarantine (dataset);
+create index if not exists idx_import_quarantine_file_path on import_quarantine (file_path);
+create index if not exists idx_import_quarantine_error_category on import_quarantine (error_category);
+create index if not exists idx_import_quarantine_can_retry_later on import_quarantine (can_retry_later);
 
 commit;

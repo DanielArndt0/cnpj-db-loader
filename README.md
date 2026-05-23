@@ -17,6 +17,7 @@ This version focuses on the real loading workflow:
   - exact preparatory scanning for total rows and total batches before import starts
   - persisted import plans reused on resume for the same validated input and batch size
   - staged bulk loads for the large datasets through PostgreSQL COPY
+  - automatic materialization of `establishment_secondary_cnaes` from establishment secondary CNAE data
   - direct final-schema upserts for the smaller domain datasets
   - checkpoint-based resume by file and byte offset
   - row quarantine for invalid or constraint-breaking records without stopping the import
@@ -95,7 +96,7 @@ The import internals are now split into dedicated modules such as planner, sourc
 
 The CLI now exposes a split workflow as well: `import` runs the full pipeline, `import load` stops after staging/direct writes, `import materialize` resumes from the saved plan and pushes staged rows into the final tables, and `database cleanup ...` exposes safe maintenance commands for staging tables, simplified final materialized tables, checkpoints, and saved plans.
 
-Materialization progress is now checkpointed separately from file-load checkpoints, and the materializer works in resumable chunks controlled by `--materialize-batch-size`. During long final materialization steps, the CLI keeps the live progress output on a dedicated MATERIALIZING stage while reducing per-chunk checkpoint and JSONL write overhead so resumable chunks stay fast. The simplified final schema keeps raw secondary CNAE text in establishments and derives helper fields such as partner dedupe keys during materialization only when they are still stored physically in the target schema.
+Materialization progress is now checkpointed separately from file-load checkpoints, and the materializer works in resumable chunks controlled by `--materialize-batch-size`. During long final materialization steps, the CLI keeps the live progress output on a dedicated MATERIALIZING stage while reducing per-chunk checkpoint and JSONL write overhead so resumable chunks stay fast. The simplified final schema keeps raw secondary CNAE text in establishments and also materializes `establishment_secondary_cnaes` so APIs can query one row per secondary CNAE without running a separate backfill script.
 
 The Federal Revenue commands write the same structured command logs and keep the remote-download phase outside the import internals. Existing completed ZIP files are skipped by default, temporary `.part` files are used while downloads are still in progress, and each reference keeps a local manifest for `status`, `retry`, `clean`, and future runner automation.
 

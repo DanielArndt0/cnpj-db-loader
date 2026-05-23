@@ -2,6 +2,7 @@ export function createIndexesSql(): string {
   return [
     "-- Operational indexes",
     "create index if not exists idx_establishments_cnpj_root on establishments (cnpj_root);",
+    "create index if not exists idx_establishment_secondary_cnaes_cnae_code on establishment_secondary_cnaes (cnae_code);",
     "create index if not exists idx_partners_cnpj_root on partners (cnpj_root);",
     "create index if not exists idx_import_plans_status on import_plans (status);",
     "create index if not exists idx_import_plans_load_status on import_plans (load_status);",

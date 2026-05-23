@@ -28,6 +28,20 @@ function canInsertIntoColumn(
   return row.is_generated.toUpperCase() !== "ALWAYS";
 }
 
+function hasRequiredColumns(
+  rows: readonly ColumnCapabilityRow[],
+  tableName: string,
+  columnNames: readonly string[],
+): boolean {
+  const availableColumns = new Set(
+    rows
+      .filter((item) => item.table_name === tableName)
+      .map((item) => item.column_name),
+  );
+
+  return columnNames.every((columnName) => availableColumns.has(columnName));
+}
+
 export async function detectImportSchemaCapabilities(
   client: Client,
 ): Promise<ImportSchemaCapabilities> {
@@ -38,6 +52,7 @@ export async function detectImportSchemaCapabilities(
         where table_schema = current_schema()
           and (
             (table_name = 'establishments' and column_name = 'cnpj_full') or
+            (table_name = 'establishment_secondary_cnaes' and column_name in ('cnpj_full', 'cnae_code')) or
             (table_name = 'partners' and column_name = 'partner_dedupe_key')
           )`,
     ),
@@ -50,7 +65,7 @@ export async function detectImportSchemaCapabilities(
            inner join pg_class target_table on target_table.oid = constraint_item.confrelid
           where constraint_item.contype = 'f'
             and source_namespace.nspname = current_schema()
-            and source_table.relname in ('companies', 'establishments', 'partners')
+            and source_table.relname in ('companies', 'establishments', 'partners', 'establishment_secondary_cnaes')
             and target_table.relname in (
               'countries',
               'cities',
@@ -73,6 +88,11 @@ export async function detectImportSchemaCapabilities(
       columnResult.rows,
       "establishments",
       "cnpj_full",
+    ),
+    includeEstablishmentSecondaryCnaesTable: hasRequiredColumns(
+      columnResult.rows,
+      "establishment_secondary_cnaes",
+      ["cnpj_full", "cnae_code"],
     ),
     includePartnerDedupeKeyInInsert: canInsertIntoColumn(
       columnResult.rows,

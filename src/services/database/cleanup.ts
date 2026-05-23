@@ -33,8 +33,14 @@ export type DatabaseCleanupSummary = {
 const MATERIALIZED_DATASET_TABLES: Readonly<
   Partial<Record<ImportDatasetType, readonly string[]>>
 > = {
-  companies: ["simples_options", "partners", "establishments", "companies"],
-  establishments: ["establishments"],
+  companies: [
+    "simples_options",
+    "partners",
+    "establishment_secondary_cnaes",
+    "establishments",
+    "companies",
+  ],
+  establishments: ["establishment_secondary_cnaes", "establishments"],
   partners: ["partners"],
   simples_options: ["simples_options"],
 } as const;
@@ -97,6 +103,33 @@ function collectMaterializedTables(dataset?: ImportDatasetType): string[] {
   }
 
   return [...orderedTables];
+}
+
+async function tableExists(
+  client: Client,
+  tableName: string,
+): Promise<boolean> {
+  const result = await client.query<{ exists: string | null }>(
+    "select to_regclass(current_schema() || '.' || $1) as exists",
+    [tableName],
+  );
+
+  return Boolean(result.rows[0]?.exists);
+}
+
+async function filterExistingTables(
+  client: Client,
+  tableNames: readonly string[],
+): Promise<string[]> {
+  const existingTables: string[] = [];
+
+  for (const tableName of tableNames) {
+    if (await tableExists(client, tableName)) {
+      existingTables.push(tableName);
+    }
+  }
+
+  return existingTables;
 }
 
 async function deleteLoadCheckpoints(
@@ -271,7 +304,10 @@ export async function cleanupDatabaseMaterializedTables(
     dataset: input.dataset,
   });
 
-  const tableNames = collectMaterializedTables(input.dataset);
+  const tableNames = await filterExistingTables(
+    client,
+    collectMaterializedTables(input.dataset),
+  );
   if (tableNames.length > 0) {
     await client.query(`truncate ${tableNames.join(", ")}`);
   }

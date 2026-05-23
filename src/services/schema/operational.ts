@@ -46,6 +46,16 @@ export function createPartnersSql(): string {
   ].join("\n");
 }
 
+export function createEstablishmentSecondaryCnaesSql(): string {
+  return [
+    "create table if not exists establishment_secondary_cnaes (",
+    "  cnpj_full text not null,",
+    "  cnae_code text not null,",
+    "  primary key (cnpj_full, cnae_code)",
+    ");",
+  ].join("\n");
+}
+
 export function createSimplesSql(): string {
   return [
     "create table if not exists simples_options (",
@@ -64,6 +74,7 @@ export function createOperationalSchemaParts(): string[] {
     "-- Final operational tables (simplified for fast first-load materialization)",
     createCompaniesSql(),
     createEstablishmentsSql(),
+    createEstablishmentSecondaryCnaesSql(),
     createPartnersSql(),
     createSimplesSql(),
   ];

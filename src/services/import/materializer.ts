@@ -538,6 +538,82 @@ async function validateDatasetCheckpoint(input: {
   };
 }
 
+type EstablishmentSecondaryCnaesCountRow = {
+  total_count: string;
+};
+
+type EstablishmentSecondaryCnaesExistsRow = {
+  exists: boolean;
+};
+
+async function readEstablishmentSecondaryCnaesCount(
+  client: Client,
+): Promise<number> {
+  const result = await client.query<EstablishmentSecondaryCnaesCountRow>(
+    `select count(*)::bigint as total_count from establishment_secondary_cnaes`,
+  );
+
+  return Number.parseInt(result.rows[0]?.total_count ?? "0", 10);
+}
+
+async function hasEstablishmentsWithSecondaryCnaes(
+  client: Client,
+): Promise<boolean> {
+  const result = await client.query<EstablishmentSecondaryCnaesExistsRow>(
+    `select exists (
+       select 1
+         from establishments
+        where secondary_cnaes_raw is not null
+          and secondary_cnaes_raw <> ''
+        limit 1
+     ) as exists`,
+  );
+
+  return result.rows[0]?.exists ?? false;
+}
+
+async function backfillEstablishmentSecondaryCnaesFromFinal(input: {
+  client: Client;
+  progressLogPath: string;
+}): Promise<number> {
+  const existingRows = await readEstablishmentSecondaryCnaesCount(input.client);
+
+  if (existingRows > 0) {
+    return 0;
+  }
+
+  if (!(await hasEstablishmentsWithSecondaryCnaes(input.client))) {
+    return 0;
+  }
+
+  const startedAt = performance.now();
+  const result = await input.client.query(
+    `insert into establishment_secondary_cnaes (cnpj_full, cnae_code)
+     select distinct
+       e.cnpj_full,
+       btrim(cnae_code) as cnae_code
+     from establishments e
+     cross join lateral unnest(
+       string_to_array(e.secondary_cnaes_raw, ',')
+     ) as cnae_code
+     where e.secondary_cnaes_raw is not null
+       and e.secondary_cnaes_raw <> ''
+       and btrim(cnae_code) <> ''
+     on conflict (cnpj_full, cnae_code) do nothing`,
+  );
+
+  const insertedRows = result.rowCount ?? 0;
+  await appendJsonLinesLog(input.progressLogPath, {
+    kind: "establishment_secondary_cnaes_backfilled",
+    targetTable: "establishment_secondary_cnaes",
+    insertedRows,
+    durationMs: performance.now() - startedAt,
+    timestamp: new Date().toISOString(),
+  });
+
+  return insertedRows;
+}
+
 async function materializeDatasetByChunks(input: {
   client: Client;
   planId: number;
@@ -1075,6 +1151,16 @@ export async function materializeStagedDatasets(input: {
         totalBatches: input.totalBatches,
         completedDatasets: summary.datasets.length,
       });
+
+      if (
+        dataset === "establishments" &&
+        input.schemaCapabilities.includeEstablishmentSecondaryCnaesTable
+      ) {
+        await backfillEstablishmentSecondaryCnaesFromFinal({
+          client: input.client,
+          progressLogPath: input.progressLogPath,
+        });
+      }
 
       const tracker = input.datasetPerformanceTrackers.get(dataset);
       if (tracker) {

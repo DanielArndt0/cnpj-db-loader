@@ -106,6 +106,7 @@ export type ImportWriteTarget = "final" | "staging";
 
 export type ImportSchemaCapabilities = {
   includeEstablishmentCnpjFullInInsert: boolean;
+  includeEstablishmentSecondaryCnaesTable: boolean;
   includePartnerDedupeKeyInInsert: boolean;
   requiresLookupReconciliation: boolean;
 };

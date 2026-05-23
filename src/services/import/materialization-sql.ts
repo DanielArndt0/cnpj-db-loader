@@ -93,6 +93,78 @@ function buildChunkInsertSql(input: {
   };
 }
 
+function buildEstablishmentsChunkInsertSql(input: {
+  insertColumns: readonly string[];
+  selectColumns: readonly string[];
+  conflictClause: string;
+  lastStagingId: number;
+  chunkSize: number;
+  includeSecondaryCnaesTable: boolean;
+}): MaterializationChunkQuery {
+  const chunkSelectList = [
+    "source.staging_id",
+    ...input.selectColumns.map((column) => `source.${column}`),
+    `${buildEstablishmentCnpjFullExpression("source")} as cnpj_full`,
+  ].join(",\n    ");
+  const insertSelectList = input.insertColumns.join(", ");
+  const secondaryCnaesCtes = input.includeSecondaryCnaesTable
+    ? [
+        ",",
+        "deleted_secondary_cnaes as (",
+        "  delete from establishment_secondary_cnaes target",
+        "  using (select distinct cnpj_full from inserted_establishments) source_keys",
+        "  where target.cnpj_full = source_keys.cnpj_full",
+        "  returning 1",
+        "),",
+        "secondary_cnaes_source as (",
+        "  select distinct",
+        "    chunked.cnpj_full,",
+        "    btrim(cnae_code) as cnae_code",
+        "  from chunked",
+        "  inner join inserted_establishments inserted",
+        "    on inserted.cnpj_full = chunked.cnpj_full",
+        "  cross join lateral unnest(string_to_array(chunked.secondary_cnaes_raw, ',')) as cnae_code",
+        "  where chunked.secondary_cnaes_raw is not null",
+        "    and chunked.secondary_cnaes_raw <> ''",
+        "    and btrim(cnae_code) <> ''",
+        "),",
+        "inserted_secondary_cnaes as (",
+        "  insert into establishment_secondary_cnaes (cnpj_full, cnae_code)",
+        "  select cnpj_full, cnae_code",
+        "  from secondary_cnaes_source",
+        "  on conflict (cnpj_full, cnae_code) do nothing",
+        "  returning 1",
+        ")",
+      ]
+    : [];
+
+  return {
+    text: [
+      "with chunked as (",
+      `  select\n    ${chunkSelectList}`,
+      "  from staging_establishments source",
+      "  where source.staging_id > $1",
+      "  order by source.staging_id asc",
+      "  limit $2",
+      "),",
+      "inserted_establishments as (",
+      `  insert into establishments (${input.insertColumns.join(", ")})`,
+      `  select ${insertSelectList}`,
+      "  from chunked",
+      ...(input.conflictClause ? [input.conflictClause] : []),
+      "  returning cnpj_full",
+      ")",
+      ...secondaryCnaesCtes,
+      "select",
+      "  coalesce(max(staging_id), $1::bigint)::bigint as max_staging_id,",
+      "  count(*)::bigint as source_rows,",
+      "  count(*)::bigint as affected_rows",
+      "from chunked;",
+    ].join("\n"),
+    values: [input.lastStagingId, input.chunkSize],
+  };
+}
+
 function buildPartnersChunkInsertSql(input: {
   insertColumns: readonly string[];
   lastStagingId: number;
@@ -195,9 +267,7 @@ export function buildMaterializationChunkQuery(input: {
         .includeEstablishmentCnpjFullInInsert
         ? [...baseColumns, "cnpj_full"]
         : [...baseColumns];
-      return buildChunkInsertSql({
-        stagingTable: "staging_establishments",
-        targetTable: "establishments",
+      return buildEstablishmentsChunkInsertSql({
         insertColumns,
         selectColumns: baseColumns,
         conflictClause: useConflictClause
@@ -209,10 +279,8 @@ export function buildMaterializationChunkQuery(input: {
           : "",
         lastStagingId: input.lastStagingId,
         chunkSize: input.chunkSize,
-        extraSelects: input.schemaCapabilities
-          .includeEstablishmentCnpjFullInInsert
-          ? [`${buildEstablishmentCnpjFullExpression("source")} as cnpj_full`]
-          : [],
+        includeSecondaryCnaesTable:
+          input.schemaCapabilities.includeEstablishmentSecondaryCnaesTable,
       });
     }
     case "simples_options":
