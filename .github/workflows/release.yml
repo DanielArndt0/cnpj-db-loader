@@ -8,7 +8,7 @@ on:
   workflow_dispatch:
     inputs:
       tag_name:
-        description: "Release tag to publish, for example v2.2.0"
+        description: "Release tag to publish, for example v2.3.1"
         required: true
         type: string
       prerelease:
@@ -78,6 +78,11 @@ jobs:
           scope: "@danielarndt0"
           cache: npm
 
+      - name: Sync package version with release tag
+        shell: bash
+        run: |
+          npm version "${{ steps.release.outputs.version }}" --no-git-tag-version --allow-same-version
+
       - name: Install dependencies
         run: npm ci
 
@@ -90,10 +95,19 @@ jobs:
       - name: Run build
         run: npm run build
 
-      - name: Sync package version with release tag
+      - name: Validate CLI version
         shell: bash
         run: |
-          npm version "${{ steps.release.outputs.version }}" --no-git-tag-version --allow-same-version
+          ACTUAL_VERSION="$(node dist/cli.js --version)"
+          EXPECTED_VERSION="${{ steps.release.outputs.version }}"
+
+          echo "Expected version: $EXPECTED_VERSION"
+          echo "Actual version: $ACTUAL_VERSION"
+
+          if [ "$ACTUAL_VERSION" != "$EXPECTED_VERSION" ]; then
+            echo "CLI version does not match release tag."
+            exit 1
+          fi
 
       - name: Pack npm tarball
         run: npm pack
