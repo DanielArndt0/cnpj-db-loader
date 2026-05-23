@@ -5,6 +5,16 @@
     "access": "public"
   },
   "description": "Practical CLI for preparing Brazilian Federal Revenue CNPJ open data for PostgreSQL.",
+  "keywords": [
+    "cnpj",
+    "federal-revenue",
+    "cli",
+    "command-line",
+    "postgresql",
+    "database",
+    "typescript",
+    "nodejs"
+  ],
   "author": "Daniel Arndt",
   "license": "MIT",
   "type": "module",
