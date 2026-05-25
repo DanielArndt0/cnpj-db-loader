@@ -1,0 +1,138 @@
+# PostgreSQL direct import workflow
+
+The PostgreSQL direct import workflow is a hybrid path for environments where the standard resumable importer is too expensive for a full monthly load.
+
+It keeps the safe preparation steps inside CNPJ DB Loader and moves the heaviest database load/materialization work into a generated `psql` script.
+
+## Intended flow
+
+```bash
+cnpj-db-loader federal-revenue download --output ./downloads
+cnpj-db-loader extract ./downloads/<reference>
+cnpj-db-loader validate ./downloads/<reference>/extracted
+cnpj-db-loader sanitize ./downloads/<reference>/extracted
+cnpj-db-loader postgres generate-script ./downloads/<reference>/sanitized --output ./downloads/<reference>/postgres-direct --force
+psql "postgres://postgres:postgres@localhost:5432/cnpj" -f ./downloads/<reference>/postgres-direct/import-postgres-direct.sql
+```
+
+The loader remains responsible for:
+
+- Federal Revenue download and local manifest control
+- extraction
+- validation
+- sanitization
+- preserving the sanitized Receita files without rewriting the whole dataset
+- generating the final `psql` import script
+- optionally exporting PostgreSQL-ready CSV files through `postgres export-csv` when an audit/debug CSV tree is useful
+
+PostgreSQL is then responsible for:
+
+- `\copy` loading sanitized Receita files into temporary raw tables
+- SQL-side conversion of dates, numeric values and nullable fields
+- staging table population
+- set-based final table upserts
+- `establishment_secondary_cnaes` materialization
+- planner statistics refresh through `ANALYZE`
+
+## Why this exists
+
+The standard `import` command is safer and resumable, but it keeps more orchestration inside the Node.js process. That is useful for production safety, checkpoints, quarantine and incremental recovery.
+
+The direct PostgreSQL path is optimized for bulk loading after the input files have already been sanitized. It avoids per-batch Node.js database inserts and avoids rewriting the full dataset into a second CSV tree. Instead, `psql` streams the sanitized Receita files into temporary text tables and PostgreSQL performs the value conversion and materialization with set-based SQL.
+
+Use this when you want to benchmark or run a faster controlled load on a local machine.
+
+## Command
+
+```bash
+cnpj-db-loader postgres generate-script <input> [--output <path>] [--dataset <dataset>] [--script-name <name>] [--source-encoding <encoding>] [-f]
+```
+
+### Arguments
+
+| Argument  | Description                              |
+| --------- | ---------------------------------------- |
+| `<input>` | Path to the sanitized dataset directory. |
+
+### Options
+
+| Option                         | Description                                                                                                                                           |
+| ------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `--output <path>`              | Custom output directory for the generated SQL script and manifest.                                                                                    |
+| `--dataset <dataset>`          | Generate a script only for one dataset block. Useful for debugging.                                                                                   |
+| `--script-name <name>`         | Name of the generated SQL script. Defaults to `import-postgres-direct.sql`.                                                                           |
+| `--source-encoding <encoding>` | Source file encoding used by `psql` while reading the sanitized Receita files. Defaults to `WIN1252`. Use `UTF8` only if the files are already UTF-8. |
+| `-f, --force`                  | Skip the confirmation prompt.                                                                                                                         |
+
+## Output structure
+
+The command creates a small PostgreSQL direct output directory:
+
+```text
+postgres-direct/
+  manifest.json
+  import-postgres-direct.sql
+```
+
+Unlike `postgres export-csv`, this command does not create a second tree of converted CSV files. The generated SQL script points directly to the sanitized Receita files.
+
+This is faster for large monthly loads because it avoids reading and writing the entire dataset again just to add headers or change delimiters.
+
+## Generated script behavior
+
+The generated `import-postgres-direct.sql` script:
+
+1. enables `ON_ERROR_STOP` for `psql`;
+2. starts a transaction;
+3. truncates the `staging_*` tables and restarts their identities;
+4. sets the configured client encoding for `psql` copy operations;
+5. loads domain datasets from sanitized Receita files into temporary raw text tables;
+6. upserts final domain tables;
+7. loads large datasets from sanitized Receita files into temporary raw text tables;
+8. converts values inside PostgreSQL and inserts them into `staging_companies`, `staging_establishments`, `staging_partners` and `staging_simples_options`;
+9. materializes final `companies`, `establishments`, `partners` and `simples_options` tables using set-based SQL;
+10. populates `establishment_secondary_cnaes` from `secondary_cnaes_raw`;
+11. runs `ANALYZE` on the main final tables;
+12. commits the transaction.
+
+The script does not recreate the schema. Run the normal schema first:
+
+```bash
+cnpj-db-loader schema generate --profile full --output ./sql/schema.sql
+psql "postgres://postgres:postgres@localhost:5432/cnpj" -f ./sql/schema.sql
+```
+
+## Important notes
+
+The generated script is designed for full controlled loads and benchmarks. It is not a replacement for the standard resumable `import` command when you need checkpoint-based recovery, row quarantine or long-running incremental resume behavior.
+
+The generated script resets staging tables, but it does not truncate final tables. Final tables are updated through `ON CONFLICT` upserts.
+
+For a fully clean rebuild, reset the database or run the appropriate database cleanup command before executing the generated script.
+
+## Windows usage
+
+On Windows, the script uses `\copy`, not server-side `COPY`.
+
+This is intentional. With `\copy`, the `psql` client reads local files and streams them to PostgreSQL. This avoids common Windows service permission issues where the PostgreSQL service user cannot read files from your working directory.
+
+Example:
+
+```powershell
+psql "postgres://postgres:postgres@localhost:5432/cnpj" -f "D:/cnpj-data/2026-05/postgres-direct/import-postgres-direct.sql"
+```
+
+## Recommended comparison benchmark
+
+To compare the standard and hybrid paths:
+
+```bash
+# Standard path
+cnpj-db-loader import ./downloads/<reference>/sanitized --load-batch-size 500 --materialize-batch-size 50000 --verbose-progress
+
+# Hybrid path
+cnpj-db-loader postgres generate-script ./downloads/<reference>/sanitized --output ./downloads/<reference>/postgres-direct --force
+psql "postgres://postgres:postgres@localhost:5432/cnpj" -f ./downloads/<reference>/postgres-direct/import-postgres-direct.sql
+```
+
+Compare total duration, disk usage, PostgreSQL CPU usage, WAL growth and final row counts.

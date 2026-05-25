@@ -21,6 +21,7 @@ This version focuses on the real loading workflow:
   - direct final-schema upserts for the smaller domain datasets
   - checkpoint-based resume by file and byte offset
   - row quarantine for invalid or constraint-breaking records without stopping the import
+- generate a direct `psql` import script that loads sanitized Receita files without rewriting the full dataset into another CSV tree
 - quarantine inspection commands for analyzing rows stored in `import_quarantine`
 
 ## Installation
@@ -48,6 +49,10 @@ cnpj-db-loader sanitize ./downloads/<reference>/extracted
 cnpj-db-loader database config set "postgresql://user:password@localhost:5432/cnpj"
 cnpj-db-loader schema generate --profile full
 cnpj-db-loader import ./downloads/<reference>/sanitized --load-batch-size 500 --materialize-batch-size 50000 --verbose-progress
+
+# Optional hybrid path for PostgreSQL direct loading
+cnpj-db-loader postgres generate-script ./downloads/<reference>/sanitized --output ./downloads/<reference>/postgres-direct --force
+psql "postgres://postgres:postgres@localhost:5432/cnpj" -f ./downloads/<reference>/postgres-direct/import-postgres-direct.sql
 ```
 
 ## Stable commands
@@ -73,6 +78,8 @@ cnpj-db-loader database cleanup staging [--db-url <url>] [--dataset <name>] [--v
 cnpj-db-loader database cleanup materialized [--db-url <url>] [--dataset <name>] [--force]
 cnpj-db-loader database cleanup checkpoints [--db-url <url>] [--phase <phase>] [--dataset <name>] [--validated-path <path>] [--plan-id <id>] [--force]
 cnpj-db-loader database cleanup plans [--db-url <url>] [--validated-path <path>] [--plan-id <id>] [--force]
+cnpj-db-loader postgres generate-script <input> [--output <path>] [--dataset <name>] [--script-name <name>] [--source-encoding <encoding>] [-f]
+cnpj-db-loader postgres export-csv <input> [--output <path>] [--dataset <name>] [--script-name <name>] [-f]
 cnpj-db-loader import <input> [--db-url <url>] [--dataset <name>] [--load-batch-size <size>] [--materialize-batch-size <size>] [--verbose-progress] [-f]
 cnpj-db-loader import load <input> [--db-url <url>] [--dataset <name>] [--load-batch-size <size>] [--verbose-progress] [-f]
 cnpj-db-loader import materialize <input> [--db-url <url>] [--dataset <name>] [--materialize-batch-size <size>] [--verbose-progress] [-f]
@@ -81,6 +88,18 @@ cnpj-db-loader quarantine stats [--dataset <name>] [--category <name>] [--stage 
 cnpj-db-loader quarantine list [--dataset <name>] [--category <name>] [--stage <name>] [--retryable] [--terminal] [--limit <number>] [--after-id <id>]
 cnpj-db-loader quarantine show <id> [--db-url <url>]
 ```
+
+## PostgreSQL direct import workflow
+
+For local benchmarks or controlled full loads, the CLI can now generate a direct `psql` import script after sanitization:
+
+```bash
+cnpj-db-loader sanitize ./downloads/<reference>/extracted
+cnpj-db-loader postgres generate-script ./downloads/<reference>/sanitized --output ./downloads/<reference>/postgres-direct --force
+psql "postgres://postgres:postgres@localhost:5432/cnpj" -f ./downloads/<reference>/postgres-direct/import-postgres-direct.sql
+```
+
+This path keeps download, extraction, validation and sanitization inside the loader, then lets PostgreSQL load the sanitized Receita files directly through `\copy`, convert values into staging tables and materialize the final tables with set-based SQL. The standard `import` command remains the safest path when checkpoint resume and quarantine recovery are required.
 
 ## Logs
 
@@ -116,5 +135,6 @@ The generated database schema now supports three profiles:
 - [Quarantine](./docs/quarantine.md)
 - [Sanitize](./docs/sanitize.md)
 - [Federal Revenue](./docs/federal-revenue.md)
+- [PostgreSQL Direct Import](./docs/postgres-direct.md)
 
 - Materialization now stores lightweight staging validation markers (row count and max staging id) in the materialization checkpoint table so reruns can verify the live staging state quickly and reuse lookup reconciliation when the staging snapshot is unchanged. The runtime validates that the required import tables already exist but no longer creates or alters them automatically.

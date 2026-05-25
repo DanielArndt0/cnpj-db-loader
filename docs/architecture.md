@@ -95,3 +95,11 @@ planner -> source-reader -> parser -> normalizer -> staging-writer -> materializ
 ```
 
 - Materialization now stores lightweight staging validation markers (row count and max staging id) in the materialization checkpoint table so reruns can verify the live staging state quickly and reuse lookup reconciliation when the staging snapshot is unchanged. The runtime validates that the required import tables already exist but no longer creates or alters them automatically.
+
+## PostgreSQL direct import workflow
+
+The PostgreSQL direct import workflow is a hybrid execution path. It keeps file detection, Receita parsing, validation and sanitization in the loader, then exports normalized CSV files and a generated `psql` script for direct PostgreSQL loading.
+
+This keeps the parsing rules centralized in the TypeScript layouts while allowing PostgreSQL to run the heaviest bulk load and materialization work with set-based SQL.
+
+The generated script resets staging tables, loads CSV files with `\copy`, upserts domain and final tables, materializes `establishment_secondary_cnaes`, and refreshes planner statistics with `ANALYZE`.

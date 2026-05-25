@@ -752,3 +752,77 @@ export function createFederalRevenueDownloadProgressReporter(): (
     );
   };
 }
+
+import type {
+  PostgresCsvExportProgressEvent,
+  PostgresDirectScriptProgressEvent,
+} from "../../../services/postgres-direct/index.js";
+
+export function createPostgresCsvExportProgressReporter(): (
+  event: PostgresCsvExportProgressEvent,
+) => void {
+  return (event: PostgresCsvExportProgressEvent): void => {
+    if (event.kind === "start") {
+      console.log(
+        theme.infoLabel("POSTGRES"),
+        "Starting PostgreSQL-ready CSV export...",
+      );
+      console.log(formatKeyValue("Input path", event.inputPath));
+      console.log(formatKeyValue("Validated path", event.validatedPath));
+      console.log(formatKeyValue("Output path", event.outputPath));
+      console.log(formatKeyValue("Files queued", event.totalFiles));
+      return;
+    }
+
+    if (event.kind === "file_finish") {
+      console.log(
+        `${theme.infoLabel("POSTGRES")} ${event.fileIndex}/${event.totalFiles} ${event.dataset} exported with ${formatCount(event.rows)} row(s).`,
+      );
+      return;
+    }
+
+    if (event.kind === "finish") {
+      console.log(
+        theme.successLabel("POSTGRES"),
+        `Exported ${event.totalFiles} file(s) with ${formatCount(event.totalRows)} row(s).`,
+      );
+      console.log(formatKeyValue("Output path", event.outputPath));
+      console.log(formatKeyValue("Script path", event.scriptPath));
+    }
+  };
+}
+
+export function createPostgresDirectScriptProgressReporter(): (
+  event: PostgresDirectScriptProgressEvent,
+) => void {
+  return (event: PostgresDirectScriptProgressEvent): void => {
+    if (event.kind === "start") {
+      console.log(
+        theme.infoLabel("POSTGRES"),
+        "Starting direct PostgreSQL script generation...",
+      );
+      console.log(formatKeyValue("Input path", event.inputPath));
+      console.log(formatKeyValue("Validated path", event.validatedPath));
+      console.log(formatKeyValue("Output path", event.outputPath));
+      console.log(formatKeyValue("Source encoding", event.sourceEncoding));
+      console.log(formatKeyValue("Files queued", event.totalFiles));
+      return;
+    }
+
+    if (event.kind === "file_registered") {
+      console.log(
+        `${theme.infoLabel("POSTGRES")} ${event.fileIndex}/${event.totalFiles} ${event.dataset} registered (${formatBytes(event.fileSize)}).`,
+      );
+      return;
+    }
+
+    if (event.kind === "finish") {
+      console.log(
+        theme.successLabel("POSTGRES"),
+        `Generated direct import script for ${event.totalFiles} file(s) (${formatBytes(event.totalBytes)}).`,
+      );
+      console.log(formatKeyValue("Output path", event.outputPath));
+      console.log(formatKeyValue("Script path", event.scriptPath));
+    }
+  };
+}

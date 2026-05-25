@@ -9,6 +9,10 @@ import type {
 } from "../../../services/federal-revenue/index.js";
 import type { InspectSummary } from "../../../services/inspect.service.js";
 import type { ImportSummary } from "../../../services/import.service.js";
+import type {
+  PostgresCsvExportSummary,
+  PostgresDirectScriptSummary,
+} from "../../../services/postgres-direct/index.js";
 import type { SanitizeSummary } from "../../../services/sanitize.service.js";
 import type { ValidationSummary } from "../../../services/validate.service.js";
 import {
@@ -600,4 +604,71 @@ export function printFederalRevenueSyncSummary(
   console.log(
     `${theme.muted("Import progress log:")} ${resolveLogFilePath(summary.import.progressLogPath)}`,
   );
+}
+
+export function printPostgresCsvExportSummary(
+  summary: PostgresCsvExportSummary,
+  logFilePath: string,
+): void {
+  console.log(
+    theme.successLabel("POSTGRES"),
+    "PostgreSQL-ready CSV export completed.",
+  );
+  console.log(formatKeyValue("Input path", summary.inputPath));
+  console.log(formatKeyValue("Validated path", summary.validatedPath));
+  console.log(formatKeyValue("Output path", summary.outputPath));
+  console.log(formatKeyValue("Generated script", summary.scriptPath));
+  console.log(formatKeyValue("Manifest", summary.manifestPath));
+  console.log(formatKeyValue("Exported files", summary.totalFiles));
+  console.log(formatKeyValue("Exported rows", formatCount(summary.totalRows)));
+
+  if (summary.datasets.length > 0) {
+    console.log(theme.infoLabel("DATASETS"));
+    for (const dataset of summary.datasets) {
+      console.log(
+        `  ${theme.blue("•")} ${dataset.dataset}: ${dataset.files} file(s), ${formatCount(dataset.rows)} row(s)`,
+      );
+    }
+  }
+
+  printWarnings(summary.warnings);
+  if (summary.nextStep) {
+    console.log(`${theme.infoLabel("NEXT")} ${summary.nextStep}`);
+  }
+
+  console.log(`${theme.muted("Log file:")} ${resolveLogFilePath(logFilePath)}`);
+}
+
+export function printPostgresDirectScriptSummary(
+  summary: PostgresDirectScriptSummary,
+  logFilePath: string,
+): void {
+  console.log(
+    theme.successLabel("POSTGRES"),
+    "Direct PostgreSQL import script generated.",
+  );
+  console.log(formatKeyValue("Input path", summary.inputPath));
+  console.log(formatKeyValue("Validated path", summary.validatedPath));
+  console.log(formatKeyValue("Output path", summary.outputPath));
+  console.log(formatKeyValue("Generated script", summary.scriptPath));
+  console.log(formatKeyValue("Manifest", summary.manifestPath));
+  console.log(formatKeyValue("Source encoding", summary.sourceEncoding));
+  console.log(formatKeyValue("Source files", summary.totalFiles));
+  console.log(formatKeyValue("Source bytes", formatBytes(summary.totalBytes)));
+
+  if (summary.datasets.length > 0) {
+    console.log(theme.infoLabel("DATASETS"));
+    for (const dataset of summary.datasets) {
+      console.log(
+        `  ${theme.blue("•")} ${dataset.dataset}: ${dataset.files} file(s), ${formatBytes(dataset.totalBytes)}`,
+      );
+    }
+  }
+
+  printWarnings(summary.warnings);
+  if (summary.nextStep) {
+    console.log(`${theme.infoLabel("NEXT")} ${summary.nextStep}`);
+  }
+
+  console.log(`${theme.muted("Log file:")} ${resolveLogFilePath(logFilePath)}`);
 }
