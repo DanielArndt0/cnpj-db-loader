@@ -667,6 +667,19 @@ export function printPostgresDirectScriptSummary(
   console.log(formatKeyValue("Generated script", summary.scriptPath));
   console.log(formatKeyValue("Manifest", summary.manifestPath));
   console.log(formatKeyValue("Source encoding", summary.sourceEncoding));
+  console.log(formatKeyValue("Transaction mode", summary.transactionMode));
+  console.log(
+    formatKeyValue("Generated SQL files", summary.scriptFiles.length),
+  );
+  console.log(
+    formatKeyValue(
+      "Included steps",
+      summary.steps
+        .filter((step) => step.included)
+        .map((step) => step.name)
+        .join(", "),
+    ),
+  );
   console.log(formatKeyValue("Source files", summary.totalFiles));
   console.log(formatKeyValue("Source bytes", formatBytes(summary.totalBytes)));
 

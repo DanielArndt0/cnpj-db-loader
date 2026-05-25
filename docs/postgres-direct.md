@@ -2,7 +2,7 @@
 
 The PostgreSQL direct import workflow is a hybrid path for environments where the standard resumable importer is too expensive for a full monthly load.
 
-It keeps the safe preparation steps inside CNPJ DB Loader and moves the heaviest database load/materialization work into a generated `psql` script.
+It keeps the safe preparation steps inside CNPJ DB Loader and moves the heaviest database load/materialization work into generated `psql` scripts.
 
 ## Intended flow
 
@@ -11,8 +11,8 @@ cnpj-db-loader federal-revenue download --output ./downloads
 cnpj-db-loader extract ./downloads/<reference>
 cnpj-db-loader validate ./downloads/<reference>/extracted
 cnpj-db-loader sanitize ./downloads/<reference>/extracted
-cnpj-db-loader postgres generate-script ./downloads/<reference>/sanitized --output ./downloads/<reference>/postgres-direct --source-encoding UTF8 --force
-psql "postgres://postgres:postgres@localhost:5432/cnpj" -f ./downloads/<reference>/postgres-direct/import-postgres-direct.sql
+cnpj-db-loader postgres generate-script ./downloads/<reference>/sanitized --output ./downloads/<reference>/postgres-direct --source-encoding UTF8 --transaction-mode phase --force
+psql -d "postgres://postgres:postgres@localhost:5432/cnpj" -f ./downloads/<reference>/postgres-direct/import-postgres-direct.sql
 ```
 
 The loader remains responsible for:
@@ -22,7 +22,7 @@ The loader remains responsible for:
 - validation
 - sanitization
 - preserving the sanitized Receita files without rewriting the whole dataset
-- generating the final `psql` import script
+- generating the modular `psql` import scripts
 - optionally exporting PostgreSQL-ready CSV files through `postgres export-csv` when an audit/debug CSV tree is useful
 
 PostgreSQL is then responsible for:
@@ -34,18 +34,10 @@ PostgreSQL is then responsible for:
 - `establishment_secondary_cnaes` materialization
 - planner statistics refresh through `ANALYZE`
 
-## Why this exists
-
-The standard `import` command is safer and resumable, but it keeps more orchestration inside the Node.js process. That is useful for production safety, checkpoints, quarantine and incremental recovery.
-
-The direct PostgreSQL path is optimized for bulk loading after the input files have already been sanitized. It avoids per-batch Node.js database inserts and avoids rewriting the full dataset into a second CSV tree. Instead, `psql` streams the sanitized Receita files into temporary text tables and PostgreSQL performs the value conversion and materialization with set-based SQL.
-
-Use this when you want to benchmark or run a faster controlled load on a local machine.
-
 ## Command
 
 ```bash
-cnpj-db-loader postgres generate-script <input> [--output <path>] [--dataset <dataset>] [--script-name <name>] [--source-encoding <encoding>] [-f]
+cnpj-db-loader postgres generate-script <input> [--output <path>] [--dataset <dataset>] [--script-name <name>] [--source-encoding <encoding>] [--transaction-mode <mode>] [--include <items>] [--skip-indexes] [--skip-analyze] [-f]
 ```
 
 ### Arguments
@@ -58,57 +50,259 @@ cnpj-db-loader postgres generate-script <input> [--output <path>] [--dataset <da
 
 | Option                         | Description                                                                                                                                                                                                                                          |
 | ------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `--output <path>`              | Custom output directory for the generated SQL script and manifest.                                                                                                                                                                                   |
-| `--dataset <dataset>`          | Generate a script only for one dataset block. Useful for debugging.                                                                                                                                                                                  |
-| `--script-name <name>`         | Name of the generated SQL script. Defaults to `import-postgres-direct.sql`.                                                                                                                                                                          |
+| `--output <path>`              | Custom output directory for the generated SQL scripts and manifest.                                                                                                                                                                                  |
+| `--dataset <dataset>`          | Generate scripts only for one dataset block. Useful for debugging.                                                                                                                                                                                   |
+| `--script-name <name>`         | Name of the generated orchestrator script. Defaults to `import-postgres-direct.sql`.                                                                                                                                                                 |
 | `--source-encoding <encoding>` | Source file encoding used by `psql` while reading the sanitized Receita files. Defaults to `UTF8` because the current `sanitize` command writes UTF-8 output. Use `WIN1252` or `LATIN1` only for legacy sanitized files generated by older versions. |
+| `--transaction-mode <mode>`    | Transaction strategy for generated scripts: `single`, `phase` or `none`. Defaults to `single`.                                                                                                                                                       |
+| `--include <items>`            | Comma-separated steps to include: `domains`, `companies`, `establishments`, `partners`, `simples`, `secondary-cnaes`, `indexes`, `analyze`.                                                                                                          |
+| `--skip-indexes`               | Do not generate the `indexes.sql` step.                                                                                                                                                                                                              |
+| `--skip-analyze`               | Do not generate the `analyze.sql` step.                                                                                                                                                                                                              |
 | `-f, --force`                  | Skip the confirmation prompt.                                                                                                                                                                                                                        |
+
+## Transaction modes
+
+### `single`
+
+The orchestrator wraps all included steps in one transaction:
+
+```text
+BEGIN
+  setup
+  load domains
+  load companies
+  load establishments
+  load partners
+  load simples
+  materialize
+  materialize secondary CNAEs
+  indexes
+  analyze
+COMMIT
+```
+
+This is the safest mode because a failure rolls back the whole run, but it is also the least convenient for very large imports because a late failure requires starting over.
+
+### `phase`
+
+Each generated phase script wraps its own work in a transaction.
+
+This is the recommended mode for long local runs because completed phases remain committed if a later phase fails.
+
+### `none`
+
+No generated transaction wrapper is added.
+
+This mode is useful for aggressive benchmark scenarios, but it can leave partial data if a command fails.
 
 ## Output structure
 
-The command creates a small PostgreSQL direct output directory:
+The command now creates a modular PostgreSQL direct output directory:
 
 ```text
 postgres-direct/
   manifest.json
   import-postgres-direct.sql
+  setup.sql
+  load-domains.sql
+  load-companies.sql
+  load-establishments.sql
+  load-partners.sql
+  load-simples.sql
+  materialize.sql
+  materialize-secondary-cnaes.sql
+  indexes.sql
+  analyze.sql
 ```
 
-Unlike `postgres export-csv`, this command does not create a second tree of converted CSV files. The generated SQL script points directly to the sanitized Receita files. Current sanitized files are expected to be clean UTF-8 by default.
+The `import-postgres-direct.sql` file is an orchestrator that runs the included phase scripts in the correct order with `\ir`.
 
-This is faster for large monthly loads because it avoids reading and writing the entire dataset again just to add headers or change delimiters.
+You can execute the full flow:
+
+```bash
+psql -d "postgres://postgres:postgres@localhost:5432/cnpj" -f ./postgres-direct/import-postgres-direct.sql
+```
+
+Or execute individual phase scripts:
+
+```bash
+psql -d "postgres://postgres:postgres@localhost:5432/cnpj" -f ./postgres-direct/load-domains.sql
+psql -d "postgres://postgres:postgres@localhost:5432/cnpj" -f ./postgres-direct/load-establishments.sql
+```
+
+## Partial generation
+
+Generate only domain scripts:
+
+```bash
+cnpj-db-loader postgres generate-script ./downloads/<reference>/sanitized --output ./downloads/<reference>/postgres-direct --include domains --transaction-mode phase --force
+```
+
+Generate without indexes and analyze:
+
+```bash
+cnpj-db-loader postgres generate-script ./downloads/<reference>/sanitized --output ./downloads/<reference>/postgres-direct --skip-indexes --skip-analyze --force
+```
+
+Generate only establishments and secondary CNAEs:
+
+```bash
+cnpj-db-loader postgres generate-script ./downloads/<reference>/sanitized --output ./downloads/<reference>/postgres-direct --include establishments,secondary-cnaes,analyze --transaction-mode phase --force
+```
 
 ## Generated script behavior
 
-The generated `import-postgres-direct.sql` script:
+The generated scripts:
 
-1. enables `ON_ERROR_STOP` for `psql`;
-2. starts a transaction;
-3. truncates the `staging_*` tables and restarts their identities;
-4. sets the configured client encoding for `psql` copy operations;
-5. loads domain datasets from sanitized Receita files into temporary raw text tables;
-6. upserts final domain tables;
-7. loads large datasets from sanitized Receita files into temporary raw text tables;
-8. converts values inside PostgreSQL and inserts them into `staging_companies`, `staging_establishments`, `staging_partners` and `staging_simples_options`;
-9. materializes final `companies`, `establishments`, `partners` and `simples_options` tables using set-based SQL;
-10. populates `establishment_secondary_cnaes` from `secondary_cnaes_raw`;
-11. runs `ANALYZE` on the main final tables;
-12. commits the transaction.
+1. enable `ON_ERROR_STOP` for `psql`;
+2. set the configured client encoding for `psql` copy operations;
+3. load domain datasets from sanitized Receita files into temporary raw text tables;
+4. upsert final domain tables;
+5. load large datasets from sanitized Receita files into temporary raw text tables;
+6. convert values inside PostgreSQL and insert them into `staging_companies`, `staging_establishments`, `staging_partners` and `staging_simples_options`;
+7. materialize final `companies`, `establishments`, `partners` and `simples_options` tables using set-based SQL;
+8. populate `establishment_secondary_cnaes` from `secondary_cnaes_raw`;
+9. optionally generate an indexes phase;
+10. optionally run `ANALYZE` on the affected tables.
 
-The script does not recreate the schema. Run the normal schema first:
+The scripts do not recreate the schema. Run the normal schema first:
 
 ```bash
 cnpj-db-loader schema generate --profile full --output ./sql/schema.sql
-psql "postgres://postgres:postgres@localhost:5432/cnpj" -f ./sql/schema.sql
+psql -d "postgres://postgres:postgres@localhost:5432/cnpj" -f ./sql/schema.sql
 ```
 
-## Important notes
+## Monitoring PostgreSQL while the import runs
 
-The generated script is designed for full controlled loads and benchmarks. It is not a replacement for the standard resumable `import` command when you need checkpoint-based recovery, row quarantine or long-running incremental resume behavior.
+The hybrid mode intentionally keeps loader checkpoints lightweight. Use PostgreSQL native views to monitor heavy work.
 
-The generated script resets staging tables, but it does not truncate final tables. Final tables are updated through `ON CONFLICT` upserts.
+### Active queries
 
-For a fully clean rebuild, reset the database or run the appropriate database cleanup command before executing the generated script.
+```sql
+SELECT
+  pid,
+  now() - query_start AS duration,
+  state,
+  wait_event_type,
+  wait_event,
+  left(query, 200) AS query
+FROM pg_stat_activity
+WHERE datname = current_database()
+  AND state <> 'idle'
+ORDER BY query_start;
+```
+
+### COPY progress
+
+```sql
+SELECT
+  pid,
+  command,
+  type,
+  bytes_processed,
+  bytes_total,
+  tuples_processed,
+  CASE
+    WHEN bytes_total > 0
+    THEN round((bytes_processed::numeric / bytes_total::numeric) * 100, 2)
+    ELSE NULL
+  END AS percent
+FROM pg_stat_progress_copy;
+```
+
+With auto-refresh in `psql`:
+
+```sql
+SELECT
+  pid,
+  command,
+  type,
+  bytes_processed,
+  bytes_total,
+  tuples_processed,
+  CASE
+    WHEN bytes_total > 0
+    THEN round((bytes_processed::numeric / bytes_total::numeric) * 100, 2)
+    ELSE NULL
+  END AS percent
+FROM pg_stat_progress_copy;
+\watch 5
+```
+
+### Locks
+
+```sql
+SELECT
+  blocked.pid AS blocked_pid,
+  blocking.pid AS blocking_pid,
+  blocked_activity.query AS blocked_query,
+  blocking_activity.query AS blocking_query
+FROM pg_catalog.pg_locks blocked
+JOIN pg_catalog.pg_stat_activity blocked_activity
+  ON blocked_activity.pid = blocked.pid
+JOIN pg_catalog.pg_locks blocking
+  ON blocking.locktype = blocked.locktype
+ AND blocking.database IS NOT DISTINCT FROM blocked.database
+ AND blocking.relation IS NOT DISTINCT FROM blocked.relation
+ AND blocking.page IS NOT DISTINCT FROM blocked.page
+ AND blocking.tuple IS NOT DISTINCT FROM blocked.tuple
+ AND blocking.virtualxid IS NOT DISTINCT FROM blocked.virtualxid
+ AND blocking.transactionid IS NOT DISTINCT FROM blocked.transactionid
+ AND blocking.classid IS NOT DISTINCT FROM blocked.classid
+ AND blocking.objid IS NOT DISTINCT FROM blocked.objid
+ AND blocking.objsubid IS NOT DISTINCT FROM blocked.objsubid
+ AND blocking.pid <> blocked.pid
+JOIN pg_catalog.pg_stat_activity blocking_activity
+  ON blocking_activity.pid = blocking.pid
+WHERE NOT blocked.granted;
+```
+
+### Main table sizes
+
+```sql
+SELECT
+  relname AS table_name,
+  pg_size_pretty(pg_total_relation_size(relid)) AS total_size
+FROM pg_catalog.pg_statio_user_tables
+WHERE relname IN (
+  'companies',
+  'establishments',
+  'partners',
+  'simples_options',
+  'establishment_secondary_cnaes'
+)
+ORDER BY pg_total_relation_size(relid) DESC;
+```
+
+### Estimated rows by table
+
+```sql
+SELECT
+  relname AS table_name,
+  n_live_tup AS estimated_rows,
+  n_dead_tup AS dead_rows,
+  last_analyze,
+  last_autoanalyze
+FROM pg_stat_user_tables
+ORDER BY n_live_tup DESC;
+```
+
+### PostgreSQL logs on Windows
+
+```powershell
+Get-ChildItem "C:\Program Files\PostgreSQL\16\data\log" |
+  Sort-Object LastWriteTime -Descending |
+  Select-Object -First 1 |
+  Get-Content -Tail 120
+```
+
+Event Viewer logs through PowerShell:
+
+```powershell
+Get-EventLog -LogName Application -Newest 80 |
+  Where-Object { $_.Source -like "*postgres*" -or $_.Message -like "*PostgreSQL*" } |
+  Format-List TimeGenerated, Source, EntryType, Message
+```
 
 ## Windows usage
 
@@ -119,7 +313,7 @@ This is intentional. With `\copy`, the `psql` client reads local files and strea
 Example:
 
 ```powershell
-psql "postgres://postgres:postgres@localhost:5432/cnpj" -f "D:/cnpj-data/2026-05/postgres-direct/import-postgres-direct.sql"
+psql -d "postgres://postgres:postgres@localhost:5432/cnpj" -f "D:/cnpj-data/2026-05/postgres-direct/import-postgres-direct.sql"
 ```
 
 ## Recommended comparison benchmark
@@ -131,8 +325,8 @@ To compare the standard and hybrid paths:
 cnpj-db-loader import ./downloads/<reference>/sanitized --load-batch-size 500 --materialize-batch-size 50000 --verbose-progress
 
 # Hybrid path
-cnpj-db-loader postgres generate-script ./downloads/<reference>/sanitized --output ./downloads/<reference>/postgres-direct --source-encoding UTF8 --force
-psql "postgres://postgres:postgres@localhost:5432/cnpj" -f ./downloads/<reference>/postgres-direct/import-postgres-direct.sql
+cnpj-db-loader postgres generate-script ./downloads/<reference>/sanitized --output ./downloads/<reference>/postgres-direct --source-encoding UTF8 --transaction-mode phase --force
+psql -d "postgres://postgres:postgres@localhost:5432/cnpj" -f ./downloads/<reference>/postgres-direct/import-postgres-direct.sql
 ```
 
 Compare total duration, disk usage, PostgreSQL CPU usage, WAL growth and final row counts.

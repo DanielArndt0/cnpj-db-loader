@@ -46,6 +46,16 @@ export function registerPostgresCommands(program: Command): void {
       "--source-encoding <encoding>",
       "PostgreSQL client encoding used while reading sanitized Receita files. Defaults to UTF8.",
     )
+    .option(
+      "--transaction-mode <mode>",
+      "Transaction mode for generated scripts: single, phase or none. Defaults to single.",
+    )
+    .option(
+      "--include <items>",
+      "Comma-separated steps to include: domains,companies,establishments,partners,simples,secondary-cnaes,indexes,analyze.",
+    )
+    .option("--skip-indexes", "Do not generate the indexes step.")
+    .option("--skip-analyze", "Do not generate the analyze step.")
     .option("-f, --force", "Skip the confirmation prompt.")
     .description(
       "Generate a direct psql import script that loads sanitized Receita files without rewriting them into new CSV files.",
@@ -58,6 +68,10 @@ export function registerPostgresCommands(program: Command): void {
           dataset?: string;
           scriptName?: string;
           sourceEncoding?: string;
+          transactionMode?: string;
+          include?: string;
+          skipIndexes?: boolean;
+          skipAnalyze?: boolean;
           force?: boolean;
         },
       ) => {
@@ -91,6 +105,26 @@ export function registerPostgresCommands(program: Command): void {
 
         if (options.sourceEncoding) {
           generateOptions.sourceEncoding = options.sourceEncoding;
+        }
+
+        if (options.transactionMode) {
+          generateOptions.transactionMode =
+            options.transactionMode as PostgresDirectScriptOptions["transactionMode"];
+        }
+
+        if (options.include) {
+          generateOptions.include = options.include
+            .split(",")
+            .map((item) => item.trim())
+            .filter(Boolean) as PostgresDirectScriptOptions["include"];
+        }
+
+        if (options.skipIndexes) {
+          generateOptions.skipIndexes = true;
+        }
+
+        if (options.skipAnalyze) {
+          generateOptions.skipAnalyze = true;
         }
 
         const summary = await generatePostgresDirectScript(

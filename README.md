@@ -51,8 +51,8 @@ cnpj-db-loader schema generate --profile full
 cnpj-db-loader import ./downloads/<reference>/sanitized --load-batch-size 500 --materialize-batch-size 50000 --verbose-progress
 
 # Optional hybrid path for PostgreSQL direct loading
-cnpj-db-loader postgres generate-script ./downloads/<reference>/sanitized --output ./downloads/<reference>/postgres-direct --source-encoding UTF8 --force
-psql "postgres://postgres:postgres@localhost:5432/cnpj" -f ./downloads/<reference>/postgres-direct/import-postgres-direct.sql
+cnpj-db-loader postgres generate-script ./downloads/<reference>/sanitized --output ./downloads/<reference>/postgres-direct --source-encoding UTF8 --transaction-mode phase --force
+psql -d "postgres://postgres:postgres@localhost:5432/cnpj" -f ./downloads/<reference>/postgres-direct/import-postgres-direct.sql
 ```
 
 ## Stable commands
@@ -78,7 +78,7 @@ cnpj-db-loader database cleanup staging [--db-url <url>] [--dataset <name>] [--v
 cnpj-db-loader database cleanup materialized [--db-url <url>] [--dataset <name>] [--force]
 cnpj-db-loader database cleanup checkpoints [--db-url <url>] [--phase <phase>] [--dataset <name>] [--validated-path <path>] [--plan-id <id>] [--force]
 cnpj-db-loader database cleanup plans [--db-url <url>] [--validated-path <path>] [--plan-id <id>] [--force]
-cnpj-db-loader postgres generate-script <input> [--output <path>] [--dataset <name>] [--script-name <name>] [--source-encoding <encoding>] [-f]
+cnpj-db-loader postgres generate-script <input> [--output <path>] [--dataset <name>] [--script-name <name>] [--source-encoding <encoding>] [--transaction-mode <mode>] [--include <items>] [--skip-indexes] [--skip-analyze] [-f]
 cnpj-db-loader postgres export-csv <input> [--output <path>] [--dataset <name>] [--script-name <name>] [-f]
 cnpj-db-loader import <input> [--db-url <url>] [--dataset <name>] [--load-batch-size <size>] [--materialize-batch-size <size>] [--verbose-progress] [-f]
 cnpj-db-loader import load <input> [--db-url <url>] [--dataset <name>] [--load-batch-size <size>] [--verbose-progress] [-f]
@@ -95,8 +95,8 @@ For local benchmarks or controlled full loads, the CLI can now generate a direct
 
 ```bash
 cnpj-db-loader sanitize ./downloads/<reference>/extracted
-cnpj-db-loader postgres generate-script ./downloads/<reference>/sanitized --output ./downloads/<reference>/postgres-direct --source-encoding UTF8 --force
-psql "postgres://postgres:postgres@localhost:5432/cnpj" -f ./downloads/<reference>/postgres-direct/import-postgres-direct.sql
+cnpj-db-loader postgres generate-script ./downloads/<reference>/sanitized --output ./downloads/<reference>/postgres-direct --source-encoding UTF8 --transaction-mode phase --force
+psql -d "postgres://postgres:postgres@localhost:5432/cnpj" -f ./downloads/<reference>/postgres-direct/import-postgres-direct.sql
 ```
 
 This path keeps download, extraction, validation and robust UTF-8 sanitization inside the loader, then lets PostgreSQL load the sanitized Receita files directly through `\copy`, convert values into staging tables and materialize the final tables with set-based SQL. The standard `import` command remains the safest path when checkpoint resume and quarantine recovery are required.

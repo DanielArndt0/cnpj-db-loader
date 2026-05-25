@@ -9,7 +9,13 @@ import {
 import type { FieldDefinition } from "../../dictionary/layouts/index.js";
 import type { ImportDatasetType } from "../import/types.js";
 import { DATASET_LAYOUTS } from "../import/types.js";
-import type { PostgresCsvFile, PostgresDirectSourceFile } from "./types.js";
+import type {
+  PostgresCsvFile,
+  PostgresDirectIncludeTarget,
+  PostgresDirectScriptStep,
+  PostgresDirectSourceFile,
+  PostgresDirectTransactionMode,
+} from "./types.js";
 
 type CsvScriptGenerationInput = {
   files: PostgresCsvFile[];
@@ -18,6 +24,15 @@ type CsvScriptGenerationInput = {
 type SanitizedScriptGenerationInput = {
   files: PostgresDirectSourceFile[];
   sourceEncoding: string;
+  transactionMode: PostgresDirectTransactionMode;
+  include: readonly PostgresDirectIncludeTarget[];
+  skipIndexes: boolean;
+  skipAnalyze: boolean;
+};
+
+export type GeneratedPostgresDirectScripts = {
+  scripts: Record<string, string>;
+  steps: PostgresDirectScriptStep[];
 };
 
 const STAGING_DATASETS: readonly ImportDatasetType[] = [
@@ -42,6 +57,19 @@ const STAGING_TABLE_BY_DATASET: Partial<Record<ImportDatasetType, string>> = {
   partners: "staging_partners",
   simples_options: "staging_simples_options",
 };
+
+const STEP_ORDER = [
+  "setup",
+  "load-domains",
+  "load-companies",
+  "load-establishments",
+  "load-partners",
+  "load-simples",
+  "materialize",
+  "materialize-secondary-cnaes",
+  "indexes",
+  "analyze",
+] as const;
 
 function quoteSqlLiteral(value: string): string {
   return `'${value.replace(/'/g, "''")}'`;
@@ -71,6 +99,10 @@ function receitaCopyCommand(
 ): string {
   const normalizedFilePath = normalizePathForPsql(filePath);
   return `\\copy ${tableName} (${columns.join(", ")}) from ${quoteSqlLiteral(normalizedFilePath)} with (format csv, header false, delimiter ';', quote '"', escape '"')`;
+}
+
+function echo(message: string): string {
+  return `\\echo ${quoteSqlLiteral(message)}`;
 }
 
 function datasetColumns(dataset: ImportDatasetType): string[] {
@@ -110,7 +142,7 @@ function materializeCompaniesSql(): string {
   const columns = companiesLayout.fields.map((field) => field.columnName);
 
   return [
-    "\\echo 'Materializing companies...'",
+    echo("[materialize] Materializing companies..."),
     "with source as (",
     "  select",
     `    ${columns.map((column) => `source.${column}`).join(",\n    ")},`,
@@ -125,6 +157,7 @@ function materializeCompaniesSql(): string {
     "from deduped",
     "on conflict (cnpj_root) do update set",
     `  ${updateAssignments(columns, ["cnpj_root"])};`,
+    echo("[materialize] Companies materialization completed."),
   ].join("\n");
 }
 
@@ -135,7 +168,7 @@ function materializeEstablishmentsSql(): string {
   const insertColumns = [...baseColumns, "cnpj_full"];
 
   return [
-    "\\echo 'Materializing establishments and secondary CNAEs...'",
+    echo("[materialize] Materializing establishments..."),
     "with source as (",
     "  select",
     `    ${baseColumns.map((column) => `source.${column}`).join(",\n    ")},`,
@@ -145,14 +178,30 @@ function materializeEstablishmentsSql(): string {
     "),",
     "deduped as (",
     "  select * from source where dedupe_rank = 1",
+    ")",
+    `insert into establishments (${insertColumns.join(", ")})`,
+    `select ${insertColumns.join(", ")}`,
+    "from deduped",
+    "on conflict (cnpj_full) do update set",
+    `  ${updateAssignments(insertColumns, ["cnpj_root", "cnpj_order", "cnpj_check_digits", "cnpj_full"])};`,
+    echo("[materialize] Establishments materialization completed."),
+  ].join("\n");
+}
+
+function materializeSecondaryCnaesSql(): string {
+  return [
+    echo(
+      "[materialize-secondary-cnaes] Materializing establishment secondary CNAEs...",
+    ),
+    "with source as (",
+    "  select",
+    "    staging.cnpj_root || staging.cnpj_order || staging.cnpj_check_digits as cnpj_full,",
+    "    staging.secondary_cnaes_raw,",
+    "    row_number() over (partition by staging.cnpj_root || staging.cnpj_order || staging.cnpj_check_digits order by staging.staging_id desc) as dedupe_rank",
+    "  from staging_establishments staging",
     "),",
-    "upserted as (",
-    `  insert into establishments (${insertColumns.join(", ")})`,
-    `  select ${insertColumns.join(", ")}`,
-    "  from deduped",
-    "  on conflict (cnpj_full) do update set",
-    `    ${updateAssignments(insertColumns, ["cnpj_root", "cnpj_order", "cnpj_check_digits", "cnpj_full"])}`,
-    "  returning cnpj_full",
+    "deduped as (",
+    "  select * from source where dedupe_rank = 1",
     "),",
     "deleted_secondary_cnaes as (",
     "  delete from establishment_secondary_cnaes target",
@@ -174,6 +223,9 @@ function materializeEstablishmentsSql(): string {
     "select cnpj_full, cnae_code",
     "from secondary_cnaes_source",
     "on conflict (cnpj_full, cnae_code) do nothing;",
+    echo(
+      "[materialize-secondary-cnaes] Secondary CNAEs materialization completed.",
+    ),
   ].join("\n");
 }
 
@@ -182,7 +234,7 @@ function materializePartnersSql(): string {
   const insertColumns = [...baseColumns, "partner_dedupe_key"];
 
   return [
-    "\\echo 'Materializing partners...'",
+    echo("[materialize] Materializing partners..."),
     "with source as (",
     "  select",
     `    ${baseColumns.map((column) => `source.${column}`).join(",\n    ")},`,
@@ -203,6 +255,7 @@ function materializePartnersSql(): string {
     "from deduped",
     "on conflict (partner_dedupe_key) do update set",
     `  ${updateAssignments(insertColumns, ["partner_dedupe_key"])};`,
+    echo("[materialize] Partners materialization completed."),
   ].join("\n");
 }
 
@@ -210,7 +263,7 @@ function materializeSimplesSql(): string {
   const columns = simplesLayout.fields.map((field) => field.columnName);
 
   return [
-    "\\echo 'Materializing simples options...'",
+    echo("[materialize] Materializing simples options..."),
     "with source as (",
     "  select",
     `    ${columns.map((column) => `source.${column}`).join(",\n    ")},`,
@@ -225,6 +278,7 @@ function materializeSimplesSql(): string {
     "from deduped",
     "on conflict (cnpj_root) do update set",
     `  ${updateAssignments(columns, ["cnpj_root"])};`,
+    echo("[materialize] Simples options materialization completed."),
   ].join("\n");
 }
 
@@ -239,13 +293,21 @@ function copyDomainSql(
   const columns = datasetColumns(dataset);
   const tempTable = `tmp_hybrid_${dataset}`;
   const lines = [
-    `\\echo 'Loading ${dataset} lookup data...'`,
+    echo(`[load-domains] Loading ${dataset} lookup data...`),
     `drop table if exists ${tempTable};`,
     `create temporary table ${tempTable} (code text, description text);`,
   ];
 
-  for (const file of files) {
-    lines.push(csvCopyCommand(tempTable, columns, file.absolutePath));
+  for (const [index, file] of files.entries()) {
+    lines.push(
+      echo(
+        `[load-domains] Loading ${dataset} file ${index + 1} of ${files.length}: ${file.relativePath}`,
+      ),
+      csvCopyCommand(tempTable, columns, file.absolutePath),
+      echo(
+        `[load-domains] Loaded ${dataset} file ${index + 1} of ${files.length}.`,
+      ),
+    );
   }
 
   lines.push(
@@ -274,12 +336,19 @@ function copyStagingSql(
   }
 
   const columns = datasetColumns(dataset);
-  return [
-    `\\echo 'Loading ${dataset} staging data...'`,
-    ...files.map((file) =>
+  const lines = [echo(`[load-${dataset}] Loading ${dataset} staging data...`)];
+
+  for (const [index, file] of files.entries()) {
+    lines.push(
+      echo(
+        `[load-${dataset}] Loading file ${index + 1} of ${files.length}: ${file.relativePath}`,
+      ),
       csvCopyCommand(tableName, columns, file.absolutePath),
-    ),
-  ];
+      echo(`[load-${dataset}] Loaded file ${index + 1} of ${files.length}.`),
+    );
+  }
+
+  return lines;
 }
 
 function csvFilesByDataset(
@@ -322,7 +391,9 @@ function createRawTempTableSql(dataset: ImportDatasetType): string {
     .join(",\n");
 
   return [
+    "set client_min_messages to warning;",
     `drop table if exists ${rawTableName(dataset)};`,
+    "reset client_min_messages;",
     `create temporary table ${rawTableName(dataset)} (`,
     columns,
     ");",
@@ -424,12 +495,22 @@ function rawDomainSql(
   const tableName = rawTableName(dataset);
 
   const lines = [
-    `\\echo 'Loading ${dataset} lookup data directly from sanitized Receita files...'`,
+    echo(
+      `[load-domains] Loading ${dataset} lookup data directly from sanitized Receita files...`,
+    ),
     createRawTempTableSql(dataset),
   ];
 
-  for (const file of files) {
-    lines.push(receitaCopyCommand(tableName, columns, file.absolutePath));
+  for (const [index, file] of files.entries()) {
+    lines.push(
+      echo(
+        `[load-domains] Loading ${dataset} file ${index + 1} of ${files.length}: ${file.relativePath}`,
+      ),
+      receitaCopyCommand(tableName, columns, file.absolutePath),
+      echo(
+        `[load-domains] Loaded ${dataset} file ${index + 1} of ${files.length}.`,
+      ),
+    );
   }
 
   lines.push(
@@ -441,6 +522,7 @@ function rawDomainSql(
     "where nullif(btrim(code), '') is not null",
     "order by code",
     "on conflict (code) do update set description = excluded.description;",
+    echo(`[load-domains] ${dataset} lookup data completed.`),
   );
 
   return lines;
@@ -467,24 +549,435 @@ function rawStagingSql(
     (field) =>
       `  ${fieldExpression(dataset, field, alias)} as ${field.columnName}`,
   );
+  const stepName = loadStepName(dataset);
 
   const lines = [
-    `\\echo 'Loading ${dataset} staging data directly from sanitized Receita files...'`,
+    echo(
+      `[${stepName}] Loading ${dataset} staging data directly from sanitized Receita files...`,
+    ),
+    `truncate table ${targetTable} restart identity;`,
     createRawTempTableSql(dataset),
   ];
 
-  for (const file of files) {
-    lines.push(receitaCopyCommand(tableName, columns, file.absolutePath));
+  for (const [index, file] of files.entries()) {
+    lines.push(
+      echo(
+        `[${stepName}] Loading file ${index + 1} of ${files.length}: ${file.relativePath}`,
+      ),
+      receitaCopyCommand(tableName, columns, file.absolutePath),
+      echo(`[${stepName}] Loaded file ${index + 1} of ${files.length}.`),
+    );
   }
 
   lines.push(
+    echo(
+      `[${stepName}] Transforming ${dataset} raw rows into ${targetTable}...`,
+    ),
     `insert into ${targetTable} (${columns.join(", ")})`,
     "select",
     expressions.join(",\n"),
     `from ${tableName} ${alias};`,
+    echo(`[${stepName}] ${dataset} staging load completed.`),
   );
 
   return lines;
+}
+
+function loadStepName(dataset: ImportDatasetType): string {
+  switch (dataset) {
+    case "companies":
+      return "load-companies";
+    case "establishments":
+      return "load-establishments";
+    case "partners":
+      return "load-partners";
+    case "simples_options":
+      return "load-simples";
+    default:
+      return `load-${dataset}`;
+  }
+}
+
+function scriptHeader(title: string, sourceEncoding?: string): string[] {
+  return [
+    `-- ${title}`,
+    "-- Generated by cnpj-db-loader postgres generate-script.",
+    "\\set ON_ERROR_STOP on",
+    ...(sourceEncoding
+      ? [
+          echo(
+            `Using source file encoding ${sourceEncoding} for psql copy operations...`,
+          ),
+          `set client_encoding to ${quoteSqlLiteral(sourceEncoding)};`,
+        ]
+      : []),
+    "",
+  ];
+}
+
+function wrapTransaction(
+  lines: readonly string[],
+  mode: PostgresDirectTransactionMode,
+  shouldWrap: boolean,
+): string[] {
+  if (!shouldWrap || mode !== "phase") {
+    return [...lines];
+  }
+
+  return ["begin;", "", ...lines, "", "commit;"];
+}
+
+function buildStepScript(
+  title: string,
+  body: readonly string[],
+  input: SanitizedScriptGenerationInput,
+  wrapInPhaseTransaction: boolean,
+): string {
+  return [
+    ...scriptHeader(title, input.sourceEncoding),
+    ...wrapTransaction(body, input.transactionMode, wrapInPhaseTransaction),
+    "",
+  ].join("\n");
+}
+
+function includeSet(
+  input: SanitizedScriptGenerationInput,
+): Set<PostgresDirectIncludeTarget> {
+  const selected = new Set(input.include);
+
+  if (input.skipIndexes) {
+    selected.delete("indexes");
+  }
+
+  if (input.skipAnalyze) {
+    selected.delete("analyze");
+  }
+
+  return selected;
+}
+
+function hasAnyFinalMaterialization(
+  selected: ReadonlySet<PostgresDirectIncludeTarget>,
+): boolean {
+  return (
+    selected.has("companies") ||
+    selected.has("establishments") ||
+    selected.has("partners") ||
+    selected.has("simples")
+  );
+}
+
+function materializeSql(
+  selected: ReadonlySet<PostgresDirectIncludeTarget>,
+): string[] {
+  const lines = [echo("[materialize] Starting final table materialization...")];
+
+  if (selected.has("companies")) {
+    lines.push(materializeCompaniesSql(), "");
+  }
+
+  if (selected.has("establishments")) {
+    lines.push(materializeEstablishmentsSql(), "");
+  }
+
+  if (selected.has("partners")) {
+    lines.push(materializePartnersSql(), "");
+  }
+
+  if (selected.has("simples")) {
+    lines.push(materializeSimplesSql(), "");
+  }
+
+  lines.push(echo("[materialize] Final table materialization completed."));
+
+  return lines;
+}
+
+function indexesSql(): string[] {
+  return [
+    echo(
+      "[indexes] No additional index operations are generated in this beta.",
+    ),
+    "-- Indexes are expected to be managed by the schema generated by cnpj-db-loader schema generate.",
+    "-- A future fast-rebuild mode may generate DROP/CREATE INDEX operations here.",
+  ];
+}
+
+function analyzeSql(
+  selected: ReadonlySet<PostgresDirectIncludeTarget>,
+): string[] {
+  const tables = new Set<string>();
+
+  if (selected.has("companies")) {
+    tables.add("companies");
+  }
+
+  if (selected.has("establishments")) {
+    tables.add("establishments");
+  }
+
+  if (selected.has("secondary-cnaes")) {
+    tables.add("establishment_secondary_cnaes");
+  }
+
+  if (selected.has("partners")) {
+    tables.add("partners");
+  }
+
+  if (selected.has("simples")) {
+    tables.add("simples_options");
+  }
+
+  if (selected.has("domains")) {
+    for (const dataset of DOMAIN_DATASETS) {
+      tables.add(dataset);
+    }
+  }
+
+  return [
+    echo("[analyze] Refreshing planner statistics..."),
+    ...[...tables].map((table) => `analyze ${table};`),
+    echo("[analyze] Planner statistics refreshed."),
+  ];
+}
+
+function step(
+  name: string,
+  file: string,
+  dependsOn: string[],
+  included: boolean,
+): PostgresDirectScriptStep {
+  return { name, file, dependsOn, included };
+}
+
+export function generatePostgresDirectScriptFiles(
+  input: SanitizedScriptGenerationInput,
+): GeneratedPostgresDirectScripts {
+  const grouped = directFilesByDataset(input.files);
+  const selected = includeSet(input);
+  if (!DOMAIN_DATASETS.some((dataset) => (grouped[dataset] ?? []).length > 0)) {
+    selected.delete("domains");
+  }
+  if ((grouped.companies ?? []).length === 0) {
+    selected.delete("companies");
+  }
+  if ((grouped.establishments ?? []).length === 0) {
+    selected.delete("establishments");
+    selected.delete("secondary-cnaes");
+  }
+  if ((grouped.partners ?? []).length === 0) {
+    selected.delete("partners");
+  }
+  if ((grouped.simples_options ?? []).length === 0) {
+    selected.delete("simples");
+  }
+  const scripts: Record<string, string> = {};
+  const steps: PostgresDirectScriptStep[] = [];
+
+  const setupIncluded = true;
+  steps.push(step("setup", "setup.sql", [], setupIncluded));
+  scripts["setup.sql"] = [
+    ...scriptHeader(
+      "CNPJ DB Loader PostgreSQL direct import setup",
+      input.sourceEncoding,
+    ),
+    echo("[setup] Preparing PostgreSQL direct import session..."),
+    "-- The database schema must be applied before running these scripts.",
+    "-- This setup script configures the psql session used by the generated orchestrator.",
+    echo("[setup] Setup completed."),
+    "",
+  ].join("\n");
+
+  const domainsIncluded =
+    selected.has("domains") &&
+    DOMAIN_DATASETS.some((dataset) => (grouped[dataset] ?? []).length > 0);
+  steps.push(
+    step("load-domains", "load-domains.sql", ["setup"], domainsIncluded),
+  );
+  if (domainsIncluded) {
+    const lines = [echo("[load-domains] Starting domain tables load...")];
+    for (const dataset of DOMAIN_DATASETS) {
+      lines.push(...rawDomainSql(dataset, grouped[dataset] ?? []), "");
+    }
+    lines.push(echo("[load-domains] Domain tables load completed."));
+    scripts["load-domains.sql"] = buildStepScript(
+      "CNPJ DB Loader PostgreSQL direct import domains step",
+      lines,
+      input,
+      true,
+    );
+  }
+
+  const datasetSteps: Array<{
+    dataset: ImportDatasetType;
+    name: string;
+    file: string;
+    include: PostgresDirectIncludeTarget;
+  }> = [
+    {
+      dataset: "companies",
+      name: "load-companies",
+      file: "load-companies.sql",
+      include: "companies",
+    },
+    {
+      dataset: "establishments",
+      name: "load-establishments",
+      file: "load-establishments.sql",
+      include: "establishments",
+    },
+    {
+      dataset: "partners",
+      name: "load-partners",
+      file: "load-partners.sql",
+      include: "partners",
+    },
+    {
+      dataset: "simples_options",
+      name: "load-simples",
+      file: "load-simples.sql",
+      include: "simples",
+    },
+  ];
+
+  for (const item of datasetSteps) {
+    const files = grouped[item.dataset] ?? [];
+    const included = selected.has(item.include) && files.length > 0;
+    steps.push(step(item.name, item.file, ["setup"], included));
+
+    if (included) {
+      scripts[item.file] = buildStepScript(
+        `CNPJ DB Loader PostgreSQL direct import ${item.name} step`,
+        rawStagingSql(item.dataset, files),
+        input,
+        true,
+      );
+    }
+  }
+
+  const materializeIncluded = hasAnyFinalMaterialization(selected);
+  steps.push(
+    step(
+      "materialize",
+      "materialize.sql",
+      datasetSteps
+        .filter((item) => selected.has(item.include))
+        .map((item) => item.name),
+      materializeIncluded,
+    ),
+  );
+  if (materializeIncluded) {
+    scripts["materialize.sql"] = buildStepScript(
+      "CNPJ DB Loader PostgreSQL direct import materialization step",
+      materializeSql(selected),
+      input,
+      true,
+    );
+  }
+
+  const secondaryIncluded =
+    selected.has("secondary-cnaes") && selected.has("establishments");
+  steps.push(
+    step(
+      "materialize-secondary-cnaes",
+      "materialize-secondary-cnaes.sql",
+      ["load-establishments"],
+      secondaryIncluded,
+    ),
+  );
+  if (secondaryIncluded) {
+    scripts["materialize-secondary-cnaes.sql"] = buildStepScript(
+      "CNPJ DB Loader PostgreSQL direct import secondary CNAEs step",
+      [materializeSecondaryCnaesSql()],
+      input,
+      true,
+    );
+  }
+
+  const indexesIncluded = selected.has("indexes");
+  steps.push(
+    step(
+      "indexes",
+      "indexes.sql",
+      materializeIncluded ? ["materialize"] : ["setup"],
+      indexesIncluded,
+    ),
+  );
+  if (indexesIncluded) {
+    scripts["indexes.sql"] = buildStepScript(
+      "CNPJ DB Loader PostgreSQL direct import indexes step",
+      indexesSql(),
+      input,
+      true,
+    );
+  }
+
+  const analyzeIncluded = selected.has("analyze");
+  const analyzeDependencies = [
+    ...(domainsIncluded ? ["load-domains"] : []),
+    ...(materializeIncluded ? ["materialize"] : []),
+    ...(secondaryIncluded ? ["materialize-secondary-cnaes"] : []),
+  ];
+  steps.push(
+    step(
+      "analyze",
+      "analyze.sql",
+      analyzeDependencies.length > 0 ? analyzeDependencies : ["setup"],
+      analyzeIncluded,
+    ),
+  );
+  if (analyzeIncluded) {
+    scripts["analyze.sql"] = buildStepScript(
+      "CNPJ DB Loader PostgreSQL direct import analyze step",
+      analyzeSql(selected),
+      input,
+      true,
+    );
+  }
+
+  const orchestratorLines = [
+    "-- CNPJ DB Loader direct PostgreSQL import orchestrator",
+    "-- Generated from sanitized Receita files by cnpj-db-loader postgres generate-script.",
+    "-- Execute with psql, for example:",
+    '--   psql -d "postgres://postgres:postgres@localhost:5432/cnpj" -f import-postgres-direct.sql',
+    "",
+    "\\set ON_ERROR_STOP on",
+    echo(
+      `Using source file encoding ${input.sourceEncoding} for psql copy operations...`,
+    ),
+    `set client_encoding to ${quoteSqlLiteral(input.sourceEncoding)};`,
+    echo(
+      `Starting CNPJ DB Loader direct PostgreSQL import using transaction mode ${input.transactionMode}...`,
+    ),
+    "",
+    ...(input.transactionMode === "single" ? ["begin;", ""] : []),
+  ];
+
+  for (const name of STEP_ORDER) {
+    const currentStep = steps.find((item) => item.name === name);
+    if (!currentStep?.included) {
+      continue;
+    }
+
+    orchestratorLines.push(
+      echo(
+        `[orchestrator] Running ${currentStep.name} (${currentStep.file})...`,
+      ),
+      `\\ir ${currentStep.file}`,
+      echo(`[orchestrator] Completed ${currentStep.name}.`),
+      "",
+    );
+  }
+
+  orchestratorLines.push(
+    ...(input.transactionMode === "single" ? ["commit;", ""] : []),
+    echo("CNPJ DB Loader hybrid PostgreSQL import completed."),
+    "",
+  );
+
+  scripts["import-postgres-direct.sql"] = orchestratorLines.join("\n");
+
+  return { scripts, steps };
 }
 
 export function generatePostgresDirectImportScript(
@@ -496,10 +989,10 @@ export function generatePostgresDirectImportScript(
     "-- CNPJ DB Loader hybrid PostgreSQL import script",
     "-- Generated from PostgreSQL-ready CSV files exported by cnpj-db-loader postgres export-csv.",
     "-- Execute with psql, for example:",
-    '--   psql "postgres://postgres:postgres@localhost:5432/cnpj" -f import-postgres-direct.sql',
+    '--   psql -d "postgres://postgres:postgres@localhost:5432/cnpj" -f import-postgres-direct.sql',
     "",
     "\\set ON_ERROR_STOP on",
-    "\\echo 'Starting CNPJ DB Loader hybrid PostgreSQL import...'",
+    echo("Starting CNPJ DB Loader hybrid PostgreSQL import..."),
     "",
     "begin;",
     "",
@@ -526,45 +1019,29 @@ export function generatePostgresDirectImportScript(
 }
 
 export function generatePostgresSanitizedDirectImportScript(
-  input: SanitizedScriptGenerationInput,
+  input: Omit<
+    SanitizedScriptGenerationInput,
+    "transactionMode" | "include" | "skipIndexes" | "skipAnalyze"
+  >,
 ): string {
-  const grouped = directFilesByDataset(input.files);
+  const generated = generatePostgresDirectScriptFiles({
+    ...input,
+    transactionMode: "single",
+    include: [
+      "domains",
+      "companies",
+      "establishments",
+      "partners",
+      "simples",
+      "secondary-cnaes",
+      "indexes",
+      "analyze",
+    ],
+    skipIndexes: false,
+    skipAnalyze: false,
+  });
 
-  const lines = [
-    "-- CNPJ DB Loader direct PostgreSQL import script",
-    "-- Generated from sanitized Receita files by cnpj-db-loader postgres generate-script.",
-    "-- This path avoids rewriting the dataset into a second CSV tree.",
-    "-- Execute with psql, for example:",
-    '--   psql "postgres://postgres:postgres@localhost:5432/cnpj" -f import-postgres-direct.sql',
-    "",
-    "\\set ON_ERROR_STOP on",
-    `\\echo 'Using source file encoding ${input.sourceEncoding} for psql copy operations...'`,
-    `set client_encoding to ${quoteSqlLiteral(input.sourceEncoding)};`,
-    "\\echo 'Starting CNPJ DB Loader direct PostgreSQL import from sanitized files...'",
-    "",
-    "begin;",
-    "",
-    "-- Keep the final schema and seed data managed by sql/schema.sql.",
-    "-- This script copies sanitized Receita files into temporary raw tables,",
-    "-- transforms values inside PostgreSQL, resets staging tables and upserts final data.",
-    "truncate table staging_companies restart identity;",
-    "truncate table staging_establishments restart identity;",
-    "truncate table staging_partners restart identity;",
-    "truncate table staging_simples_options restart identity;",
-    "",
-  ];
-
-  for (const dataset of DOMAIN_DATASETS) {
-    lines.push(...rawDomainSql(dataset, grouped[dataset] ?? []), "");
-  }
-
-  for (const dataset of STAGING_DATASETS) {
-    lines.push(...rawStagingSql(dataset, grouped[dataset] ?? []), "");
-  }
-
-  lines.push(...materializationAndAnalyzeSql());
-
-  return lines.join("\n");
+  return generated.scripts["import-postgres-direct.sql"] ?? "";
 }
 
 function materializationAndAnalyzeSql(): string[] {
@@ -573,11 +1050,13 @@ function materializationAndAnalyzeSql(): string[] {
     "",
     materializeEstablishmentsSql(),
     "",
+    materializeSecondaryCnaesSql(),
+    "",
     materializePartnersSql(),
     "",
     materializeSimplesSql(),
     "",
-    "\\echo 'Refreshing planner statistics...'",
+    echo("Refreshing planner statistics..."),
     "analyze companies;",
     "analyze establishments;",
     "analyze establishment_secondary_cnaes;",
@@ -592,7 +1071,7 @@ function materializationAndAnalyzeSql(): string[] {
     "",
     "commit;",
     "",
-    "\\echo 'CNPJ DB Loader hybrid PostgreSQL import completed.'",
+    echo("CNPJ DB Loader hybrid PostgreSQL import completed."),
     "",
   ];
 }

@@ -10,15 +10,43 @@ import {
   isImportDatasetType,
   type ImportDatasetType,
 } from "../import/types.js";
-import { generatePostgresSanitizedDirectImportScript } from "./script.js";
+import { generatePostgresDirectScriptFiles } from "./script.js";
 import type {
+  PostgresDirectIncludeTarget,
   PostgresDirectScriptDatasetSummary,
   PostgresDirectScriptOptions,
   PostgresDirectScriptSummary,
   PostgresDirectSourceFile,
+  PostgresDirectTransactionMode,
 } from "./types.js";
 
 const DEFAULT_SOURCE_ENCODING = "UTF8";
+const DEFAULT_TRANSACTION_MODE: PostgresDirectTransactionMode = "single";
+const ALL_INCLUDE_TARGETS: PostgresDirectIncludeTarget[] = [
+  "domains",
+  "companies",
+  "establishments",
+  "partners",
+  "simples",
+  "secondary-cnaes",
+  "indexes",
+  "analyze",
+];
+
+const INCLUDE_TARGETS_BY_DATASET: Partial<
+  Record<ImportDatasetType, PostgresDirectIncludeTarget>
+> = {
+  companies: "companies",
+  establishments: "establishments",
+  partners: "partners",
+  simples_options: "simples",
+  countries: "domains",
+  cities: "domains",
+  partner_qualifications: "domains",
+  legal_natures: "domains",
+  reasons: "domains",
+  cnaes: "domains",
+};
 
 function defaultPostgresDirectOutputPath(inputPath: string): string {
   const baseName = path.basename(inputPath);
@@ -30,7 +58,7 @@ function defaultPostgresDirectOutputPath(inputPath: string): string {
 }
 
 function inferNextStep(scriptPath: string): string {
-  return `psql "postgres://postgres:postgres@localhost:5432/cnpj" -f ${scriptPath.replace(/\\/g, "/")}`;
+  return `psql -d "postgres://postgres:postgres@localhost:5432/cnpj" -f ${scriptPath.replace(/\\/g, "/")}`;
 }
 
 function normalizeSourceEncoding(value: string | undefined): string {
@@ -43,6 +71,55 @@ function normalizeSourceEncoding(value: string | undefined): string {
   }
 
   return encoding.toUpperCase();
+}
+
+function normalizeTransactionMode(
+  value: PostgresDirectTransactionMode | undefined,
+): PostgresDirectTransactionMode {
+  const mode = value ?? DEFAULT_TRANSACTION_MODE;
+  if (!["single", "phase", "none"].includes(mode)) {
+    throw new ValidationError(
+      `Invalid transaction mode: ${String(value)}. Use single, phase or none.`,
+    );
+  }
+
+  return mode;
+}
+
+function isIncludeTarget(value: string): value is PostgresDirectIncludeTarget {
+  return (ALL_INCLUDE_TARGETS as string[]).includes(value);
+}
+
+function normalizeIncludeTargets(
+  include: PostgresDirectIncludeTarget[] | undefined,
+  dataset: ImportDatasetType | undefined,
+): PostgresDirectIncludeTarget[] {
+  if (include && include.length > 0) {
+    const unique = [...new Set(include)];
+    const invalid = unique.filter((item) => !isIncludeTarget(item));
+    if (invalid.length > 0) {
+      throw new ValidationError(
+        `Invalid include target(s): ${invalid.join(", ")}. Use ${ALL_INCLUDE_TARGETS.join(", ")}.`,
+      );
+    }
+
+    return unique;
+  }
+
+  if (dataset) {
+    const target = INCLUDE_TARGETS_BY_DATASET[dataset];
+    if (!target) {
+      return [];
+    }
+
+    if (target === "establishments") {
+      return ["establishments", "secondary-cnaes", "analyze"];
+    }
+
+    return [target, "analyze"];
+  }
+
+  return [...ALL_INCLUDE_TARGETS];
 }
 
 export async function generatePostgresDirectScript(
@@ -67,6 +144,10 @@ export async function generatePostgresDirectScript(
     options.outputPath ?? defaultPostgresDirectOutputPath(validatedPath),
   );
   const sourceEncoding = normalizeSourceEncoding(options.sourceEncoding);
+  const transactionMode = normalizeTransactionMode(options.transactionMode);
+  const include = normalizeIncludeTargets(options.include, options.dataset);
+  const skipIndexes = options.skipIndexes ?? false;
+  const skipAnalyze = options.skipAnalyze ?? false;
   const inspected = await inspectFiles(validatedPath);
   const recognizedFiles = inspected.entries
     .filter((entry) => entry.entryKind === "file")
@@ -103,6 +184,10 @@ export async function generatePostgresDirectScript(
     totalFiles: recognizedFiles.length,
     datasets,
     sourceEncoding,
+    transactionMode,
+    include,
+    skipIndexes,
+    skipAnalyze,
   });
 
   await mkdir(outputPath, { recursive: true });
@@ -148,11 +233,23 @@ export async function generatePostgresDirectScript(
 
   const scriptName = options.scriptName ?? "import-postgres-direct.sql";
   const scriptPath = path.join(outputPath, scriptName);
-  const script = generatePostgresSanitizedDirectImportScript({
+  const generated = generatePostgresDirectScriptFiles({
     files: sourceFiles,
     sourceEncoding,
+    transactionMode,
+    include,
+    skipIndexes,
+    skipAnalyze,
   });
-  await writeFile(scriptPath, script, "utf8");
+
+  const scriptFiles: string[] = [];
+  for (const [fileName, script] of Object.entries(generated.scripts)) {
+    const outputFileName =
+      fileName === "import-postgres-direct.sql" ? scriptName : fileName;
+    const outputFilePath = path.join(outputPath, outputFileName);
+    await writeFile(outputFilePath, script, "utf8");
+    scriptFiles.push(outputFilePath);
+  }
 
   const manifestPath = path.join(outputPath, "manifest.json");
   const summaryDatasets = [...summariesByDataset.values()].sort(
@@ -167,13 +264,19 @@ export async function generatePostgresDirectScript(
   const manifest = {
     generatedAt: new Date().toISOString(),
     mode: "direct-sanitized-script",
+    transactionMode,
+    include,
+    skipIndexes,
+    skipAnalyze,
     inputPath: path.resolve(inputPath),
     validatedPath,
     outputPath,
     scriptPath,
+    scriptFiles,
     sourceEncoding,
     totalFiles: sourceFiles.length,
     totalBytes,
+    steps: generated.steps,
     datasets: summaryDatasets,
   };
   await writeFile(
@@ -197,15 +300,19 @@ export async function generatePostgresDirectScript(
     scriptPath,
     manifestPath,
     sourceEncoding,
+    transactionMode,
     totalFiles: sourceFiles.length,
     totalBytes,
     datasets: summaryDatasets,
+    scriptFiles,
+    steps: generated.steps,
     warnings: [
       ...(validation.ok ? [] : validation.errors),
       "This script imports sanitized Receita files directly with psql \\copy. It avoids rewriting the full dataset into a second CSV tree.",
-      "The generated script expects the database schema generated by cnpj-db-loader to be applied before execution.",
+      "The generated scripts expect the database schema generated by cnpj-db-loader to be applied before execution.",
       "The direct PostgreSQL script now defaults to UTF8 because the sanitize command writes clean UTF-8 files.",
       "Use --source-encoding WIN1252 or LATIN1 only when generating scripts for legacy sanitized files produced by older loader versions.",
+      "The generated import is now modular. Use import-postgres-direct.sql as the orchestrator or run individual phase scripts manually.",
     ],
     nextStep: inferNextStep(scriptPath),
   };

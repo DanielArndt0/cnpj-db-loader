@@ -819,6 +819,14 @@ export function createPostgresDirectScriptProgressReporter(): (
       console.log(formatKeyValue("Validated path", event.validatedPath));
       console.log(formatKeyValue("Output path", event.outputPath));
       console.log(formatKeyValue("Source encoding", event.sourceEncoding));
+      console.log(formatKeyValue("Transaction mode", event.transactionMode));
+      console.log(formatKeyValue("Included steps", event.include.join(", ")));
+      console.log(
+        formatKeyValue("Skip indexes", event.skipIndexes ? "yes" : "no"),
+      );
+      console.log(
+        formatKeyValue("Skip analyze", event.skipAnalyze ? "yes" : "no"),
+      );
       console.log(formatKeyValue("Files queued", event.totalFiles));
       return;
     }

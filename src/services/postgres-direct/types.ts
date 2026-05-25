@@ -86,6 +86,25 @@ export type PostgresDirectScriptDatasetSummary = {
   sourceFiles: string[];
 };
 
+export type PostgresDirectTransactionMode = "single" | "phase" | "none";
+
+export type PostgresDirectIncludeTarget =
+  | "domains"
+  | "companies"
+  | "establishments"
+  | "partners"
+  | "simples"
+  | "secondary-cnaes"
+  | "indexes"
+  | "analyze";
+
+export type PostgresDirectScriptStep = {
+  name: string;
+  file: string;
+  dependsOn: string[];
+  included: boolean;
+};
+
 export type PostgresDirectScriptProgressEvent =
   | {
       kind: "start";
@@ -95,6 +114,10 @@ export type PostgresDirectScriptProgressEvent =
       totalFiles: number;
       datasets: ImportDatasetType[];
       sourceEncoding: string;
+      transactionMode: PostgresDirectTransactionMode;
+      include: PostgresDirectIncludeTarget[];
+      skipIndexes: boolean;
+      skipAnalyze: boolean;
     }
   | {
       kind: "file_registered";
@@ -121,6 +144,10 @@ export type PostgresDirectScriptOptions = {
   dataset?: ImportDatasetType | undefined;
   scriptName?: string | undefined;
   sourceEncoding?: string | undefined;
+  transactionMode?: PostgresDirectTransactionMode | undefined;
+  include?: PostgresDirectIncludeTarget[] | undefined;
+  skipIndexes?: boolean | undefined;
+  skipAnalyze?: boolean | undefined;
   onProgress?: PostgresDirectScriptProgressListener | undefined;
 };
 
@@ -131,9 +158,12 @@ export type PostgresDirectScriptSummary = {
   scriptPath: string;
   manifestPath: string;
   sourceEncoding: string;
+  transactionMode: PostgresDirectTransactionMode;
   totalFiles: number;
   totalBytes: number;
   datasets: PostgresDirectScriptDatasetSummary[];
+  scriptFiles: string[];
+  steps: PostgresDirectScriptStep[];
   warnings: string[];
   nextStep?: string | undefined;
 };

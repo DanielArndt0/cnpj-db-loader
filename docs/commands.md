@@ -71,7 +71,7 @@ cnpj-db-loader quarantine show 42
 ## PostgreSQL direct import helper
 
 ```bash
-cnpj-db-loader postgres generate-script <input> [--output <path>] [--dataset <dataset>] [--script-name <name>] [--source-encoding <encoding>] [-f]
+cnpj-db-loader postgres generate-script <input> [--output <path>] [--dataset <dataset>] [--script-name <name>] [--source-encoding <encoding>] [--transaction-mode <mode>] [--include <items>] [--skip-indexes] [--skip-analyze] [-f]
 cnpj-db-loader postgres export-csv <input> [--output <path>] [--dataset <dataset>] [--script-name <name>] [-f]
 ```
 
@@ -85,4 +85,8 @@ Options:
 - `--dataset <dataset>`: generate only one dataset block.
 - `--script-name <name>`: custom generated SQL script name.
 - `--source-encoding <encoding>`: source file encoding for `psql` copy operations. Defaults to `UTF8`.
+- `--transaction-mode <mode>`: generated transaction strategy: `single`, `phase` or `none`. Defaults to `single`.
+- `--include <items>`: comma-separated generation targets such as `domains,companies,establishments,secondary-cnaes,analyze`.
+- `--skip-indexes`: skip the generated indexes phase.
+- `--skip-analyze`: skip the generated analyze phase.
 - `-f, --force`: skip confirmation.
