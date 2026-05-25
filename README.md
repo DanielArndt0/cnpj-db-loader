@@ -10,7 +10,7 @@ This version focuses on the real loading workflow:
 - check, download, retry, clean, and inspect the latest Federal Revenue CNPJ monthly ZIP archives from the public share
 - extract Receita Federal ZIP archives
 - validate an extracted tree
-- sanitize validated files before import to remove known low-level byte issues
+- sanitize validated files into clean UTF-8 before import, removing NUL bytes, invalid bytes and problematic control characters
 - print or generate final, staging, or combined SQL schemas
 - configure and test the default PostgreSQL URL
 - import validated dataset files into PostgreSQL with:
@@ -51,7 +51,7 @@ cnpj-db-loader schema generate --profile full
 cnpj-db-loader import ./downloads/<reference>/sanitized --load-batch-size 500 --materialize-batch-size 50000 --verbose-progress
 
 # Optional hybrid path for PostgreSQL direct loading
-cnpj-db-loader postgres generate-script ./downloads/<reference>/sanitized --output ./downloads/<reference>/postgres-direct --force
+cnpj-db-loader postgres generate-script ./downloads/<reference>/sanitized --output ./downloads/<reference>/postgres-direct --source-encoding UTF8 --force
 psql "postgres://postgres:postgres@localhost:5432/cnpj" -f ./downloads/<reference>/postgres-direct/import-postgres-direct.sql
 ```
 
@@ -67,7 +67,7 @@ cnpj-db-loader federal-revenue sync [reference] [--reference <yyyy-mm>] [--curre
 cnpj-db-loader inspect <input>
 cnpj-db-loader extract <input> [--output <path>]
 cnpj-db-loader validate <input>
-cnpj-db-loader sanitize <input> [--output <path>] [--dataset <name>] [-f]
+cnpj-db-loader sanitize <input> [--output <path>] [--dataset <name>] [--source-encoding <encoding>] [-f]
 cnpj-db-loader schema print [--profile <profile>]
 cnpj-db-loader schema generate [--name <name>] [--output <path>] [--profile <profile>]
 cnpj-db-loader database config set <url>
@@ -95,11 +95,11 @@ For local benchmarks or controlled full loads, the CLI can now generate a direct
 
 ```bash
 cnpj-db-loader sanitize ./downloads/<reference>/extracted
-cnpj-db-loader postgres generate-script ./downloads/<reference>/sanitized --output ./downloads/<reference>/postgres-direct --force
+cnpj-db-loader postgres generate-script ./downloads/<reference>/sanitized --output ./downloads/<reference>/postgres-direct --source-encoding UTF8 --force
 psql "postgres://postgres:postgres@localhost:5432/cnpj" -f ./downloads/<reference>/postgres-direct/import-postgres-direct.sql
 ```
 
-This path keeps download, extraction, validation and sanitization inside the loader, then lets PostgreSQL load the sanitized Receita files directly through `\copy`, convert values into staging tables and materialize the final tables with set-based SQL. The standard `import` command remains the safest path when checkpoint resume and quarantine recovery are required.
+This path keeps download, extraction, validation and robust UTF-8 sanitization inside the loader, then lets PostgreSQL load the sanitized Receita files directly through `\copy`, convert values into staging tables and materialize the final tables with set-based SQL. The standard `import` command remains the safest path when checkpoint resume and quarantine recovery are required.
 
 ## Logs
 

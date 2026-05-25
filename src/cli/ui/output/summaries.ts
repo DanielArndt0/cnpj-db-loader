@@ -248,8 +248,22 @@ export function printSanitizeSummary(
   console.log(
     formatKeyValue("Processed bytes", formatBytes(summary.totalBytes)),
   );
+  console.log(formatKeyValue("Source encoding", summary.sourceEncoding));
+  console.log(formatKeyValue("Output encoding", "UTF8"));
   console.log(
     formatKeyValue("Removed NUL bytes", formatCount(summary.nulBytesRemoved)),
+  );
+  console.log(
+    formatKeyValue(
+      "Removed invalid bytes",
+      formatCount(summary.invalidBytesRemoved),
+    ),
+  );
+  console.log(
+    formatKeyValue(
+      "Removed control chars",
+      formatCount(summary.controlCharsRemoved),
+    ),
   );
   console.log(formatKeyValue("Changed files", summary.changedFiles));
   console.log(formatKeyValue("Unchanged files", summary.unchangedFiles));

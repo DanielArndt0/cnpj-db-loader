@@ -546,8 +546,9 @@ export function createSanitizeProgressReporter(): (
         `Validated: ${shortPath(event.validatedPath)}`,
         `Output: ${shortPath(event.outputPath)}`,
         `Datasets: ${event.datasets.join(" > ")}`,
+        `Source encoding: ${event.sourceEncoding} > UTF8`,
         `Files: 0/${formatCount(event.totalFiles)} | Bytes: ${formatBytes(0)} / ${formatBytes(event.totalBytes)}`,
-        `Rows counted: ${formatCount(0)} | NUL removed: ${formatCount(0)}`,
+        `Rows: ${formatCount(0)} | NUL: ${formatCount(0)} | Invalid bytes: ${formatCount(0)} | Controls: ${formatCount(0)}`,
         `Current: waiting...`,
       ];
       renderBlock([
@@ -564,8 +565,9 @@ export function createSanitizeProgressReporter(): (
         currentLines[1] ?? "",
         currentLines[2] ?? "",
         currentLines[3] ?? "",
+        currentLines[4] ?? "",
         `Files: ${formatCount(event.fileIndex)}/${formatCount(event.totalFiles)} | Bytes: ${formatBytes(event.bytesProcessed)} / ${formatBytes(event.totalBytes)}`,
-        `Rows counted: ${formatCount(event.processedRows)} | NUL removed: ${formatCount(event.nulBytesRemoved)} | Changed files: ${formatCount(event.changedFiles)}`,
+        `Rows: ${formatCount(event.processedRows)} | NUL: ${formatCount(event.nulBytesRemoved)} | Invalid bytes: ${formatCount(event.invalidBytesRemoved)} | Controls: ${formatCount(event.controlCharsRemoved)} | Changed: ${formatCount(event.changedFiles)}`,
         `Current: ${shortPath(event.currentFileDisplayPath)}`,
       ];
       renderBlock([
@@ -585,6 +587,18 @@ export function createSanitizeProgressReporter(): (
     );
     console.log(
       formatKeyValue("Removed NUL bytes", formatCount(event.nulBytesRemoved)),
+    );
+    console.log(
+      formatKeyValue(
+        "Removed invalid bytes",
+        formatCount(event.invalidBytesRemoved),
+      ),
+    );
+    console.log(
+      formatKeyValue(
+        "Removed control chars",
+        formatCount(event.controlCharsRemoved),
+      ),
     );
     console.log(
       formatKeyValue("Changed files", formatCount(event.changedFiles)),

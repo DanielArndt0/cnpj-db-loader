@@ -84,5 +84,5 @@ Options:
 - `--output <path>`: directory where manifest and SQL script are generated.
 - `--dataset <dataset>`: generate only one dataset block.
 - `--script-name <name>`: custom generated SQL script name.
-- `--source-encoding <encoding>`: source file encoding for `psql` copy operations. Defaults to `WIN1252`.
+- `--source-encoding <encoding>`: source file encoding for `psql` copy operations. Defaults to `UTF8`.
 - `-f, --force`: skip confirmation.

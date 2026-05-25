@@ -1,4 +1,6 @@
 import type { DatasetType, FileInspection } from "../inspect.service.js";
+import type { SanitizeSourceEncoding } from "./encoding.js";
+export type { SanitizeSourceEncoding } from "./encoding.js";
 
 export type SanitizeDatasetType = Exclude<
   DatasetType,
@@ -27,7 +29,10 @@ export type SanitizedFileResult = {
   plan: SanitizeFilePlan;
   totalBytesRead: number;
   totalBytesWritten: number;
+  sourceEncoding: SanitizeSourceEncoding;
   nulBytesRemoved: number;
+  invalidBytesRemoved: number;
+  controlCharsRemoved: number;
   lineCount: number;
   changed: boolean;
 };
@@ -40,7 +45,10 @@ export type SanitizeSummary = {
   totalBytes: number;
   processedFiles: number;
   processedRows: number;
+  sourceEncoding: SanitizeSourceEncoding;
   nulBytesRemoved: number;
+  invalidBytesRemoved: number;
+  controlCharsRemoved: number;
   changedFiles: number;
   unchangedFiles: number;
   datasets: SanitizeDatasetType[];
@@ -51,6 +59,8 @@ export type SanitizeSummary = {
     lineCount: number;
     changed: boolean;
     nulBytesRemoved: number;
+    invalidBytesRemoved: number;
+    controlCharsRemoved: number;
   }>;
   warnings: string[];
   nextStep?: string | undefined;
@@ -64,6 +74,7 @@ export type SanitizeProgressEvent =
       totalFiles: number;
       totalBytes: number;
       datasets: SanitizeDatasetType[];
+      sourceEncoding: SanitizeSourceEncoding;
     }
   | {
       kind: "progress";
@@ -76,6 +87,8 @@ export type SanitizeProgressEvent =
       currentFileSize: number;
       processedRows: number;
       nulBytesRemoved: number;
+      invalidBytesRemoved: number;
+      controlCharsRemoved: number;
       changedFiles: number;
     }
   | {
@@ -83,6 +96,8 @@ export type SanitizeProgressEvent =
       totalFiles: number;
       processedRows: number;
       nulBytesRemoved: number;
+      invalidBytesRemoved: number;
+      controlCharsRemoved: number;
       changedFiles: number;
       totalBytes: number;
     };
@@ -92,6 +107,7 @@ export type SanitizeProgressListener = (event: SanitizeProgressEvent) => void;
 export type SanitizeOptions = {
   outputPath?: string | undefined;
   dataset?: SanitizeDatasetType | undefined;
+  sourceEncoding?: string | undefined;
   onProgress?: SanitizeProgressListener | undefined;
 };
 

@@ -21,7 +21,7 @@ The import pipeline now uses:
 - deterministic dataset order to respect foreign keys
 - an exact preparatory scan that counts total source rows and planned batches before the first write
 - streaming file reads to avoid loading the full dataset into RAM
-- an optional sanitize step that removes known low-level byte issues before import starts
+- an optional sanitize step that writes clean UTF-8 files and removes known low-level byte issues before import starts
 - COPY-based staged writes for the large datasets followed by staged-to-final materialization
 - conflict-safe upserts for the smaller domain datasets
 - `import_plans` and `import_plan_files` to persist exact import plans and avoid recounting the same source files on resume

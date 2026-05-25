@@ -2,33 +2,38 @@ import { createReadStream, createWriteStream } from "node:fs";
 import { mkdir } from "node:fs/promises";
 import path from "node:path";
 
+import {
+  normalizeSanitizeSourceEncoding,
+  SanitizeEncodingNormalizer,
+} from "./encoding.js";
 import type { SanitizeFilePlan, SanitizedFileResult } from "./types.js";
 
-function stripNulBytes(chunk: Buffer): { buffer: Buffer; removed: number } {
-  let removed = 0;
+async function writeUtf8(
+  output: ReturnType<typeof createWriteStream>,
+  value: string,
+): Promise<void> {
+  if (value.length === 0) {
+    return;
+  }
 
-  for (let index = 0; index < chunk.length; index += 1) {
-    if (chunk[index] === 0x00) {
-      removed += 1;
+  if (!output.write(value, "utf8")) {
+    await new Promise<void>((resolve, reject) => {
+      output.once("drain", resolve);
+      output.once("error", reject);
+    });
+  }
+}
+
+function countNewlines(value: string): number {
+  let count = 0;
+
+  for (let index = 0; index < value.length; index += 1) {
+    if (value[index] === "\n") {
+      count += 1;
     }
   }
 
-  if (removed === 0) {
-    return { buffer: chunk, removed: 0 };
-  }
-
-  const sanitized = Buffer.allocUnsafe(chunk.length - removed);
-  let outputIndex = 0;
-
-  for (let index = 0; index < chunk.length; index += 1) {
-    const value = chunk[index]!;
-    if (value !== 0x00) {
-      sanitized[outputIndex] = value;
-      outputIndex += 1;
-    }
-  }
-
-  return { buffer: sanitized, removed };
+  return count;
 }
 
 export async function sanitizeDatasetFile(
@@ -39,41 +44,51 @@ export async function sanitizeDatasetFile(
     currentFileSize: number;
     processedRows: number;
     nulBytesRemoved: number;
+    invalidBytesRemoved: number;
+    controlCharsRemoved: number;
   }) => void,
+  options: { sourceEncoding?: string | undefined } = {},
 ): Promise<SanitizedFileResult> {
   await mkdir(path.dirname(plan.outputPath), { recursive: true });
 
+  const sourceEncoding = normalizeSanitizeSourceEncoding(
+    options.sourceEncoding,
+  );
+  const normalizer = new SanitizeEncodingNormalizer(sourceEncoding);
   const input = createReadStream(plan.absolutePath);
-  const output = createWriteStream(plan.outputPath);
+  const output = createWriteStream(plan.outputPath, { encoding: "utf8" });
 
   let totalBytesRead = 0;
   let totalBytesWritten = 0;
   let nulBytesRemoved = 0;
+  let invalidBytesRemoved = 0;
+  let controlCharsRemoved = 0;
   let lineCount = 0;
-  let sawAnyByte = false;
-  let lastByteWasNewline = false;
+  let sawAnyCharacter = false;
+  let lastCharacterWasNewline = false;
+
+  const processText = async (text: string): Promise<void> => {
+    if (text.length === 0) {
+      return;
+    }
+
+    sawAnyCharacter = true;
+    lineCount += countNewlines(text);
+    lastCharacterWasNewline = text.endsWith("\n");
+    totalBytesWritten += Buffer.byteLength(text, "utf8");
+    await writeUtf8(output, text);
+  };
 
   try {
     for await (const chunk of input) {
       const chunkBuffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
       totalBytesRead += chunkBuffer.length;
 
-      const { buffer, removed } = stripNulBytes(chunkBuffer);
-      nulBytesRemoved += removed;
-      sawAnyByte = sawAnyByte || buffer.length > 0;
-
-      for (let index = 0; index < buffer.length; index += 1) {
-        if (buffer[index] === 0x0a) {
-          lineCount += 1;
-        }
-      }
-
-      if (buffer.length > 0) {
-        lastByteWasNewline = buffer[buffer.length - 1] === 0x0a;
-      }
-
-      totalBytesWritten += buffer.length;
-      output.write(buffer);
+      const normalized = normalizer.normalizeChunk(chunkBuffer);
+      nulBytesRemoved += normalized.nulBytesRemoved;
+      invalidBytesRemoved += normalized.invalidBytesRemoved;
+      controlCharsRemoved += normalized.controlCharsRemoved;
+      await processText(normalized.text);
 
       onChunk?.({
         bytesProcessed: chunkBuffer.length,
@@ -81,24 +96,42 @@ export async function sanitizeDatasetFile(
         currentFileSize: plan.fileSize,
         processedRows: lineCount,
         nulBytesRemoved,
+        invalidBytesRemoved,
+        controlCharsRemoved,
       });
     }
 
-    if (sawAnyByte && !lastByteWasNewline) {
+    const flushed = normalizer.flush();
+    nulBytesRemoved += flushed.nulBytesRemoved;
+    invalidBytesRemoved += flushed.invalidBytesRemoved;
+    controlCharsRemoved += flushed.controlCharsRemoved;
+    await processText(flushed.text);
+
+    if (sawAnyCharacter && !lastCharacterWasNewline) {
       lineCount += 1;
     }
   } finally {
     input.close();
     output.end();
-    await new Promise<void>((resolve) => output.on("finish", () => resolve()));
+    await new Promise<void>((resolve, reject) => {
+      output.on("finish", () => resolve());
+      output.on("error", (error) => reject(error));
+    });
   }
 
   return {
     plan,
     totalBytesRead,
     totalBytesWritten,
+    sourceEncoding,
     nulBytesRemoved,
+    invalidBytesRemoved,
+    controlCharsRemoved,
     lineCount,
-    changed: nulBytesRemoved > 0 || totalBytesRead !== totalBytesWritten,
+    changed:
+      nulBytesRemoved > 0 ||
+      invalidBytesRemoved > 0 ||
+      controlCharsRemoved > 0 ||
+      totalBytesRead !== totalBytesWritten,
   };
 }

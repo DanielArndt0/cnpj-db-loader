@@ -44,7 +44,7 @@ export function registerPostgresCommands(program: Command): void {
     )
     .option(
       "--source-encoding <encoding>",
-      "PostgreSQL client encoding used while reading sanitized Receita files. Defaults to WIN1252.",
+      "PostgreSQL client encoding used while reading sanitized Receita files. Defaults to UTF8.",
     )
     .option("-f, --force", "Skip the confirmation prompt.")
     .description(
