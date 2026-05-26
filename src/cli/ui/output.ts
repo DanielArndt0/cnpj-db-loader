@@ -6,6 +6,7 @@ export {
   printExtractionSummary,
   printFederalRevenueCheckSummary,
   printFederalRevenueCleanSummary,
+  printFederalRevenueConfigSummary,
   printFederalRevenueDownloadSummary,
   printFederalRevenueStatusSummary,
   printFederalRevenueSyncSummary,

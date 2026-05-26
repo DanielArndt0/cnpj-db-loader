@@ -6,7 +6,6 @@ import type {
   FederalRevenueReferenceSelection,
 } from "./types.js";
 
-export const DEFAULT_FEDERAL_REVENUE_SHARE_TOKEN = "YggdBLfdninEJX9";
 export const DEFAULT_FEDERAL_REVENUE_WEBDAV_URL =
   "https://arquivos.receitafederal.gov.br/public.php/webdav";
 export const DEFAULT_FEDERAL_REVENUE_USER_AGENT =
@@ -23,7 +22,15 @@ function normalizeBaseUrl(value?: string): string {
 }
 
 function getShareToken(value?: string): string {
-  return value ?? DEFAULT_FEDERAL_REVENUE_SHARE_TOKEN;
+  const shareToken = value?.trim();
+
+  if (!shareToken) {
+    throw new ValidationError(
+      "Federal Revenue public share token is not configured. Run `cnpj-db-loader federal-revenue config set share-token <token>` or pass --share-token.",
+    );
+  }
+
+  return shareToken;
 }
 
 function encodePathSegment(value: string): string {

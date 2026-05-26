@@ -2,6 +2,10 @@
 
 | Command                         | Purpose                                                                                                                                                           |
 | ------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `federal-revenue config set`    | Persist Federal Revenue WebDAV settings such as share token, WebDAV URL, and user agent in the local config file.                                                 |
+| `federal-revenue config show`   | Show the effective Federal Revenue configuration.                                                                                                                 |
+| `federal-revenue config test`   | Test the configured Federal Revenue WebDAV connection.                                                                                                            |
+| `federal-revenue config reset`  | Reset one or all persisted Federal Revenue settings.                                                                                                              |
 | `federal-revenue check`         | Check the selected or latest Federal Revenue monthly CNPJ reference and list the remote ZIP files.                                                                |
 | `federal-revenue download`      | Download the selected Federal Revenue monthly CNPJ ZIP files with retries, `.part` files, and skip-on-existing behavior.                                          |
 | `federal-revenue status`        | Read the local Federal Revenue manifest and report downloaded, failed, partial, and missing files.                                                                |
@@ -35,6 +39,8 @@
 ## Examples
 
 ```bash
+cnpj-db-loader federal-revenue config set share-token "<public-share-token>"
+cnpj-db-loader federal-revenue config test
 cnpj-db-loader federal-revenue check
 cnpj-db-loader federal-revenue check 2026-05
 cnpj-db-loader federal-revenue download --output ./downloads --force

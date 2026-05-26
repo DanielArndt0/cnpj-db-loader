@@ -149,6 +149,41 @@ export function printDatabaseConfigSummary(
   console.log(`${theme.muted("Log file:")} ${resolveLogFilePath(logFilePath)}`);
 }
 
+export function printFederalRevenueConfigSummary(
+  config: {
+    webdavUrl: string;
+    userAgent: string;
+    shareToken?: string | undefined;
+    configured: {
+      webdavUrl: boolean;
+      userAgent: boolean;
+      shareToken: boolean;
+    };
+  },
+  logFilePath: string,
+): void {
+  console.log(
+    theme.successLabel("FEDERAL REVENUE"),
+    "Federal Revenue configuration loaded.",
+  );
+  console.log(
+    formatKeyValue(
+      "WebDAV URL",
+      `${config.webdavUrl}${config.configured.webdavUrl ? "" : " (default)"}`,
+    ),
+  );
+  console.log(
+    formatKeyValue(
+      "User agent",
+      `${config.userAgent}${config.configured.userAgent ? "" : " (default)"}`,
+    ),
+  );
+  console.log(
+    formatKeyValue("Share token", config.shareToken ?? "not configured"),
+  );
+  console.log(`${theme.muted("Log file:")} ${resolveLogFilePath(logFilePath)}`);
+}
+
 export function printDatabaseCleanupSummary(
   summary: {
     scope: string;

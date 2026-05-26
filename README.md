@@ -7,7 +7,7 @@ CNPJ DB Loader is a practical CLI for preparing Brazilian Federal Revenue CNPJ d
 This version focuses on the real loading workflow:
 
 - inspect a downloaded directory
-- check, download, retry, clean, and inspect the latest Federal Revenue CNPJ monthly ZIP archives from the public share
+- configure, check, download, retry, clean, and inspect the latest Federal Revenue CNPJ monthly ZIP archives from the public share
 - extract Receita Federal ZIP archives
 - validate an extracted tree
 - sanitize validated files into clean UTF-8 before import, removing NUL bytes, invalid bytes and problematic control characters
@@ -39,6 +39,8 @@ npm run cli -- --help
 ## Quick start
 
 ```bash
+cnpj-db-loader federal-revenue config set share-token "<public-share-token>"
+cnpj-db-loader federal-revenue config test
 cnpj-db-loader federal-revenue check
 cnpj-db-loader federal-revenue download --output ./downloads
 cnpj-db-loader federal-revenue status --output ./downloads
@@ -58,6 +60,8 @@ psql -d "postgres://postgres:postgres@localhost:5432/cnpj" -f ./downloads/<refer
 ## Stable commands
 
 ```bash
+cnpj-db-loader federal-revenue config set share-token "<public-share-token>"
+cnpj-db-loader federal-revenue config test
 cnpj-db-loader federal-revenue check [reference] [--reference <yyyy-mm>] [--current]
 cnpj-db-loader federal-revenue download [reference] [--reference <yyyy-mm>] [--current] [--output <path>] [--retries <number>] [--overwrite] [-f]
 cnpj-db-loader federal-revenue status [reference] [--reference <yyyy-mm>] [--current] [--output <path>]
