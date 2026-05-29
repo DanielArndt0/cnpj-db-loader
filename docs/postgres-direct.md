@@ -29,7 +29,9 @@ PostgreSQL is then responsible for:
 
 - `\copy` loading sanitized Receita files into temporary raw tables
 - SQL-side conversion of dates, numeric values and nullable fields
-- staging table population
+- quarantining known row-level inconsistencies in the existing `import_quarantine` table
+- updating the existing `import_plans`, `import_plan_files`, `import_checkpoints` and `import_materialization_checkpoints` tables
+- staging table population using only valid rows
 - set-based final table upserts
 - `establishment_secondary_cnaes` materialization
 - planner statistics refresh through `ANALYZE`
@@ -156,14 +158,16 @@ The generated scripts:
 
 1. enable `ON_ERROR_STOP` for `psql`;
 2. set the configured client encoding for `psql` copy operations;
-3. load domain datasets from sanitized Receita files into temporary raw text tables;
-4. upsert final domain tables;
-5. load large datasets from sanitized Receita files into temporary raw text tables;
-6. convert values inside PostgreSQL and insert them into `staging_companies`, `staging_establishments`, `staging_partners` and `staging_simples_options`;
-7. materialize final `companies`, `establishments`, `partners` and `simples_options` tables using set-based SQL;
-8. populate `establishment_secondary_cnaes` from `secondary_cnaes_raw`;
-9. optionally generate an indexes phase;
-10. optionally run `ANALYZE` on the affected tables.
+3. register the hybrid execution using the existing import plan tables;
+4. load each sanitized Receita file into a temporary raw text table;
+5. validate known row-level inconsistencies before staging insertion;
+6. write invalid rows to the existing `import_quarantine` table instead of silently discarding them;
+7. update the existing file checkpoints after each completed source file;
+8. convert valid values inside PostgreSQL and insert them into `staging_companies`, `staging_establishments`, `staging_partners` and `staging_simples_options`;
+9. materialize final `companies`, `establishments`, `partners` and `simples_options` tables using set-based SQL while updating the existing materialization checkpoints;
+10. populate `establishment_secondary_cnaes` from `secondary_cnaes_raw`;
+11. optionally generate an indexes phase;
+12. optionally run `ANALYZE` on the affected tables.
 
 The scripts do not recreate the schema. Run the normal schema first:
 
@@ -171,6 +175,30 @@ The scripts do not recreate the schema. Run the normal schema first:
 cnpj-db-loader schema generate --profile full --output ./sql/schema.sql
 psql -d "postgres://postgres:postgres@localhost:5432/cnpj" -f ./sql/schema.sql
 ```
+
+## Quarantine and checkpoint compatibility
+
+The hybrid mode reuses the same operational tables already created by the `full` schema profile:
+
+```text
+import_plans
+import_plan_files
+import_checkpoints
+import_materialization_checkpoints
+import_quarantine
+```
+
+Known row-level inconsistencies, such as missing required values or invalid transformed numeric/date values, are written to `import_quarantine`. Valid rows continue to staging in the same execution.
+
+Because the direct SQL path validates rows after `\copy` has loaded them into a temporary raw table, the existing quarantine columns remain compatible but some source-level details are represented differently: `raw_line` stores the JSON text representation of the loaded raw row and `checkpoint_offset` is left `NULL` when the exact original byte offset is not available.
+
+The direct scripts intentionally avoid creating a second quarantine model or new permanent operational tables. The generated SQL only reuses the existing loader schema.
+
+### Important limitation
+
+Malformed CSV structure or low-level `\copy` failures still stop the current phase because PostgreSQL rejects the source stream before row-level SQL validation can run. The normal `validate` and `sanitize` steps must run before `postgres generate-script` so structural and encoding problems are handled earlier in the pipeline.
+
+When running individual phase scripts manually, execute `setup.sql` first so the existing import plan tables are initialized for the hybrid execution.
 
 ## Monitoring PostgreSQL while the import runs
 

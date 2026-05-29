@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import path from "node:path";
 
 import {
@@ -23,6 +24,7 @@ type CsvScriptGenerationInput = {
 
 type SanitizedScriptGenerationInput = {
   files: PostgresDirectSourceFile[];
+  validatedPath?: string | undefined;
   sourceEncoding: string;
   transactionMode: PostgresDirectTransactionMode;
   include: readonly PostgresDirectIncludeTarget[];
@@ -33,6 +35,7 @@ type SanitizedScriptGenerationInput = {
 export type GeneratedPostgresDirectScripts = {
   scripts: Record<string, string>;
   steps: PostgresDirectScriptStep[];
+  sourceFingerprint: string;
 };
 
 const STAGING_DATASETS: readonly ImportDatasetType[] = [
@@ -400,31 +403,69 @@ function createRawTempTableSql(dataset: ImportDatasetType): string {
   ].join("\n");
 }
 
+function safeConversionFunctionsSql(): string[] {
+  return [
+    `create or replace function pg_temp.cdl_safe_date(value text)
+returns date
+language plpgsql
+immutable
+as $$
+declare
+  normalized text := btrim(value);
+begin
+  if normalized = '' or normalized = '00000000' then
+    return null;
+  end if;
+
+  if normalized !~ '^\\d{8}$' then
+    return null;
+  end if;
+
+  return (
+    substring(normalized, 1, 4) || '-' ||
+    substring(normalized, 5, 2) || '-' ||
+    substring(normalized, 7, 2)
+  )::date;
+exception when others then
+  return null;
+end;
+$$;`,
+    `create or replace function pg_temp.cdl_safe_numeric(value text)
+returns numeric
+language plpgsql
+immutable
+as $$
+declare
+  normalized text := btrim(value);
+begin
+  if normalized = '' then
+    return null;
+  end if;
+
+  if position(',' in normalized) > 0 and position('.' in normalized) > 0 then
+    normalized := replace(replace(normalized, '.', ''), ',', '.');
+  elsif position(',' in normalized) > 0 then
+    normalized := replace(normalized, ',', '.');
+  end if;
+
+  return normalized::numeric;
+exception when others then
+  return null;
+end;
+$$;`,
+  ];
+}
+
 function textExpression(alias: string, column: string): string {
   return `nullif(btrim(${alias}.${quoteIdentifier(column)}), '')`;
 }
 
 function dateExpression(alias: string, column: string): string {
-  const value = `btrim(${alias}.${quoteIdentifier(column)})`;
-  return [
-    "case",
-    `  when ${value} = '' or ${value} = '00000000' then null`,
-    `  when ${value} ~ '^\\d{8}$' then to_date(${value}, 'YYYYMMDD')`,
-    "  else null",
-    "end",
-  ].join(" ");
+  return `pg_temp.cdl_safe_date(${alias}.${quoteIdentifier(column)})`;
 }
 
 function numericExpression(alias: string, column: string): string {
-  const value = `btrim(${alias}.${quoteIdentifier(column)})`;
-  return [
-    "case",
-    `  when ${value} = '' then null`,
-    `  when ${value} like '%,%' and ${value} like '%.%' then replace(replace(${value}, '.', ''), ',', '.')::numeric`,
-    `  when ${value} like '%,%' then replace(${value}, ',', '.')::numeric`,
-    `  else ${value}::numeric`,
-    "end",
-  ].join(" ");
+  return `pg_temp.cdl_safe_numeric(${alias}.${quoteIdentifier(column)})`;
 }
 
 function integerExpression(alias: string, column: string): string {
@@ -482,9 +523,502 @@ function fieldExpression(
   }
 }
 
+type HybridValidationRule = {
+  condition: string;
+  code: string;
+  category: string;
+  message: string;
+};
+
+function rawTrimExpression(alias: string, column: string): string {
+  return `btrim(${alias}.${quoteIdentifier(column)})`;
+}
+
+function hasDefaultValue(dataset: ImportDatasetType, column: string): boolean {
+  return (
+    (dataset === "companies" && column === "company_size_code") ||
+    (dataset === "establishments" && column === "branch_type_code") ||
+    (dataset === "establishments" && column === "registration_status_code")
+  );
+}
+
+function validationRules(
+  dataset: ImportDatasetType,
+  alias: string,
+): HybridValidationRule[] {
+  const layout = DATASET_LAYOUTS[dataset];
+  const rules: HybridValidationRule[] = [];
+
+  for (const field of layout.fields) {
+    const rawValue = rawTrimExpression(alias, field.columnName);
+    const parsedValue = fieldExpression(dataset, field, alias);
+
+    if (field.dataType === "date") {
+      rules.push({
+        condition: `${rawValue} <> '' and ${rawValue} <> '00000000' and ${parsedValue} is null`,
+        code: "HYBRID_INVALID_DATE_VALUE",
+        category: "transform_error",
+        message: `Invalid date value for ${field.columnName}.`,
+      });
+    }
+
+    if (field.dataType === "numeric") {
+      rules.push({
+        condition: `${rawValue} <> '' and ${parsedValue} is null`,
+        code: "HYBRID_INVALID_NUMERIC_VALUE",
+        category: "transform_error",
+        message: `Invalid numeric value for ${field.columnName}.`,
+      });
+    }
+
+    if (field.dataType === "integer") {
+      rules.push({
+        condition: `${rawValue} <> '' and ${parsedValue} is null`,
+        code: "HYBRID_INVALID_INTEGER_VALUE",
+        category: "transform_error",
+        message: `Invalid integer value for ${field.columnName}.`,
+      });
+    }
+
+    if (field.dataType === "boolean") {
+      rules.push({
+        condition: `${rawValue} <> '' and ${parsedValue} is null`,
+        code: "HYBRID_INVALID_BOOLEAN_VALUE",
+        category: "transform_error",
+        message: `Invalid boolean value for ${field.columnName}.`,
+      });
+    }
+
+    if (
+      dataset === "simples_options" &&
+      ["simples_option_flag", "mei_option_flag"].includes(field.columnName)
+    ) {
+      rules.push({
+        condition: `${rawValue} <> '' and upper(${rawValue}) not in ('S', 'N')`,
+        code: "HYBRID_INVALID_ALLOWED_VALUE",
+        category: "transform_error",
+        message: `Invalid allowed value for ${field.columnName}.`,
+      });
+    }
+
+    if (!field.nullable && !hasDefaultValue(dataset, field.columnName)) {
+      rules.push({
+        condition: `${parsedValue} is null`,
+        code: "HYBRID_REQUIRED_VALUE_MISSING",
+        category: "not_null_violation",
+        message: `Missing required value for ${field.columnName}.`,
+      });
+    }
+  }
+
+  return rules;
+}
+
+function validationIssueExpression(
+  dataset: ImportDatasetType,
+  alias: string,
+): string {
+  const rules = validationRules(dataset, alias);
+
+  return [
+    "case",
+    ...rules.map(
+      (rule) =>
+        `  when ${rule.condition} then jsonb_build_object('code', ${quoteSqlLiteral(rule.code)}, 'category', ${quoteSqlLiteral(rule.category)}, 'message', ${quoteSqlLiteral(rule.message)})`,
+    ),
+    "  else null",
+    "end",
+  ].join("\n");
+}
+
+function domainValidationIssueExpression(alias: string): string {
+  return [
+    "case",
+    `  when nullif(btrim(${alias}.code), '') is null then jsonb_build_object('code', 'HYBRID_REQUIRED_VALUE_MISSING', 'category', 'not_null_violation', 'message', 'Missing required value for code.')`,
+    `  when nullif(btrim(${alias}.description), '') is null then jsonb_build_object('code', 'HYBRID_REQUIRED_VALUE_MISSING', 'category', 'not_null_violation', 'message', 'Missing required value for description.')`,
+    "  else null",
+    "end",
+  ].join("\n");
+}
+
+function hybridSourceFingerprint(
+  files: readonly PostgresDirectSourceFile[],
+): string {
+  const payload = files
+    .map((file) =>
+      [
+        file.dataset,
+        normalizePathForPsql(file.absolutePath),
+        String(file.fileSize),
+        file.fileMtime,
+      ].join("|"),
+    )
+    .sort()
+    .join("\n");
+
+  return `hybrid:${createHash("sha256").update(payload).digest("hex")}`;
+}
+
+function hybridValidatedPath(input: SanitizedScriptGenerationInput): string {
+  if (input.validatedPath) {
+    return normalizePathForPsql(input.validatedPath);
+  }
+
+  const firstFile = input.files[0];
+  return firstFile
+    ? normalizePathForPsql(path.dirname(firstFile.absolutePath))
+    : ".";
+}
+
+function hybridPlanIdSql(sourceFingerprint: string): string {
+  return `(select id from import_plans where source_fingerprint = ${quoteSqlLiteral(sourceFingerprint)})`;
+}
+
+function hybridPlanPhaseSql(
+  sourceFingerprint: string,
+  phase: string,
+  options: {
+    status?: string;
+    loadStatus?: string;
+    materializationStatus?: string;
+  } = {},
+): string {
+  const assignments = [
+    `last_phase = ${quoteSqlLiteral(phase)}`,
+    "updated_at = now()",
+    "last_used_at = now()",
+  ];
+
+  if (options.status) {
+    assignments.push(`status = ${quoteSqlLiteral(options.status)}`);
+  }
+  if (options.loadStatus) {
+    assignments.push(`load_status = ${quoteSqlLiteral(options.loadStatus)}`);
+  }
+  if (options.materializationStatus) {
+    assignments.push(
+      `materialization_status = ${quoteSqlLiteral(options.materializationStatus)}`,
+    );
+  }
+
+  return [
+    "update import_plans",
+    `set ${assignments.join(",\n    ")}`,
+    `where source_fingerprint = ${quoteSqlLiteral(sourceFingerprint)};`,
+  ].join("\n");
+}
+
+function hybridPlanSetupSql(
+  input: SanitizedScriptGenerationInput,
+  sourceFingerprint: string,
+): string[] {
+  const validatedPath = hybridValidatedPath(input);
+  const datasets = [...new Set(input.files.map((file) => file.dataset))];
+  const executionOrder = JSON.stringify(datasets);
+  const planId = hybridPlanIdSql(sourceFingerprint);
+  const lines = [
+    echo(
+      "[setup] Registering hybrid import plan using the existing import control tables...",
+    ),
+    `insert into import_plans (
+  source_fingerprint,
+  input_path,
+  validated_path,
+  batch_size,
+  target_database,
+  total_datasets,
+  total_files,
+  total_rows,
+  total_batches,
+  execution_order,
+  status,
+  load_status,
+  materialization_status,
+  last_phase,
+  last_error,
+  created_at,
+  updated_at,
+  last_used_at
+) values (
+  ${quoteSqlLiteral(sourceFingerprint)},
+  ${quoteSqlLiteral(validatedPath)},
+  ${quoteSqlLiteral(validatedPath)},
+  0,
+  current_database(),
+  ${datasets.length},
+  ${input.files.length},
+  0,
+  0,
+  ${quoteSqlLiteral(executionOrder)}::jsonb,
+  'planned',
+  'pending',
+  'pending',
+  'postgres-direct-setup',
+  null,
+  now(),
+  now(),
+  now()
+)
+on conflict (source_fingerprint)
+do update set
+  input_path = excluded.input_path,
+  validated_path = excluded.validated_path,
+  target_database = excluded.target_database,
+  total_datasets = excluded.total_datasets,
+  total_files = excluded.total_files,
+  execution_order = excluded.execution_order,
+  status = 'planned',
+  load_status = 'pending',
+  materialization_status = 'pending',
+  last_phase = 'postgres-direct-setup',
+  last_error = null,
+  updated_at = now(),
+  last_used_at = now();`,
+  ];
+
+  for (const [fileIndex, file] of input.files.entries()) {
+    const datasetIndex = datasets.indexOf(file.dataset) + 1;
+    lines.push(
+      `insert into import_plan_files (
+  plan_id,
+  dataset,
+  dataset_index,
+  file_index,
+  file_path,
+  file_display_path,
+  file_size,
+  file_mtime,
+  total_rows,
+  total_batches
+)
+select
+  ${planId},
+  ${quoteSqlLiteral(file.dataset)},
+  ${datasetIndex},
+  ${fileIndex + 1},
+  ${quoteSqlLiteral(normalizePathForPsql(file.absolutePath))},
+  ${quoteSqlLiteral(file.relativePath)},
+  ${file.fileSize},
+  ${quoteSqlLiteral(file.fileMtime)}::timestamptz,
+  0,
+  0
+on conflict (plan_id, file_path)
+do update set
+  dataset = excluded.dataset,
+  dataset_index = excluded.dataset_index,
+  file_index = excluded.file_index,
+  file_display_path = excluded.file_display_path,
+  file_size = excluded.file_size,
+  file_mtime = excluded.file_mtime;`,
+    );
+  }
+
+  lines.push(echo("[setup] Hybrid import plan registered."));
+  return lines;
+}
+
+function importCheckpointStartSql(
+  dataset: ImportDatasetType,
+  file: PostgresDirectSourceFile,
+): string {
+  const filePath = normalizePathForPsql(file.absolutePath);
+  return `insert into import_checkpoints (
+  dataset,
+  file_path,
+  file_size,
+  file_mtime,
+  byte_offset,
+  rows_committed,
+  status,
+  last_error,
+  updated_at
+) values (
+  ${quoteSqlLiteral(dataset)},
+  ${quoteSqlLiteral(filePath)},
+  ${file.fileSize},
+  ${quoteSqlLiteral(file.fileMtime)}::timestamptz,
+  0,
+  0,
+  'in_progress',
+  null,
+  now()
+)
+on conflict (dataset, file_path)
+do update set
+  file_size = excluded.file_size,
+  file_mtime = excluded.file_mtime,
+  byte_offset = 0,
+  rows_committed = 0,
+  status = 'in_progress',
+  last_error = null,
+  updated_at = now();`;
+}
+
+function importCheckpointCompletedSql(
+  dataset: ImportDatasetType,
+  file: PostgresDirectSourceFile,
+): string {
+  const filePath = normalizePathForPsql(file.absolutePath);
+  return `update import_checkpoints
+set byte_offset = ${file.fileSize},
+    rows_committed = :hybrid_valid_rows,
+    status = 'completed',
+    last_error = null,
+    updated_at = now()
+where dataset = ${quoteSqlLiteral(dataset)}
+  and file_path = ${quoteSqlLiteral(filePath)};`;
+}
+
+function quarantineAndCountSql(input: {
+  dataset: ImportDatasetType;
+  file: PostgresDirectSourceFile;
+  tableName: string;
+  alias: string;
+  issueExpression: string;
+  stepName: string;
+}): string[] {
+  const filePath = normalizePathForPsql(input.file.absolutePath);
+  const issueExpression = input.issueExpression;
+
+  return [
+    `select
+  count(*) filter (where (${issueExpression}) is null) as hybrid_valid_rows,
+  count(*) filter (where (${issueExpression}) is not null) as hybrid_quarantined_rows
+from ${input.tableName} ${input.alias}
+\\gset`,
+    `\\echo '[${input.stepName}] Valid rows:' :hybrid_valid_rows '- quarantined rows:' :hybrid_quarantined_rows`,
+    `delete from import_quarantine
+where dataset = ${quoteSqlLiteral(input.dataset)}
+  and file_path = ${quoteSqlLiteral(filePath)}
+  and error_stage = 'postgres_direct_staging_validation';`,
+    `with invalid_rows as (
+  select
+    ${input.alias}.*,
+    row_number() over () as __hybrid_row_number,
+    ${issueExpression} as __hybrid_issue
+  from ${input.tableName} ${input.alias}
+)
+insert into import_quarantine (
+  dataset,
+  file_path,
+  row_number,
+  checkpoint_offset,
+  error_code,
+  error_category,
+  error_stage,
+  error_message,
+  raw_line,
+  parsed_payload,
+  sanitizations_applied,
+  retry_count,
+  can_retry_later,
+  created_at
+)
+select
+  ${quoteSqlLiteral(input.dataset)},
+  ${quoteSqlLiteral(filePath)},
+  invalid_rows.__hybrid_row_number,
+  null,
+  invalid_rows.__hybrid_issue ->> 'code',
+  invalid_rows.__hybrid_issue ->> 'category',
+  'postgres_direct_staging_validation',
+  invalid_rows.__hybrid_issue ->> 'message',
+  (to_jsonb(invalid_rows) - '__hybrid_row_number' - '__hybrid_issue')::text,
+  to_jsonb(invalid_rows) - '__hybrid_row_number' - '__hybrid_issue',
+  null,
+  0,
+  false,
+  now()
+from invalid_rows
+where invalid_rows.__hybrid_issue is not null;`,
+  ];
+}
+
+function materializationCheckpointStartSql(
+  sourceFingerprint: string,
+  dataset: ImportDatasetType,
+  targetTable: string,
+): string {
+  return `insert into import_materialization_checkpoints (
+  plan_id,
+  dataset,
+  target_table,
+  status,
+  rows_materialized,
+  last_staging_id,
+  chunks_completed,
+  last_error,
+  started_at,
+  completed_at,
+  updated_at
+) values (
+  ${hybridPlanIdSql(sourceFingerprint)},
+  ${quoteSqlLiteral(dataset)},
+  ${quoteSqlLiteral(targetTable)},
+  'in_progress',
+  0,
+  0,
+  0,
+  null,
+  now(),
+  null,
+  now()
+)
+on conflict (plan_id, dataset)
+do update set
+  target_table = excluded.target_table,
+  status = 'in_progress',
+  rows_materialized = 0,
+  last_staging_id = 0,
+  chunks_completed = 0,
+  last_error = null,
+  started_at = now(),
+  completed_at = null,
+  updated_at = now();`;
+}
+
+function materializationCheckpointCompletedSql(
+  sourceFingerprint: string,
+  dataset: ImportDatasetType,
+  stagingTable: string,
+): string {
+  return `update import_materialization_checkpoints
+set status = 'completed',
+    rows_materialized = (select coalesce(max(staging_id), 0) from ${stagingTable}),
+    last_staging_id = (select coalesce(max(staging_id), 0) from ${stagingTable}),
+    chunks_completed = 1,
+    last_error = null,
+    completed_at = now(),
+    updated_at = now()
+where plan_id = ${hybridPlanIdSql(sourceFingerprint)}
+  and dataset = ${quoteSqlLiteral(dataset)};`;
+}
+
+function secondaryCnaesCheckpointStartSql(sourceFingerprint: string): string {
+  return `update import_materialization_checkpoints
+set lookup_reconciliation_status = 'in_progress',
+    lookup_reconciliation_completed_at = null,
+    updated_at = now()
+where plan_id = ${hybridPlanIdSql(sourceFingerprint)}
+  and dataset = 'establishments';`;
+}
+
+function secondaryCnaesCheckpointCompletedSql(
+  sourceFingerprint: string,
+): string {
+  return `update import_materialization_checkpoints
+set lookup_reconciliation_status = 'completed',
+    lookup_reconciliation_max_staging_id_verified = (select coalesce(max(staging_id), 0) from staging_establishments),
+    lookup_reconciliation_completed_at = now(),
+    updated_at = now()
+where plan_id = ${hybridPlanIdSql(sourceFingerprint)}
+  and dataset = 'establishments';`;
+}
+
 function rawDomainSql(
   dataset: ImportDatasetType,
   files: readonly PostgresDirectSourceFile[],
+  sourceFingerprint: string,
 ): string[] {
   if (files.length === 0) {
     return [];
@@ -493,16 +1027,24 @@ function rawDomainSql(
   const layout = DATASET_LAYOUTS[dataset];
   const columns = layout.fields.map((field) => field.columnName);
   const tableName = rawTableName(dataset);
-
+  const alias = "source";
+  const issueExpression = domainValidationIssueExpression(alias);
+  const stepName = "load-domains";
   const lines = [
     echo(
       `[load-domains] Loading ${dataset} lookup data directly from sanitized Receita files...`,
     ),
+    hybridPlanPhaseSql(sourceFingerprint, `load-domains:${dataset}`, {
+      status: "in_progress",
+      loadStatus: "in_progress",
+    }),
     createRawTempTableSql(dataset),
   ];
 
   for (const [index, file] of files.entries()) {
     lines.push(
+      `truncate table ${tableName};`,
+      importCheckpointStartSql(dataset, file),
       echo(
         `[load-domains] Loading ${dataset} file ${index + 1} of ${files.length}: ${file.relativePath}`,
       ),
@@ -510,18 +1052,31 @@ function rawDomainSql(
       echo(
         `[load-domains] Loaded ${dataset} file ${index + 1} of ${files.length}.`,
       ),
+      ...quarantineAndCountSql({
+        dataset,
+        file,
+        tableName,
+        alias,
+        issueExpression,
+        stepName,
+      }),
+      `insert into ${dataset} (${columns.join(", ")})
+select distinct on (code)
+  nullif(btrim(code), '') as code,
+  nullif(btrim(description), '') as description
+from ${tableName} ${alias}
+where (${issueExpression}) is null
+order by code
+on conflict (code) do update set description = excluded.description;`,
+      importCheckpointCompletedSql(dataset, file),
+      echo(
+        `[load-domains] Completed ${dataset} file ${index + 1} of ${files.length}.`,
+      ),
     );
   }
 
   lines.push(
-    `insert into ${dataset} (${columns.join(", ")})`,
-    "select distinct on (code)",
-    "  nullif(btrim(code), '') as code,",
-    "  nullif(btrim(description), '') as description",
-    `from ${tableName}`,
-    "where nullif(btrim(code), '') is not null",
-    "order by code",
-    "on conflict (code) do update set description = excluded.description;",
+    hybridPlanPhaseSql(sourceFingerprint, `load-domains:${dataset}:completed`),
     echo(`[load-domains] ${dataset} lookup data completed.`),
   );
 
@@ -531,6 +1086,7 @@ function rawDomainSql(
 function rawStagingSql(
   dataset: ImportDatasetType,
   files: readonly PostgresDirectSourceFile[],
+  sourceFingerprint: string,
 ): string[] {
   if (files.length === 0) {
     return [];
@@ -549,34 +1105,54 @@ function rawStagingSql(
     (field) =>
       `  ${fieldExpression(dataset, field, alias)} as ${field.columnName}`,
   );
+  const issueExpression = validationIssueExpression(dataset, alias);
   const stepName = loadStepName(dataset);
 
   const lines = [
     echo(
       `[${stepName}] Loading ${dataset} staging data directly from sanitized Receita files...`,
     ),
+    hybridPlanPhaseSql(sourceFingerprint, stepName, {
+      status: "in_progress",
+      loadStatus: "in_progress",
+    }),
     `truncate table ${targetTable} restart identity;`,
+    ...safeConversionFunctionsSql(),
     createRawTempTableSql(dataset),
   ];
 
   for (const [index, file] of files.entries()) {
     lines.push(
+      `truncate table ${tableName};`,
+      importCheckpointStartSql(dataset, file),
       echo(
         `[${stepName}] Loading file ${index + 1} of ${files.length}: ${file.relativePath}`,
       ),
       receitaCopyCommand(tableName, columns, file.absolutePath),
       echo(`[${stepName}] Loaded file ${index + 1} of ${files.length}.`),
+      ...quarantineAndCountSql({
+        dataset,
+        file,
+        tableName,
+        alias,
+        issueExpression,
+        stepName,
+      }),
+      echo(
+        `[${stepName}] Transforming valid ${dataset} rows from file ${index + 1} into ${targetTable}...`,
+      ),
+      `insert into ${targetTable} (${columns.join(", ")})
+select
+${expressions.join(",\n")}
+from ${tableName} ${alias}
+where (${issueExpression}) is null;`,
+      importCheckpointCompletedSql(dataset, file),
+      echo(`[${stepName}] Completed file ${index + 1} of ${files.length}.`),
     );
   }
 
   lines.push(
-    echo(
-      `[${stepName}] Transforming ${dataset} raw rows into ${targetTable}...`,
-    ),
-    `insert into ${targetTable} (${columns.join(", ")})`,
-    "select",
-    expressions.join(",\n"),
-    `from ${tableName} ${alias};`,
+    hybridPlanPhaseSql(sourceFingerprint, `${stepName}:completed`),
     echo(`[${stepName}] ${dataset} staging load completed.`),
   );
 
@@ -669,26 +1245,91 @@ function hasAnyFinalMaterialization(
 
 function materializeSql(
   selected: ReadonlySet<PostgresDirectIncludeTarget>,
+  sourceFingerprint: string,
 ): string[] {
-  const lines = [echo("[materialize] Starting final table materialization...")];
+  const lines = [
+    echo("[materialize] Starting final table materialization..."),
+    hybridPlanPhaseSql(sourceFingerprint, "materialize", {
+      status: "in_progress",
+      loadStatus: "completed",
+      materializationStatus: "in_progress",
+    }),
+  ];
 
   if (selected.has("companies")) {
-    lines.push(materializeCompaniesSql(), "");
+    lines.push(
+      materializationCheckpointStartSql(
+        sourceFingerprint,
+        "companies",
+        "companies",
+      ),
+      materializeCompaniesSql(),
+      materializationCheckpointCompletedSql(
+        sourceFingerprint,
+        "companies",
+        "staging_companies",
+      ),
+      "",
+    );
   }
 
   if (selected.has("establishments")) {
-    lines.push(materializeEstablishmentsSql(), "");
+    lines.push(
+      materializationCheckpointStartSql(
+        sourceFingerprint,
+        "establishments",
+        "establishments",
+      ),
+      materializeEstablishmentsSql(),
+      materializationCheckpointCompletedSql(
+        sourceFingerprint,
+        "establishments",
+        "staging_establishments",
+      ),
+      "",
+    );
   }
 
   if (selected.has("partners")) {
-    lines.push(materializePartnersSql(), "");
+    lines.push(
+      materializationCheckpointStartSql(
+        sourceFingerprint,
+        "partners",
+        "partners",
+      ),
+      materializePartnersSql(),
+      materializationCheckpointCompletedSql(
+        sourceFingerprint,
+        "partners",
+        "staging_partners",
+      ),
+      "",
+    );
   }
 
   if (selected.has("simples")) {
-    lines.push(materializeSimplesSql(), "");
+    lines.push(
+      materializationCheckpointStartSql(
+        sourceFingerprint,
+        "simples_options",
+        "simples_options",
+      ),
+      materializeSimplesSql(),
+      materializationCheckpointCompletedSql(
+        sourceFingerprint,
+        "simples_options",
+        "staging_simples_options",
+      ),
+      "",
+    );
   }
 
-  lines.push(echo("[materialize] Final table materialization completed."));
+  lines.push(
+    hybridPlanPhaseSql(sourceFingerprint, "materialize:completed", {
+      materializationStatus: "completed",
+    }),
+    echo("[materialize] Final table materialization completed."),
+  );
 
   return lines;
 }
@@ -755,6 +1396,7 @@ export function generatePostgresDirectScriptFiles(
 ): GeneratedPostgresDirectScripts {
   const grouped = directFilesByDataset(input.files);
   const selected = includeSet(input);
+  const sourceFingerprint = hybridSourceFingerprint(input.files);
   if (!DOMAIN_DATASETS.some((dataset) => (grouped[dataset] ?? []).length > 0)) {
     selected.delete("domains");
   }
@@ -782,6 +1424,7 @@ export function generatePostgresDirectScriptFiles(
       input.sourceEncoding,
     ),
     echo("[setup] Preparing PostgreSQL direct import session..."),
+    ...hybridPlanSetupSql(input, sourceFingerprint),
     "-- The database schema must be applied before running these scripts.",
     "-- This setup script configures the psql session used by the generated orchestrator.",
     echo("[setup] Setup completed."),
@@ -797,7 +1440,10 @@ export function generatePostgresDirectScriptFiles(
   if (domainsIncluded) {
     const lines = [echo("[load-domains] Starting domain tables load...")];
     for (const dataset of DOMAIN_DATASETS) {
-      lines.push(...rawDomainSql(dataset, grouped[dataset] ?? []), "");
+      lines.push(
+        ...rawDomainSql(dataset, grouped[dataset] ?? [], sourceFingerprint),
+        "",
+      );
     }
     lines.push(echo("[load-domains] Domain tables load completed."));
     scripts["load-domains.sql"] = buildStepScript(
@@ -848,7 +1494,7 @@ export function generatePostgresDirectScriptFiles(
     if (included) {
       scripts[item.file] = buildStepScript(
         `CNPJ DB Loader PostgreSQL direct import ${item.name} step`,
-        rawStagingSql(item.dataset, files),
+        rawStagingSql(item.dataset, files, sourceFingerprint),
         input,
         true,
       );
@@ -869,7 +1515,7 @@ export function generatePostgresDirectScriptFiles(
   if (materializeIncluded) {
     scripts["materialize.sql"] = buildStepScript(
       "CNPJ DB Loader PostgreSQL direct import materialization step",
-      materializeSql(selected),
+      materializeSql(selected, sourceFingerprint),
       input,
       true,
     );
@@ -888,7 +1534,11 @@ export function generatePostgresDirectScriptFiles(
   if (secondaryIncluded) {
     scripts["materialize-secondary-cnaes.sql"] = buildStepScript(
       "CNPJ DB Loader PostgreSQL direct import secondary CNAEs step",
-      [materializeSecondaryCnaesSql()],
+      [
+        secondaryCnaesCheckpointStartSql(sourceFingerprint),
+        materializeSecondaryCnaesSql(),
+        secondaryCnaesCheckpointCompletedSql(sourceFingerprint),
+      ],
       input,
       true,
     );
@@ -970,6 +1620,11 @@ export function generatePostgresDirectScriptFiles(
   }
 
   orchestratorLines.push(
+    hybridPlanPhaseSql(sourceFingerprint, "completed", {
+      status: "completed",
+      loadStatus: "completed",
+      materializationStatus: materializeIncluded ? "completed" : "pending",
+    }),
     ...(input.transactionMode === "single" ? ["commit;", ""] : []),
     echo("CNPJ DB Loader hybrid PostgreSQL import completed."),
     "",
@@ -977,7 +1632,7 @@ export function generatePostgresDirectScriptFiles(
 
   scripts["import-postgres-direct.sql"] = orchestratorLines.join("\n");
 
-  return { scripts, steps };
+  return { scripts, steps, sourceFingerprint };
 }
 
 export function generatePostgresDirectImportScript(

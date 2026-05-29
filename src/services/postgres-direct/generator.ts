@@ -208,6 +208,7 @@ export async function generatePostgresDirectScript(
       absolutePath,
       relativePath: entry.relativePath,
       fileSize: fileStats.size,
+      fileMtime: fileStats.mtime.toISOString(),
     });
 
     const currentSummary = summariesByDataset.get(dataset) ?? {
@@ -235,6 +236,7 @@ export async function generatePostgresDirectScript(
   const scriptPath = path.join(outputPath, scriptName);
   const generated = generatePostgresDirectScriptFiles({
     files: sourceFiles,
+    validatedPath,
     sourceEncoding,
     transactionMode,
     include,
@@ -277,6 +279,7 @@ export async function generatePostgresDirectScript(
     totalFiles: sourceFiles.length,
     totalBytes,
     steps: generated.steps,
+    sourceFingerprint: generated.sourceFingerprint,
     datasets: summaryDatasets,
   };
   await writeFile(

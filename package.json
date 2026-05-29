@@ -1,6 +1,6 @@
 {
   "name": "@danielarndt0/cnpj-db-loader",
-  "version": "2.4.0-beta.4",
+  "version": "2.4.0-beta.5",
   "publishConfig": {
     "access": "public"
   },
@@ -39,6 +39,14 @@
   "engines": {
     "node": ">=20"
   },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/DanielArndt0/cnpj-db-loader.git"
+  },
+  "bugs": {
+    "url": "https://github.com/DanielArndt0/cnpj-db-loader/issues"
+  },
+  "homepage": "https://github.com/DanielArndt0/cnpj-db-loader#readme",
   "scripts": {
     "clean": "rimraf dist",
     "build": "tsup",

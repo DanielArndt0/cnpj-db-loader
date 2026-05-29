@@ -98,8 +98,8 @@ planner -> source-reader -> parser -> normalizer -> staging-writer -> materializ
 
 ## PostgreSQL direct import workflow
 
-The PostgreSQL direct import workflow is a hybrid execution path. It keeps file detection, Receita parsing, validation and sanitization in the loader, then exports normalized CSV files and a generated `psql` script for direct PostgreSQL loading.
+The PostgreSQL direct import workflow is a hybrid execution path. It keeps file detection, validation and sanitization in the loader, then generates modular `psql` scripts that read the sanitized Receita files directly without rewriting the complete dataset into a second CSV tree.
 
-This keeps the parsing rules centralized in the TypeScript layouts while allowing PostgreSQL to run the heaviest bulk load and materialization work with set-based SQL.
+The hybrid scripts reuse the same operational model as the standard importer: `import_plans`, `import_plan_files`, `import_checkpoints`, `import_materialization_checkpoints` and `import_quarantine`.
 
-The generated script resets staging tables, loads CSV files with `\copy`, upserts domain and final tables, materializes `establishment_secondary_cnaes`, and refreshes planner statistics with `ANALYZE`.
+The generated scripts reset staging tables, load sanitized files with `\copy`, quarantine known row-level inconsistencies, insert valid rows into staging tables, upsert domain and final tables, materialize `establishment_secondary_cnaes`, update lightweight checkpoints and refresh planner statistics with `ANALYZE`.

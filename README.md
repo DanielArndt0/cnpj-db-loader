@@ -103,7 +103,7 @@ cnpj-db-loader postgres generate-script ./downloads/<reference>/sanitized --outp
 psql -d "postgres://postgres:postgres@localhost:5432/cnpj" -f ./downloads/<reference>/postgres-direct/import-postgres-direct.sql
 ```
 
-This path keeps download, extraction, validation and robust UTF-8 sanitization inside the loader, then lets PostgreSQL load the sanitized Receita files directly through `\copy`, convert values into staging tables and materialize the final tables with set-based SQL. The standard `import` command remains the safest path when checkpoint resume and quarantine recovery are required.
+This path keeps download, extraction, validation and robust UTF-8 sanitization inside the loader, then lets PostgreSQL load the sanitized Receita files directly through `\copy`, validate known row-level inconsistencies, reuse the existing `import_quarantine` table, update the existing import checkpoint tables, convert valid values into staging tables and materialize the final tables with set-based SQL. The standard `import` command remains the most complete resumable path, while the hybrid mode now preserves compatibility with the same operational tables.
 
 ## Logs
 

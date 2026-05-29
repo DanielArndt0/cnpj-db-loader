@@ -2,6 +2,8 @@
 
 The `quarantine` service is a read-only CLI surface for inspecting rows written to the `import_quarantine` table during import.
 
+Both the standard Node-driven import flow and the hybrid PostgreSQL direct import flow reuse this same table. The hybrid flow writes known row-level validation inconsistencies to quarantine before inserting valid rows into staging tables.
+
 ## Commands
 
 | Command                | Purpose                                                 |
@@ -38,3 +40,7 @@ cnpj-db-loader quarantine show 42
 - `quarantine` is intentionally read-only. It does not retry or mutate quarantined rows.
 - The service automatically ensures that the `import_quarantine` table and its newer columns exist before querying.
 - A future replay/recovery command can reuse the same filters to target retryable or terminal rows.
+- Hybrid PostgreSQL validation rows use the `postgres_direct_staging_validation` stage.
+- Hybrid mode keeps the existing quarantine schema. It does not create a second quarantine table.
+- For SQL-side hybrid validation rows, `raw_line` contains the JSON text representation of the temporary raw row and `checkpoint_offset` can be `NULL` when the exact source byte offset is unavailable after `\copy`.
+- Structural CSV or low-level `\copy` failures still stop the phase before SQL-side row quarantine can run; execute `validate` and `sanitize` first.

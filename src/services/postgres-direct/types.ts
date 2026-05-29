@@ -77,6 +77,7 @@ export type PostgresDirectSourceFile = {
   absolutePath: string;
   relativePath: string;
   fileSize: number;
+  fileMtime: string;
 };
 
 export type PostgresDirectScriptDatasetSummary = {
