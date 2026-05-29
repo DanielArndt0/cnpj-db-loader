@@ -11,6 +11,7 @@ export * from "./logging.service.js";
 export * from "./import.service.js";
 export * from "./quarantine.service.js";
 export * from "./federal-revenue/index.js";
+export * from "./postgres-direct/index.js";
 
 export * from "./sanitize.service.js";
 

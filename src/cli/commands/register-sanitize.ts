@@ -23,6 +23,10 @@ export function registerSanitizeCommands(program: Command): void {
       "--dataset <dataset>",
       "Sanitize only one validated dataset block (for example: establishments or companies).",
     )
+    .option(
+      "--source-encoding <encoding>",
+      "Source file encoding used while reading Receita files. Defaults to WIN1252 and writes clean UTF-8 output.",
+    )
     .option("-f, --force", "Skip the confirmation prompt.")
     .description(
       "Prepare a sanitized dataset tree before import by removing known low-level byte issues such as NUL bytes.",
@@ -30,7 +34,12 @@ export function registerSanitizeCommands(program: Command): void {
     .action(
       async (
         input: string,
-        options: { output?: string; dataset?: string; force?: boolean },
+        options: {
+          output?: string;
+          dataset?: string;
+          sourceEncoding?: string;
+          force?: boolean;
+        },
       ) => {
         if (!options.force) {
           const confirmed = await confirm(
@@ -54,6 +63,10 @@ export function registerSanitizeCommands(program: Command): void {
         if (options.dataset) {
           sanitizeOptions.dataset =
             options.dataset as SanitizeOptions["dataset"];
+        }
+
+        if (options.sourceEncoding) {
+          sanitizeOptions.sourceEncoding = options.sourceEncoding;
         }
 
         const summary = await sanitizeInputDirectory(input, sanitizeOptions);

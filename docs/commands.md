@@ -2,6 +2,10 @@
 
 | Command                         | Purpose                                                                                                                                                           |
 | ------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `federal-revenue config set`    | Persist Federal Revenue WebDAV settings such as share token, WebDAV URL, and user agent in the local config file.                                                 |
+| `federal-revenue config show`   | Show the effective Federal Revenue configuration.                                                                                                                 |
+| `federal-revenue config test`   | Test the configured Federal Revenue WebDAV connection.                                                                                                            |
+| `federal-revenue config reset`  | Reset one or all persisted Federal Revenue settings.                                                                                                              |
 | `federal-revenue check`         | Check the selected or latest Federal Revenue monthly CNPJ reference and list the remote ZIP files.                                                                |
 | `federal-revenue download`      | Download the selected Federal Revenue monthly CNPJ ZIP files with retries, `.part` files, and skip-on-existing behavior.                                          |
 | `federal-revenue status`        | Read the local Federal Revenue manifest and report downloaded, failed, partial, and missing files.                                                                |
@@ -22,6 +26,8 @@
 | `database cleanup materialized` | Truncate simplified final relational tables populated by materialization, including establishment secondary CNAEs when available, in safe order.                  |
 | `database cleanup checkpoints`  | Clear load checkpoints, materialization checkpoints, or both without truncating staging or final tables.                                                          |
 | `database cleanup plans`        | Delete saved import plans. Related plan files and materialization checkpoints are removed by database cascade.                                                    |
+| `postgres generate-script`      | Generate a direct `psql` import script that loads sanitized Receita files without rewriting them into new CSV files.                                              |
+| `postgres export-csv`           | Convert sanitized Receita files into normalized PostgreSQL-ready CSV files and generate a direct `psql` import script for audit/debug workflows.                  |
 | `import <input>`                | Run the full pipeline: plan, load validated files into staging/direct final targets, materialize staged datasets into final tables, and finalize the import plan. |
 | `import load <input>`           | Prepare the plan and run only the load phase. Heavy datasets stop in `staging_*`; domain datasets still upsert directly into the final schema.                    |
 | `import materialize <input>`    | Resume from the saved import plan and materialize staged datasets into the final relational tables with resumable chunks.                                         |
@@ -33,6 +39,8 @@
 ## Examples
 
 ```bash
+cnpj-db-loader federal-revenue config set share-token "<public-share-token>"
+cnpj-db-loader federal-revenue config test
 cnpj-db-loader federal-revenue check
 cnpj-db-loader federal-revenue check 2026-05
 cnpj-db-loader federal-revenue download --output ./downloads --force
@@ -50,6 +58,8 @@ cnpj-db-loader database cleanup staging --validated-path ./downloads/sanitized -
 cnpj-db-loader database cleanup materialized --dataset companies --force
 cnpj-db-loader database cleanup checkpoints --phase materialization --validated-path ./downloads/sanitized --force
 cnpj-db-loader database cleanup plans --validated-path ./downloads/sanitized --force
+cnpj-db-loader postgres generate-script ./downloads/sanitized --output ./downloads/postgres-direct --force
+psql "postgres://user:password@localhost:5432/cnpj" -f ./downloads/postgres-direct/import-postgres-direct.sql
 cnpj-db-loader import ./downloads/sanitized
 cnpj-db-loader import ./downloads/sanitized --db-url "postgresql://user:password@localhost:5432/cnpj"
 cnpj-db-loader import ./downloads/sanitized --dataset companies --load-batch-size 500
@@ -63,3 +73,26 @@ cnpj-db-loader quarantine list --dataset establishments --limit 10
 cnpj-db-loader quarantine list --terminal --after-id 500
 cnpj-db-loader quarantine show 42
 ```
+
+## PostgreSQL direct import helper
+
+```bash
+cnpj-db-loader postgres generate-script <input> [--output <path>] [--dataset <dataset>] [--script-name <name>] [--source-encoding <encoding>] [--transaction-mode <mode>] [--include <items>] [--skip-indexes] [--skip-analyze] [-f]
+cnpj-db-loader postgres export-csv <input> [--output <path>] [--dataset <dataset>] [--script-name <name>] [-f]
+```
+
+`postgres generate-script` is the recommended hybrid workflow. The loader performs extraction, validation and sanitization, then generates a `psql` script that loads the sanitized Receita files directly through `\copy`.
+
+`postgres export-csv` remains available when you explicitly want a normalized CSV output tree for audit/debug purposes.
+
+Options:
+
+- `--output <path>`: directory where manifest and SQL script are generated.
+- `--dataset <dataset>`: generate only one dataset block.
+- `--script-name <name>`: custom generated SQL script name.
+- `--source-encoding <encoding>`: source file encoding for `psql` copy operations. Defaults to `UTF8`.
+- `--transaction-mode <mode>`: generated transaction strategy: `single`, `phase` or `none`. Defaults to `single`.
+- `--include <items>`: comma-separated generation targets such as `domains,companies,establishments,secondary-cnaes,analyze`.
+- `--skip-indexes`: skip the generated indexes phase.
+- `--skip-analyze`: skip the generated analyze phase.
+- `-f, --force`: skip confirmation.

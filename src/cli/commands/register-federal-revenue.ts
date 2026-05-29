@@ -15,7 +15,12 @@ import {
   cleanFederalRevenueDataset,
   downloadFederalRevenueDataset,
   getFederalRevenueStatus,
+  listFederalRevenueReferences,
+  readFederalRevenueEffectiveConfig,
+  resetFederalRevenueConfig,
   retryFederalRevenueDataset,
+  resolveFederalRevenueClientOptions,
+  setFederalRevenueConfigValue,
   syncFederalRevenueDataset,
   writeCommandLog,
 } from "../../services/index.js";
@@ -26,6 +31,7 @@ import {
   createSanitizeProgressReporter,
   printFederalRevenueCheckSummary,
   printFederalRevenueCleanSummary,
+  printFederalRevenueConfigSummary,
   printFederalRevenueDownloadSummary,
   printFederalRevenueStatusSummary,
   printFederalRevenueSyncSummary,
@@ -36,6 +42,7 @@ type FederalRevenueSharedOptions = {
   current?: boolean;
   baseUrl?: string;
   shareToken?: string;
+  userAgent?: string;
 };
 
 type FederalRevenueDownloadCommandOptions = FederalRevenueSharedOptions & {
@@ -118,7 +125,28 @@ function applySharedOptions<T extends FederalRevenueCheckOptions>(
     target.shareToken = options.shareToken;
   }
 
+  if (options.userAgent) {
+    target.userAgent = options.userAgent;
+  }
+
   return target;
+}
+
+async function resolveSharedOptions(
+  referenceArgument: string | undefined,
+  options: FederalRevenueSharedOptions,
+): Promise<FederalRevenueSharedOptions> {
+  const mergedOptions = mergeSharedOptions(referenceArgument, options);
+  const clientOptions = await resolveFederalRevenueClientOptions(mergedOptions);
+
+  return {
+    ...mergedOptions,
+    ...(clientOptions.baseUrl ? { baseUrl: clientOptions.baseUrl } : {}),
+    ...(clientOptions.shareToken
+      ? { shareToken: clientOptions.shareToken }
+      : {}),
+    ...(clientOptions.userAgent ? { userAgent: clientOptions.userAgent } : {}),
+  };
 }
 
 function buildDownloadOptions(
@@ -249,6 +277,10 @@ function registerSharedOptions(command: Command): Command {
     .option(
       "--share-token <token>",
       "Override the public Federal Revenue share token.",
+    )
+    .option(
+      "--user-agent <value>",
+      "Override the Federal Revenue HTTP user agent.",
     );
 }
 
@@ -299,6 +331,94 @@ export function registerFederalRevenueCommands(program: Command): void {
       "Check, download, sync, and maintain CNPJ monthly files from the Federal Revenue public share.",
     );
 
+  const config = federalRevenue
+    .command("config")
+    .description(
+      "Read, persist, test, or reset Federal Revenue public share settings.",
+    );
+
+  config
+    .command("set")
+    .argument(
+      "<key>",
+      "Configuration key: share-token, webdav-url, or user-agent.",
+    )
+    .argument("<value>", "Configuration value to persist.")
+    .description(
+      "Persist a Federal Revenue setting in the local CNPJ DB Loader config file.",
+    )
+    .action(async (key: string, value: string) => {
+      const effectiveConfig = await setFederalRevenueConfigValue(key, value);
+      const logFilePath = await writeCommandLog("federal-revenue-config-set", {
+        key,
+        effectiveConfig,
+      });
+      printFederalRevenueConfigSummary(effectiveConfig, logFilePath);
+    });
+
+  config
+    .command("show")
+    .description("Show the currently persisted Federal Revenue configuration.")
+    .action(async () => {
+      const effectiveConfig = await readFederalRevenueEffectiveConfig();
+      const logFilePath = await writeCommandLog(
+        "federal-revenue-config-show",
+        effectiveConfig,
+      );
+      printFederalRevenueConfigSummary(effectiveConfig, logFilePath);
+    });
+
+  config
+    .command("test")
+    .description("Test the configured Federal Revenue WebDAV connection.")
+    .action(async () => {
+      const clientOptions = await resolveFederalRevenueClientOptions();
+      const result = await listFederalRevenueReferences(clientOptions);
+      const references = result.references.map((item) => item.reference);
+      const latestReference = references.at(-1) ?? "not found";
+      const logFilePath = await writeCommandLog("federal-revenue-config-test", {
+        remoteBaseUrl: result.remoteBaseUrl,
+        referencesFound: references.length,
+        latestReference,
+      });
+      printFederalRevenueConfigSummary(
+        await readFederalRevenueEffectiveConfig(),
+        logFilePath,
+      );
+      console.log(
+        `Federal Revenue WebDAV connection succeeded. References found: ${references.length}. Latest reference: ${latestReference}.`,
+      );
+    });
+
+  config
+    .command("reset")
+    .argument(
+      "[key]",
+      "Optional key to reset: share-token, webdav-url, or user-agent. When omitted, all Federal Revenue settings are reset.",
+    )
+    .option("-f, --force", "Skip the confirmation prompt.")
+    .description(
+      "Reset one Federal Revenue setting or all persisted Federal Revenue settings.",
+    )
+    .action(async (key: string | undefined, options: { force?: boolean }) => {
+      const target = key ? `Federal Revenue ${key}` : "all Federal Revenue";
+      const confirmed = await confirmFederalRevenueAction(
+        `Reset ${target} configuration?`,
+        options.force,
+      );
+      if (!confirmed) {
+        console.log("Federal Revenue config reset cancelled.");
+        return;
+      }
+
+      const effectiveConfig = await resetFederalRevenueConfig(key);
+      const logFilePath = await writeCommandLog(
+        "federal-revenue-config-reset",
+        { key: key ?? "all", effectiveConfig },
+      );
+      printFederalRevenueConfigSummary(effectiveConfig, logFilePath);
+    });
+
   registerSharedOptions(
     federalRevenue
       .command("check")
@@ -314,7 +434,10 @@ export function registerFederalRevenueCommands(program: Command): void {
       referenceArgument: string | undefined,
       options: FederalRevenueSharedOptions,
     ) => {
-      const resolvedOptions = mergeSharedOptions(referenceArgument, options);
+      const resolvedOptions = await resolveSharedOptions(
+        referenceArgument,
+        options,
+      );
       const summary = await checkFederalRevenueDataset(
         applySharedOptions<FederalRevenueCheckOptions>(resolvedOptions, {}),
       );
@@ -341,7 +464,10 @@ export function registerFederalRevenueCommands(program: Command): void {
       referenceArgument: string | undefined,
       options: FederalRevenueDownloadCommandOptions,
     ) => {
-      const resolvedOptions = mergeSharedOptions(referenceArgument, options);
+      const resolvedOptions = await resolveSharedOptions(
+        referenceArgument,
+        options,
+      );
       const confirmed = await confirmFederalRevenueAction(
         "Download Federal Revenue CNPJ ZIP files now? Existing completed files are skipped unless --overwrite is used.",
         options.force,
@@ -383,7 +509,10 @@ export function registerFederalRevenueCommands(program: Command): void {
       referenceArgument: string | undefined,
       options: FederalRevenueStatusCommandOptions,
     ) => {
-      const resolvedOptions = mergeSharedOptions(referenceArgument, options);
+      const resolvedOptions = await resolveSharedOptions(
+        referenceArgument,
+        options,
+      );
       const summary = await getFederalRevenueStatus(
         buildStatusOptions({ ...options, ...resolvedOptions }),
       );
@@ -414,7 +543,10 @@ export function registerFederalRevenueCommands(program: Command): void {
       referenceArgument: string | undefined,
       options: FederalRevenueRetryCommandOptions,
     ) => {
-      const resolvedOptions = mergeSharedOptions(referenceArgument, options);
+      const resolvedOptions = await resolveSharedOptions(
+        referenceArgument,
+        options,
+      );
       const confirmed = await confirmFederalRevenueAction(
         "Retry incomplete Federal Revenue files now? Completed files are kept.",
         options.force,
@@ -460,7 +592,10 @@ export function registerFederalRevenueCommands(program: Command): void {
       referenceArgument: string | undefined,
       options: FederalRevenueCleanCommandOptions,
     ) => {
-      const resolvedOptions = mergeSharedOptions(referenceArgument, options);
+      const resolvedOptions = await resolveSharedOptions(
+        referenceArgument,
+        options,
+      );
       const actionLabel = options.all
         ? "remove the entire selected Federal Revenue reference folder"
         : options.failed
@@ -535,7 +670,10 @@ export function registerFederalRevenueCommands(program: Command): void {
       referenceArgument: string | undefined,
       options: FederalRevenueSyncCommandOptions,
     ) => {
-      const resolvedOptions = mergeSharedOptions(referenceArgument, options);
+      const resolvedOptions = await resolveSharedOptions(
+        referenceArgument,
+        options,
+      );
       const confirmed = await confirmFederalRevenueAction(
         "Run the full Federal Revenue sync now? This downloads files, extracts archives, sanitizes the dataset, and imports it into PostgreSQL.",
         options.force,

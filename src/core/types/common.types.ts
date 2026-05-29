@@ -18,6 +18,13 @@ export type DatasetBlock =
   | "legal_natures"
   | "cnaes";
 
+export type FederalRevenueConfig = {
+  shareToken?: string;
+  webdavUrl?: string;
+  userAgent?: string;
+};
+
 export type DatabaseConfig = {
   defaultDbUrl?: string;
+  federalRevenue?: FederalRevenueConfig;
 };

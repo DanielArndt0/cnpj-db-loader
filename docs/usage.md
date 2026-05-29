@@ -117,6 +117,20 @@ The final import summary also includes baseline metrics for preparatory scan tim
 
 The exact preparatory scan runs only when no saved import plan exists for the same validated source files and batch size. On resume, the importer reuses the saved plan and then reuses the checkpoint table to continue from the last committed byte offset instead of restarting the data load itself. Rows that fail after retries are written to `import_quarantine`, so a few bad rows do not stop the entire dataset. Running `sanitize` first reduces how often the importer has to fall back to those slower recovery paths.
 
+## Hybrid PostgreSQL direct import
+
+After sanitization, you can generate a direct `psql` script and let PostgreSQL load the sanitized Receita files without rewriting the full dataset into another CSV tree:
+
+```bash
+cnpj-db-loader sanitize ./downloads/<reference>/extracted
+cnpj-db-loader postgres generate-script ./downloads/<reference>/sanitized --output ./downloads/<reference>/postgres-direct --force
+psql "postgres://postgres:postgres@localhost:5432/cnpj" -f ./downloads/<reference>/postgres-direct/import-postgres-direct.sql
+```
+
+Use this flow when you want PostgreSQL to perform the heavy bulk load and set-based materialization directly. Use `postgres export-csv` only when you need an intermediate normalized CSV tree for audit/debug purposes. Use the standard `import` command when you need checkpoint-based resume and row quarantine recovery.
+
+See [PostgreSQL Direct Import](./postgres-direct.md) for details.
+
 ## Quarantine analysis
 
 Use the `quarantine` service after a long-running import when you want to inspect the rows that could not be inserted.

@@ -6,10 +6,13 @@ export {
   printExtractionSummary,
   printFederalRevenueCheckSummary,
   printFederalRevenueCleanSummary,
+  printFederalRevenueConfigSummary,
   printFederalRevenueDownloadSummary,
   printFederalRevenueStatusSummary,
   printFederalRevenueSyncSummary,
   printImportSummary,
+  printPostgresCsvExportSummary,
+  printPostgresDirectScriptSummary,
   printSanitizeSummary,
   printInfoWithLog,
   printInspectSummary,
@@ -19,6 +22,8 @@ export {
   createExtractionProgressReporter,
   createFederalRevenueDownloadProgressReporter,
   createImportProgressReporter,
+  createPostgresCsvExportProgressReporter,
+  createPostgresDirectScriptProgressReporter,
   createSanitizeProgressReporter,
 } from "./output/progress.js";
 export {

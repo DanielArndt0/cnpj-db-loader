@@ -546,8 +546,9 @@ export function createSanitizeProgressReporter(): (
         `Validated: ${shortPath(event.validatedPath)}`,
         `Output: ${shortPath(event.outputPath)}`,
         `Datasets: ${event.datasets.join(" > ")}`,
+        `Source encoding: ${event.sourceEncoding} > UTF8`,
         `Files: 0/${formatCount(event.totalFiles)} | Bytes: ${formatBytes(0)} / ${formatBytes(event.totalBytes)}`,
-        `Rows counted: ${formatCount(0)} | NUL removed: ${formatCount(0)}`,
+        `Rows: ${formatCount(0)} | NUL: ${formatCount(0)} | Invalid bytes: ${formatCount(0)} | Controls: ${formatCount(0)}`,
         `Current: waiting...`,
       ];
       renderBlock([
@@ -564,8 +565,9 @@ export function createSanitizeProgressReporter(): (
         currentLines[1] ?? "",
         currentLines[2] ?? "",
         currentLines[3] ?? "",
+        currentLines[4] ?? "",
         `Files: ${formatCount(event.fileIndex)}/${formatCount(event.totalFiles)} | Bytes: ${formatBytes(event.bytesProcessed)} / ${formatBytes(event.totalBytes)}`,
-        `Rows counted: ${formatCount(event.processedRows)} | NUL removed: ${formatCount(event.nulBytesRemoved)} | Changed files: ${formatCount(event.changedFiles)}`,
+        `Rows: ${formatCount(event.processedRows)} | NUL: ${formatCount(event.nulBytesRemoved)} | Invalid bytes: ${formatCount(event.invalidBytesRemoved)} | Controls: ${formatCount(event.controlCharsRemoved)} | Changed: ${formatCount(event.changedFiles)}`,
         `Current: ${shortPath(event.currentFileDisplayPath)}`,
       ];
       renderBlock([
@@ -585,6 +587,18 @@ export function createSanitizeProgressReporter(): (
     );
     console.log(
       formatKeyValue("Removed NUL bytes", formatCount(event.nulBytesRemoved)),
+    );
+    console.log(
+      formatKeyValue(
+        "Removed invalid bytes",
+        formatCount(event.invalidBytesRemoved),
+      ),
+    );
+    console.log(
+      formatKeyValue(
+        "Removed control chars",
+        formatCount(event.controlCharsRemoved),
+      ),
     );
     console.log(
       formatKeyValue("Changed files", formatCount(event.changedFiles)),
@@ -750,5 +764,87 @@ export function createFederalRevenueDownloadProgressReporter(): (
         `${formatBytes(event.downloadedBytes)} / ${formatBytes(event.totalBytes)}`,
       ),
     );
+  };
+}
+
+import type {
+  PostgresCsvExportProgressEvent,
+  PostgresDirectScriptProgressEvent,
+} from "../../../services/postgres-direct/index.js";
+
+export function createPostgresCsvExportProgressReporter(): (
+  event: PostgresCsvExportProgressEvent,
+) => void {
+  return (event: PostgresCsvExportProgressEvent): void => {
+    if (event.kind === "start") {
+      console.log(
+        theme.infoLabel("POSTGRES"),
+        "Starting PostgreSQL-ready CSV export...",
+      );
+      console.log(formatKeyValue("Input path", event.inputPath));
+      console.log(formatKeyValue("Validated path", event.validatedPath));
+      console.log(formatKeyValue("Output path", event.outputPath));
+      console.log(formatKeyValue("Files queued", event.totalFiles));
+      return;
+    }
+
+    if (event.kind === "file_finish") {
+      console.log(
+        `${theme.infoLabel("POSTGRES")} ${event.fileIndex}/${event.totalFiles} ${event.dataset} exported with ${formatCount(event.rows)} row(s).`,
+      );
+      return;
+    }
+
+    if (event.kind === "finish") {
+      console.log(
+        theme.successLabel("POSTGRES"),
+        `Exported ${event.totalFiles} file(s) with ${formatCount(event.totalRows)} row(s).`,
+      );
+      console.log(formatKeyValue("Output path", event.outputPath));
+      console.log(formatKeyValue("Script path", event.scriptPath));
+    }
+  };
+}
+
+export function createPostgresDirectScriptProgressReporter(): (
+  event: PostgresDirectScriptProgressEvent,
+) => void {
+  return (event: PostgresDirectScriptProgressEvent): void => {
+    if (event.kind === "start") {
+      console.log(
+        theme.infoLabel("POSTGRES"),
+        "Starting direct PostgreSQL script generation...",
+      );
+      console.log(formatKeyValue("Input path", event.inputPath));
+      console.log(formatKeyValue("Validated path", event.validatedPath));
+      console.log(formatKeyValue("Output path", event.outputPath));
+      console.log(formatKeyValue("Source encoding", event.sourceEncoding));
+      console.log(formatKeyValue("Transaction mode", event.transactionMode));
+      console.log(formatKeyValue("Included steps", event.include.join(", ")));
+      console.log(
+        formatKeyValue("Skip indexes", event.skipIndexes ? "yes" : "no"),
+      );
+      console.log(
+        formatKeyValue("Skip analyze", event.skipAnalyze ? "yes" : "no"),
+      );
+      console.log(formatKeyValue("Files queued", event.totalFiles));
+      return;
+    }
+
+    if (event.kind === "file_registered") {
+      console.log(
+        `${theme.infoLabel("POSTGRES")} ${event.fileIndex}/${event.totalFiles} ${event.dataset} registered (${formatBytes(event.fileSize)}).`,
+      );
+      return;
+    }
+
+    if (event.kind === "finish") {
+      console.log(
+        theme.successLabel("POSTGRES"),
+        `Generated direct import script for ${event.totalFiles} file(s) (${formatBytes(event.totalBytes)}).`,
+      );
+      console.log(formatKeyValue("Output path", event.outputPath));
+      console.log(formatKeyValue("Script path", event.scriptPath));
+    }
   };
 }

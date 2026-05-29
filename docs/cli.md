@@ -12,7 +12,7 @@ cnpj-db-loader federal-revenue sync [reference] [--reference <yyyy-mm>] [--curre
 cnpj-db-loader inspect <input>
 cnpj-db-loader extract <input> [--output <path>]
 cnpj-db-loader validate <input>
-cnpj-db-loader sanitize <input> [--output <path>] [--dataset <name>] [-f]
+cnpj-db-loader sanitize <input> [--output <path>] [--dataset <name>] [--source-encoding <encoding>] [-f]
 cnpj-db-loader schema print [--profile <profile>]
 cnpj-db-loader schema generate [--name <name>] [--output <path>] [--profile <profile>]
 cnpj-db-loader database config set <url>

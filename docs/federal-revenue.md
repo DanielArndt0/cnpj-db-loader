@@ -10,9 +10,14 @@ check/download -> extract -> validate -> sanitize -> import
 
 The command also has the shorter alias `revenue`.
 
+The public Federal Revenue share token is no longer embedded in the package. Configure it locally before using remote commands, or pass it with `--share-token` when running a command.
+
 ## Commands
 
 ```bash
+cnpj-db-loader federal-revenue config set share-token "<public-share-token>"
+cnpj-db-loader federal-revenue config show
+cnpj-db-loader federal-revenue config test
 cnpj-db-loader federal-revenue check
 cnpj-db-loader federal-revenue download --output ./downloads --force
 cnpj-db-loader federal-revenue status --output ./downloads
@@ -27,6 +32,34 @@ Alias examples:
 cnpj-db-loader revenue check
 cnpj-db-loader revenue status 2026-05 --output ./downloads
 cnpj-db-loader revenue retry 2026-05 --output ./downloads --force
+```
+
+## Configuration
+
+Federal Revenue WebDAV settings are stored in the same local CNPJ DB Loader config file used by `database config`. This keeps endpoint-specific values outside the published npm package.
+
+```bash
+cnpj-db-loader federal-revenue config set share-token "<public-share-token>"
+cnpj-db-loader federal-revenue config set webdav-url "https://arquivos.receitafederal.gov.br/public.php/webdav"
+cnpj-db-loader federal-revenue config set user-agent "cnpj-db-loader federal-revenue-client"
+cnpj-db-loader federal-revenue config show
+cnpj-db-loader federal-revenue config test
+cnpj-db-loader federal-revenue config reset share-token --force
+cnpj-db-loader federal-revenue config reset --force
+```
+
+Configuration keys:
+
+| Key           | Purpose                                                                  | Default                                                          |
+| ------------- | ------------------------------------------------------------------------ | ---------------------------------------------------------------- |
+| `share-token` | Public Federal Revenue share token used for WebDAV Basic authentication. | No default. Must be configured or provided with `--share-token`. |
+| `webdav-url`  | Federal Revenue WebDAV endpoint.                                         | `https://arquivos.receitafederal.gov.br/public.php/webdav`       |
+| `user-agent`  | HTTP user agent used by Federal Revenue requests.                        | `cnpj-db-loader federal-revenue-client`                          |
+
+Command-line overrides still have priority over persisted configuration:
+
+```bash
+cnpj-db-loader federal-revenue check --share-token "<token>" --base-url "https://arquivos.receitafederal.gov.br/public.php/webdav"
 ```
 
 ## Reference selection
@@ -215,8 +248,9 @@ cnpj-db-loader federal-revenue sync \
 | `--load-batch-size <size>`              | `sync`                                                  | Import load batch size.                                             |
 | `--materialize-batch-size <size>`       | `sync`                                                  | Materialization chunk size.                                         |
 | `--verbose-progress`                    | `sync`                                                  | Show detailed import progress.                                      |
-| `--base-url <url>`                      | `check`, `download`, `retry`, `sync`                    | Override the WebDAV base URL.                                       |
-| `--share-token <token>`                 | `check`, `download`, `retry`, `sync`                    | Override the public share token.                                    |
+| `--base-url <url>`                      | `check`, `download`, `status`, `retry`, `clean`, `sync` | Override the WebDAV base URL.                                       |
+| `--share-token <token>`                 | `check`, `download`, `status`, `retry`, `clean`, `sync` | Override the public share token.                                    |
+| `--user-agent <value>`                  | `check`, `download`, `status`, `retry`, `clean`, `sync` | Override the HTTP user agent.                                       |
 | `--force`                               | `download`, `retry`, `clean`, `sync`                    | Skip confirmation prompts.                                          |
 
 ## Notes

@@ -7,6 +7,7 @@ import { registerDoctorCommands } from "./commands/register-doctor.js";
 import { registerInspectCommands } from "./commands/register-inspect.js";
 import { registerImportCommands } from "./commands/register-import.js";
 import { registerQuarantineCommands } from "./commands/register-quarantine.js";
+import { registerPostgresCommands } from "./commands/register-postgres.js";
 import { registerSchemaCommands } from "./commands/register-schema.js";
 import { registerSanitizeCommands } from "./commands/register-sanitize.js";
 import { registerValidateCommands } from "./commands/register-validate.js";
@@ -34,6 +35,7 @@ export function buildProgram(): Command {
   registerSchemaCommands(program);
   registerFederalRevenueCommands(program);
   registerDatabaseCommands(program);
+  registerPostgresCommands(program);
   registerImportCommands(program);
   registerQuarantineCommands(program);
   registerDoctorCommands(program);
