@@ -1,4 +1,4 @@
-import { StringDecoder } from "node:string_decoder";
+import iconv from "iconv-lite";
 
 import { ValidationError } from "../../core/errors/index.js";
 
@@ -9,42 +9,13 @@ export type SanitizedTextChunk = {
   nulBytesRemoved: number;
   invalidBytesRemoved: number;
   controlCharsRemoved: number;
-};
-
-const WINDOWS_1252_C1_MAP: Record<number, string | undefined> = {
-  0x80: "€",
-  0x82: "‚",
-  0x83: "ƒ",
-  0x84: "„",
-  0x85: "…",
-  0x86: "†",
-  0x87: "‡",
-  0x88: "ˆ",
-  0x89: "‰",
-  0x8a: "Š",
-  0x8b: "‹",
-  0x8c: "Œ",
-  0x8e: "Ž",
-  0x91: "‘",
-  0x92: "’",
-  0x93: "“",
-  0x94: "”",
-  0x95: "•",
-  0x96: "–",
-  0x97: "—",
-  0x98: "˜",
-  0x99: "™",
-  0x9a: "š",
-  0x9b: "›",
-  0x9c: "œ",
-  0x9e: "ž",
-  0x9f: "Ÿ",
+  replacementCharactersFound: number;
 };
 
 export function normalizeSanitizeSourceEncoding(
   value: string | undefined,
 ): SanitizeSourceEncoding {
-  const normalized = (value ?? "WIN1252")
+  const normalized = (value ?? "LATIN1")
     .trim()
     .toUpperCase()
     .replace(/_/g, "-");
@@ -69,6 +40,17 @@ export function normalizeSanitizeSourceEncoding(
   }
 }
 
+function decoderEncoding(sourceEncoding: SanitizeSourceEncoding): string {
+  switch (sourceEncoding) {
+    case "WIN1252":
+      return "windows-1252";
+    case "LATIN1":
+      return "iso-8859-1";
+    case "UTF8":
+      return "utf8";
+  }
+}
+
 function isAllowedControlCodePoint(codePoint: number): boolean {
   return codePoint === 0x09 || codePoint === 0x0a || codePoint === 0x0d;
 }
@@ -86,18 +68,48 @@ function isProblematicControlCodePoint(codePoint: number): boolean {
   );
 }
 
+function removeNulBytes(chunk: Buffer): {
+  chunk: Buffer;
+  nulBytesRemoved: number;
+} {
+  if (!chunk.includes(0x00)) {
+    return { chunk, nulBytesRemoved: 0 };
+  }
+
+  const output = Buffer.allocUnsafe(chunk.length);
+  let offset = 0;
+  let nulBytesRemoved = 0;
+
+  for (const byte of chunk) {
+    if (byte === 0x00) {
+      nulBytesRemoved += 1;
+      continue;
+    }
+
+    output[offset] = byte;
+    offset += 1;
+  }
+
+  return {
+    chunk: output.subarray(0, offset),
+    nulBytesRemoved,
+  };
+}
+
 function sanitizeDecodedText(
   text: string,
-): Omit<SanitizedTextChunk, "nulBytesRemoved"> {
+  nulBytesRemoved: number,
+): SanitizedTextChunk {
   const output: string[] = [];
-  let invalidBytesRemoved = 0;
   let controlCharsRemoved = 0;
+  let replacementCharactersFound = 0;
 
   for (const char of text) {
     const codePoint = char.codePointAt(0)!;
 
     if (codePoint === 0xfffd) {
-      invalidBytesRemoved += 1;
+      replacementCharactersFound += 1;
+      output.push(char);
       continue;
     }
 
@@ -111,99 +123,66 @@ function sanitizeDecodedText(
 
   return {
     text: output.join(""),
-    invalidBytesRemoved,
+    nulBytesRemoved,
+    invalidBytesRemoved: 0,
     controlCharsRemoved,
+    replacementCharactersFound,
   };
 }
 
 export class SanitizeEncodingNormalizer {
-  private readonly utf8Decoder: StringDecoder | undefined;
+  private readonly decoder;
+  private replacementByteSequenceCarry = Buffer.alloc(0);
 
   constructor(private readonly sourceEncoding: SanitizeSourceEncoding) {
-    this.utf8Decoder =
-      sourceEncoding === "UTF8" ? new StringDecoder("utf8") : undefined;
+    this.decoder = iconv.getDecoder(decoderEncoding(sourceEncoding));
   }
 
   normalizeChunk(chunk: Buffer): SanitizedTextChunk {
-    if (this.sourceEncoding === "UTF8") {
-      const decoded = this.utf8Decoder!.write(chunk);
-      const sanitized = sanitizeDecodedText(decoded);
-      const nulBytesRemoved = [...decoded].filter(
-        (char) => char === "\0",
-      ).length;
-
-      return {
-        ...sanitized,
-        nulBytesRemoved,
-      };
-    }
-
-    return this.normalizeSingleByteChunk(chunk);
-  }
-
-  flush(): SanitizedTextChunk {
-    if (!this.utf8Decoder) {
-      return {
-        text: "",
-        nulBytesRemoved: 0,
-        invalidBytesRemoved: 0,
-        controlCharsRemoved: 0,
-      };
-    }
-
-    const decoded = this.utf8Decoder.end();
-    const sanitized = sanitizeDecodedText(decoded);
-    const nulBytesRemoved = [...decoded].filter((char) => char === "\0").length;
+    const replacementByteSequencesFound =
+      this.sourceEncoding === "UTF8"
+        ? 0
+        : this.countUtf8ReplacementByteSequences(chunk);
+    const withoutNulBytes = removeNulBytes(chunk);
+    const decoded = this.decoder.write(withoutNulBytes.chunk);
+    const sanitized = sanitizeDecodedText(
+      decoded,
+      withoutNulBytes.nulBytesRemoved,
+    );
 
     return {
       ...sanitized,
-      nulBytesRemoved,
+      replacementCharactersFound:
+        sanitized.replacementCharactersFound + replacementByteSequencesFound,
     };
   }
 
-  private normalizeSingleByteChunk(chunk: Buffer): SanitizedTextChunk {
-    const output: string[] = [];
-    let nulBytesRemoved = 0;
-    let invalidBytesRemoved = 0;
-    let controlCharsRemoved = 0;
+  flush(): SanitizedTextChunk {
+    const decoded = this.decoder.end() ?? "";
+    return sanitizeDecodedText(decoded, 0);
+  }
 
-    for (const byte of chunk) {
-      if (byte === 0x00) {
-        nulBytesRemoved += 1;
-        continue;
+  private countUtf8ReplacementByteSequences(chunk: Buffer): number {
+    const searchable = Buffer.concat([
+      this.replacementByteSequenceCarry,
+      chunk,
+    ]);
+    let count = 0;
+
+    for (let index = 0; index <= searchable.length - 3; index += 1) {
+      if (
+        searchable[index] === 0xef &&
+        searchable[index + 1] === 0xbf &&
+        searchable[index + 2] === 0xbd
+      ) {
+        count += 1;
       }
-
-      if (byte < 0x20 || byte === 0x7f) {
-        if (isAllowedControlCodePoint(byte)) {
-          output.push(String.fromCharCode(byte));
-        } else {
-          controlCharsRemoved += 1;
-        }
-        continue;
-      }
-
-      if (byte >= 0x80 && byte <= 0x9f) {
-        if (this.sourceEncoding === "WIN1252") {
-          const mapped = WINDOWS_1252_C1_MAP[byte];
-          if (mapped === undefined) {
-            invalidBytesRemoved += 1;
-          } else {
-            output.push(mapped);
-          }
-        } else {
-          controlCharsRemoved += 1;
-        }
-        continue;
-      }
-
-      output.push(String.fromCharCode(byte));
     }
 
-    return {
-      text: output.join(""),
-      nulBytesRemoved,
-      invalidBytesRemoved,
-      controlCharsRemoved,
-    };
+    this.replacementByteSequenceCarry = searchable.subarray(
+      Math.max(0, searchable.length - 2),
+    );
+
+    return count;
   }
 }

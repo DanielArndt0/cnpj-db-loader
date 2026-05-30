@@ -1,7 +1,11 @@
+import { randomUUID } from "node:crypto";
 import { createReadStream, createWriteStream } from "node:fs";
-import { mkdir } from "node:fs/promises";
+import { mkdir, rename, rm } from "node:fs/promises";
 import path from "node:path";
+import { StringDecoder } from "node:string_decoder";
+import { finished } from "node:stream/promises";
 
+import { ValidationError } from "../../core/errors/index.js";
 import {
   normalizeSanitizeSourceEncoding,
   SanitizeEncodingNormalizer,
@@ -36,6 +40,77 @@ function countNewlines(value: string): number {
   return count;
 }
 
+function countReplacementCharacters(value: string): number {
+  let count = 0;
+
+  for (const char of value) {
+    if (char === "\ufffd") {
+      count += 1;
+    }
+  }
+
+  return count;
+}
+
+async function validateNormalizedUtf8File(filePath: string): Promise<number> {
+  const decoder = new StringDecoder("utf8");
+  const input = createReadStream(filePath);
+  let replacementCharactersFound = 0;
+
+  try {
+    for await (const chunk of input) {
+      const chunkBuffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+      replacementCharactersFound += countReplacementCharacters(
+        decoder.write(chunkBuffer),
+      );
+    }
+
+    replacementCharactersFound += countReplacementCharacters(decoder.end());
+  } finally {
+    input.destroy();
+  }
+
+  return replacementCharactersFound;
+}
+
+async function replaceDestinationFile(
+  temporaryPath: string,
+  destinationPath: string,
+): Promise<void> {
+  const backupPath = `${destinationPath}.backup-${randomUUID()}`;
+  let destinationWasBackedUp = false;
+
+  try {
+    await rename(destinationPath, backupPath);
+    destinationWasBackedUp = true;
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
+      throw error;
+    }
+  }
+
+  try {
+    await rename(temporaryPath, destinationPath);
+  } catch (error) {
+    if (destinationWasBackedUp) {
+      await rename(backupPath, destinationPath).catch(() => undefined);
+    }
+
+    throw error;
+  }
+
+  if (destinationWasBackedUp) {
+    await rm(backupPath, { force: true });
+  }
+}
+
+function buildTemporaryOutputPath(outputPath: string): string {
+  return path.join(
+    path.dirname(outputPath),
+    `.${path.basename(outputPath)}.sanitizing-${randomUUID()}.tmp`,
+  );
+}
+
 export async function sanitizeDatasetFile(
   plan: SanitizeFilePlan,
   onChunk?: (update: {
@@ -46,23 +121,30 @@ export async function sanitizeDatasetFile(
     nulBytesRemoved: number;
     invalidBytesRemoved: number;
     controlCharsRemoved: number;
+    replacementCharactersFound: number;
   }) => void,
-  options: { sourceEncoding?: string | undefined } = {},
+  options: {
+    sourceEncoding?: string | undefined;
+    strict?: boolean | undefined;
+  } = {},
 ): Promise<SanitizedFileResult> {
   await mkdir(path.dirname(plan.outputPath), { recursive: true });
 
   const sourceEncoding = normalizeSanitizeSourceEncoding(
     options.sourceEncoding,
   );
+  const strict = options.strict ?? true;
   const normalizer = new SanitizeEncodingNormalizer(sourceEncoding);
+  const temporaryOutputPath = buildTemporaryOutputPath(plan.outputPath);
   const input = createReadStream(plan.absolutePath);
-  const output = createWriteStream(plan.outputPath, { encoding: "utf8" });
+  const output = createWriteStream(temporaryOutputPath, { encoding: "utf8" });
 
   let totalBytesRead = 0;
   let totalBytesWritten = 0;
   let nulBytesRemoved = 0;
   let invalidBytesRemoved = 0;
   let controlCharsRemoved = 0;
+  let replacementCharactersFound = 0;
   let lineCount = 0;
   let sawAnyCharacter = false;
   let lastCharacterWasNewline = false;
@@ -88,6 +170,7 @@ export async function sanitizeDatasetFile(
       nulBytesRemoved += normalized.nulBytesRemoved;
       invalidBytesRemoved += normalized.invalidBytesRemoved;
       controlCharsRemoved += normalized.controlCharsRemoved;
+      replacementCharactersFound += normalized.replacementCharactersFound;
       await processText(normalized.text);
 
       onChunk?.({
@@ -98,6 +181,7 @@ export async function sanitizeDatasetFile(
         nulBytesRemoved,
         invalidBytesRemoved,
         controlCharsRemoved,
+        replacementCharactersFound,
       });
     }
 
@@ -105,33 +189,54 @@ export async function sanitizeDatasetFile(
     nulBytesRemoved += flushed.nulBytesRemoved;
     invalidBytesRemoved += flushed.invalidBytesRemoved;
     controlCharsRemoved += flushed.controlCharsRemoved;
+    replacementCharactersFound += flushed.replacementCharactersFound;
     await processText(flushed.text);
 
     if (sawAnyCharacter && !lastCharacterWasNewline) {
       lineCount += 1;
     }
-  } finally {
-    input.close();
-    output.end();
-    await new Promise<void>((resolve, reject) => {
-      output.on("finish", () => resolve());
-      output.on("error", (error) => reject(error));
-    });
-  }
 
-  return {
-    plan,
-    totalBytesRead,
-    totalBytesWritten,
-    sourceEncoding,
-    nulBytesRemoved,
-    invalidBytesRemoved,
-    controlCharsRemoved,
-    lineCount,
-    changed:
-      nulBytesRemoved > 0 ||
-      invalidBytesRemoved > 0 ||
-      controlCharsRemoved > 0 ||
-      totalBytesRead !== totalBytesWritten,
-  };
+    output.end();
+    await finished(output);
+
+    const replacementCharactersRemaining =
+      await validateNormalizedUtf8File(temporaryOutputPath);
+
+    if (
+      strict &&
+      (replacementCharactersFound > 0 || replacementCharactersRemaining > 0)
+    ) {
+      throw new ValidationError(
+        `Sanitized output validation failed for ${plan.displayPath}. Found ${replacementCharactersFound} replacement marker(s) in source decoding and ${replacementCharactersRemaining} Unicode replacement character(s) in normalized output. Verify the source encoding or source file before importing this dataset.`,
+      );
+    }
+
+    await replaceDestinationFile(temporaryOutputPath, plan.outputPath);
+
+    return {
+      plan,
+      totalBytesRead,
+      totalBytesWritten,
+      sourceEncoding,
+      nulBytesRemoved,
+      invalidBytesRemoved,
+      controlCharsRemoved,
+      replacementCharactersFound,
+      replacementCharactersRemaining,
+      lineCount,
+      changed:
+        nulBytesRemoved > 0 ||
+        invalidBytesRemoved > 0 ||
+        controlCharsRemoved > 0 ||
+        replacementCharactersFound > 0 ||
+        totalBytesRead !== totalBytesWritten,
+    };
+  } catch (error) {
+    input.destroy();
+    output.destroy();
+    await rm(temporaryOutputPath, { force: true });
+    throw error;
+  } finally {
+    input.destroy();
+  }
 }

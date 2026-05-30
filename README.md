@@ -10,7 +10,7 @@ This version focuses on the real loading workflow:
 - configure, check, download, retry, clean, and inspect the latest Federal Revenue CNPJ monthly ZIP archives from the public share
 - extract Receita Federal ZIP archives, including large ZIP/ZIP64 and split ZIP volumes
 - validate an extracted tree
-- sanitize validated files into clean UTF-8 before import, removing NUL bytes, invalid bytes and problematic control characters
+- normalize validated Receita files from ISO-8859-1 into validated UTF-8 before import, removing NUL bytes at byte level and problematic control characters
 - print or generate final, staging, or combined SQL schemas
 - configure and test the default PostgreSQL URL
 - import validated dataset files into PostgreSQL with:
@@ -71,7 +71,7 @@ cnpj-db-loader federal-revenue sync [reference] [--reference <yyyy-mm>] [--curre
 cnpj-db-loader inspect <input>
 cnpj-db-loader extract <input> [--output <path>]
 cnpj-db-loader validate <input>
-cnpj-db-loader sanitize <input> [--output <path>] [--dataset <name>] [--source-encoding <encoding>] [-f]
+cnpj-db-loader sanitize <input> [--output <path>] [--dataset <name>] [--source-encoding <encoding>] [--allow-replacement-chars] [-f]
 cnpj-db-loader schema print [--profile <profile>]
 cnpj-db-loader schema generate [--name <name>] [--output <path>] [--profile <profile>]
 cnpj-db-loader database config set <url>
@@ -122,6 +122,8 @@ The CLI now exposes a split workflow as well: `import` runs the full pipeline, `
 Materialization progress is now checkpointed separately from file-load checkpoints, and the materializer works in resumable chunks controlled by `--materialize-batch-size`. During long final materialization steps, the CLI keeps the live progress output on a dedicated MATERIALIZING stage while reducing per-chunk checkpoint and JSONL write overhead so resumable chunks stay fast. The simplified final schema keeps raw secondary CNAE text in establishments and also materializes `establishment_secondary_cnaes` so APIs can query one row per secondary CNAE without running a separate backfill script.
 
 The extraction service uses a bundled 7-Zip engine for robust large ZIP/ZIP64 processing and split ZIP volume support. Archives are extracted into temporary folders and moved into place only after a successful extraction, preventing partially extracted folders from being treated as complete.
+
+The sanitization service processes Receita source files as streams, removes NUL bytes before decoding, defaults to ISO-8859-1 input, writes temporary UTF-8 output and replaces the final destination only after validation succeeds. Unicode replacement characters are rejected by default so corrupted text is not silently persisted before import.
 
 The Federal Revenue commands write the same structured command logs and keep the remote-download phase outside the import internals. Existing completed ZIP files are skipped by default, temporary `.part` files are used while downloads are still in progress, and each reference keeps a local manifest for `status`, `retry`, `clean`, and future runner automation.
 
