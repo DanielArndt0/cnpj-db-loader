@@ -13,6 +13,7 @@ The current CLI is centered on one practical job: move Receita Federal CNPJ data
 | `src/dictionary` | Dataset layout definitions derived from the Receita dictionary |
 | `src/core`       | Shared errors, prompts, and utilities                          |
 | `src/config`     | Local configuration helpers and paths                          |
+| `src/tests`      | Automated regression tests organized by application area       |
 
 ## Import design
 

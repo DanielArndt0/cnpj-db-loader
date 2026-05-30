@@ -11,9 +11,9 @@ import path from "node:path";
 
 import { afterEach, describe, expect, it } from "vitest";
 
-import { normalizeSanitizeSourceEncoding } from "./encoding.js";
-import { sanitizeDatasetFile } from "./runner.js";
-import type { SanitizeFilePlan } from "./types.js";
+import { normalizeSanitizeSourceEncoding } from "../../services/sanitize/encoding.js";
+import { sanitizeDatasetFile } from "../../services/sanitize/runner.js";
+import type { SanitizeFilePlan } from "../../services/sanitize/types.js";
 
 const temporaryDirectories: string[] = [];
 

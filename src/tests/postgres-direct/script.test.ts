@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { generatePostgresDirectScriptFiles } from "./script.js";
+import { generatePostgresDirectScriptFiles } from "../../services/postgres-direct/script.js";
 
 const FILE_MTIME = "2026-05-29T00:00:00.000Z";
 
