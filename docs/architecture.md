@@ -21,7 +21,7 @@ The import pipeline now uses:
 - deterministic dataset order to respect foreign keys
 - an exact preparatory scan that counts total source rows and planned batches before the first write
 - streaming file reads to avoid loading the full dataset into RAM
-- an optional sanitize step that writes clean UTF-8 files and removes known low-level byte issues before import starts
+- an optional streaming sanitize step that normalizes ISO-8859-1 source files into validated UTF-8 output, removes NUL bytes before decoding and replaces destination files only after validation succeeds
 - COPY-based staged writes for the large datasets followed by staged-to-final materialization
 - conflict-safe upserts for the smaller domain datasets
 - `import_plans` and `import_plan_files` to persist exact import plans and avoid recounting the same source files on resume
@@ -103,6 +103,8 @@ The PostgreSQL direct import workflow is a hybrid execution path. It keeps file 
 The hybrid scripts reuse the same operational model as the standard importer: `import_plans`, `import_plan_files`, `import_checkpoints`, `import_materialization_checkpoints` and `import_quarantine`.
 
 The generated scripts reset staging tables, load sanitized files with `\copy`, quarantine known row-level inconsistencies, insert valid rows into staging tables, upsert domain and final tables, materialize `establishment_secondary_cnaes`, update lightweight checkpoints and refresh planner statistics with `ANALYZE`.
+
+Before either import path begins, the sanitization service processes extracted files as byte streams, removes NUL bytes, decodes the configured source encoding (default `LATIN1` / `ISO-8859-1`), writes temporary UTF-8 output and validates that no Unicode replacement characters remain before moving files into the sanitized tree.
 
 ## Extraction engine
 

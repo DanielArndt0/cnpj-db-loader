@@ -2,18 +2,22 @@
 
 ## Purpose
 
-`sanitize` prepares a clean dataset tree before PostgreSQL import.
+`sanitize` prepares a normalized dataset tree before PostgreSQL import.
 
-The command now performs robust text sanitization for Receita Federal files:
+Receita Federal source files can use the legacy `ISO-8859-1` encoding. The command now normalizes source bytes before any downstream text parsing:
 
-- reads legacy Receita files using a configurable source encoding;
-- writes sanitized output as clean UTF-8;
-- removes NUL bytes;
-- removes invalid bytes that cannot be safely decoded;
-- removes problematic control characters while preserving line breaks;
-- keeps the original dataset file names and directory structure.
+```txt
+raw extracted file
+  -> byte stream
+  -> remove NUL bytes (0x00)
+  -> decode source encoding
+  -> encode as UTF-8
+  -> write temporary UTF-8 file
+  -> validate normalized output
+  -> replace destination file only after validation succeeds
+```
 
-This makes the sanitized tree safer for both the standard loader import flow and the hybrid PostgreSQL direct import flow.
+This prevents accented Portuguese characters from being persisted incorrectly before import.
 
 ## Command
 
@@ -23,12 +27,13 @@ cnpj-db-loader sanitize <input>
 
 ## Options
 
-| Option                         | Description                                                                                                           |
-| ------------------------------ | --------------------------------------------------------------------------------------------------------------------- |
-| `--output <path>`              | Custom output directory for the sanitized dataset tree.                                                               |
-| `--dataset <name>`             | Sanitize only one dataset block, such as `establishments` or `companies`.                                             |
-| `--source-encoding <encoding>` | Source file encoding used while reading Receita files. Defaults to `WIN1252`. Supported: `WIN1252`, `LATIN1`, `UTF8`. |
-| `-f, --force`                  | Skip the confirmation prompt.                                                                                         |
+| Option                         | Description                                                                                                                         |
+| ------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------- |
+| `--output <path>`              | Custom output directory for the sanitized dataset tree.                                                                             |
+| `--dataset <name>`             | Sanitize only one dataset block, such as `establishments` or `companies`.                                                           |
+| `--source-encoding <encoding>` | Source file encoding used while reading Receita files. Defaults to `LATIN1` (`ISO-8859-1`). Supported: `LATIN1`, `WIN1252`, `UTF8`. |
+| `--allow-replacement-chars`    | Allow Unicode replacement characters (`�`) in output instead of failing validation. Use only for manual inspection.                 |
+| `-f, --force`                  | Skip the confirmation prompt.                                                                                                       |
 
 ## Default output behavior
 
@@ -47,7 +52,7 @@ cnpj-db-loader import ./downloads/sanitized --load-batch-size 500 --materialize-
 
 ## Recommended hybrid PostgreSQL flow
 
-Because sanitized files are now written as UTF-8, the direct PostgreSQL script can use `UTF8` as the source encoding.
+Sanitized files are validated UTF-8 output, so the direct PostgreSQL script should use `UTF8` as the source encoding.
 
 ```bash
 cnpj-db-loader sanitize ./downloads/extracted --output ./downloads/sanitized --force
@@ -55,31 +60,50 @@ cnpj-db-loader postgres generate-script ./downloads/sanitized --output ./downloa
 psql -d "postgres://postgres:postgres@localhost:5432/cnpj" -f ./downloads/postgres-direct/import-postgres-direct.sql
 ```
 
-## What it improves
+## Safe normalization behavior
 
-- fewer encoding-related `COPY` failures;
-- fewer UTF-8 / NUL-byte related insert failures;
-- no invalid bytes in sanitized output;
-- fewer problematic control characters in PostgreSQL input files;
-- less row-by-row fallback during standard import;
-- better throughput for large datasets;
-- cleaner quarantine data because known low-level issues are removed earlier.
+The sanitization pipeline:
+
+- processes large files as streams instead of loading them fully into memory;
+- removes NUL bytes at byte level before decoding;
+- defaults to decoding Receita source files as `ISO-8859-1`;
+- writes UTF-8 output to a temporary file;
+- validates the temporary output before replacing the destination file;
+- preserves a previously valid destination file when normalization or validation fails;
+- rejects Unicode replacement characters (`�`) by default instead of silently removing them;
+- reports source encoding, removed NUL bytes, removed control characters and replacement-character metrics.
 
 ## Encoding notes
 
-The default source encoding is `WIN1252`, which matches the common legacy encoding used by Receita files.
+The default source encoding is `LATIN1`, which maps to `ISO-8859-1` and matches the Receita files validated during development.
 
-If a source dataset still fails because of undefined Windows-1252 bytes, `LATIN1` can be used as a more permissive decoder:
+Use `WIN1252` only when processing a source tree that is known to use Windows-1252:
 
 ```bash
-cnpj-db-loader sanitize ./downloads/extracted --source-encoding LATIN1 --output ./downloads/sanitized --force
+cnpj-db-loader sanitize ./downloads/extracted --source-encoding WIN1252 --output ./downloads/sanitized --force
 ```
 
-The output is still UTF-8 in both cases.
+Use `UTF8` only when the input tree is already valid UTF-8:
+
+```bash
+cnpj-db-loader sanitize ./downloads/extracted --source-encoding UTF8 --output ./downloads/sanitized --force
+```
+
+## Replacement-character validation
+
+The visible character:
+
+```txt
+�
+```
+
+is the Unicode replacement character. Once it has replaced an original accented character and the corrupted content has been persisted, the original value cannot be reliably recovered from that file alone.
+
+For this reason, sanitization fails by default if replacement characters remain in normalized output. The optional `--allow-replacement-chars` flag exists only for controlled manual inspection and should not be used in normal import flows.
 
 ## Notes
 
-- `sanitize` does not replace validation; it assumes the dataset tree is already valid.
-- `sanitize` preserves file names and relative paths so existing import logic can keep detecting datasets by name.
-- `import` still keeps quarantine and retry logic for unexpected issues that survive sanitization.
+- `sanitize` does not replace dataset-tree validation;
+- `sanitize` preserves file names and relative paths so existing import logic can keep detecting datasets by name;
+- row-level business inconsistencies that survive normalization remain handled by the existing import quarantine flow;
 - no database schema changes are required to use `sanitize`.

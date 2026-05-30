@@ -25,11 +25,15 @@ export function registerSanitizeCommands(program: Command): void {
     )
     .option(
       "--source-encoding <encoding>",
-      "Source file encoding used while reading Receita files. Defaults to WIN1252 and writes clean UTF-8 output.",
+      "Source file encoding used while reading Receita files. Defaults to LATIN1 (ISO-8859-1) and writes validated UTF-8 output.",
+    )
+    .option(
+      "--allow-replacement-chars",
+      "Allow Unicode replacement characters in sanitized output instead of failing validation.",
     )
     .option("-f, --force", "Skip the confirmation prompt.")
     .description(
-      "Prepare a sanitized dataset tree before import by removing known low-level byte issues such as NUL bytes.",
+      "Normalize Receita source files into validated UTF-8 output before import.",
     )
     .action(
       async (
@@ -38,6 +42,7 @@ export function registerSanitizeCommands(program: Command): void {
           output?: string;
           dataset?: string;
           sourceEncoding?: string;
+          allowReplacementChars?: boolean;
           force?: boolean;
         },
       ) => {
@@ -67,6 +72,10 @@ export function registerSanitizeCommands(program: Command): void {
 
         if (options.sourceEncoding) {
           sanitizeOptions.sourceEncoding = options.sourceEncoding;
+        }
+
+        if (options.allowReplacementChars) {
+          sanitizeOptions.strict = false;
         }
 
         const summary = await sanitizeInputDirectory(input, sanitizeOptions);

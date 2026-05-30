@@ -15,7 +15,7 @@
 | `inspect <input>`               | Detect whether the input is zipped, extracted, mixed, or empty.                                                                                                   |
 | `extract <input>`               | Extract ZIP, ZIP64, and split ZIP archives found inside the input directory using the bundled 7-Zip engine.                                                       |
 | `validate <input>`              | Validate an extracted dataset tree.                                                                                                                               |
-| `sanitize <input>`              | Prepare a sanitized dataset tree before import.                                                                                                                   |
+| `sanitize <input>`              | Normalize Receita source files into validated UTF-8 output before import.                                                                                         |
 | `schema print`                  | Print a generated PostgreSQL schema profile (`full`, `final`, or `staging`) to stdout. The final profile is simplified for fast first-load materialization.       |
 | `schema generate`               | Write a generated schema profile to the current working directory by default.                                                                                     |
 | `database config set <url>`     | Persist the default PostgreSQL URL.                                                                                                                               |

@@ -300,6 +300,18 @@ export function printSanitizeSummary(
       formatCount(summary.controlCharsRemoved),
     ),
   );
+  console.log(
+    formatKeyValue(
+      "Replacement chars found",
+      formatCount(summary.replacementCharactersFound),
+    ),
+  );
+  console.log(
+    formatKeyValue(
+      "Replacement chars remaining",
+      formatCount(summary.replacementCharactersRemaining),
+    ),
+  );
   console.log(formatKeyValue("Changed files", summary.changedFiles));
   console.log(formatKeyValue("Unchanged files", summary.unchangedFiles));
 

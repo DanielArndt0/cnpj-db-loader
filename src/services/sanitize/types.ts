@@ -33,6 +33,8 @@ export type SanitizedFileResult = {
   nulBytesRemoved: number;
   invalidBytesRemoved: number;
   controlCharsRemoved: number;
+  replacementCharactersFound: number;
+  replacementCharactersRemaining: number;
   lineCount: number;
   changed: boolean;
 };
@@ -49,6 +51,8 @@ export type SanitizeSummary = {
   nulBytesRemoved: number;
   invalidBytesRemoved: number;
   controlCharsRemoved: number;
+  replacementCharactersFound: number;
+  replacementCharactersRemaining: number;
   changedFiles: number;
   unchangedFiles: number;
   datasets: SanitizeDatasetType[];
@@ -61,6 +65,8 @@ export type SanitizeSummary = {
     nulBytesRemoved: number;
     invalidBytesRemoved: number;
     controlCharsRemoved: number;
+    replacementCharactersFound: number;
+    replacementCharactersRemaining: number;
   }>;
   warnings: string[];
   nextStep?: string | undefined;
@@ -89,6 +95,7 @@ export type SanitizeProgressEvent =
       nulBytesRemoved: number;
       invalidBytesRemoved: number;
       controlCharsRemoved: number;
+      replacementCharactersFound: number;
       changedFiles: number;
     }
   | {
@@ -98,6 +105,8 @@ export type SanitizeProgressEvent =
       nulBytesRemoved: number;
       invalidBytesRemoved: number;
       controlCharsRemoved: number;
+      replacementCharactersFound: number;
+      replacementCharactersRemaining: number;
       changedFiles: number;
       totalBytes: number;
     };
@@ -108,6 +117,7 @@ export type SanitizeOptions = {
   outputPath?: string | undefined;
   dataset?: SanitizeDatasetType | undefined;
   sourceEncoding?: string | undefined;
+  strict?: boolean | undefined;
   onProgress?: SanitizeProgressListener | undefined;
 };
 

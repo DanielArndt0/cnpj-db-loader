@@ -36,7 +36,7 @@ By default, the latest published `YYYY-MM` folder is selected from the Federal R
 | 1    | `inspect <input>`                                        | Detect whether the folder contains ZIP archives, extracted content, or both                                               |
 | 2    | `extract <input>`                                        | Extract Receita ZIP, ZIP64, and split ZIP archives into `./extracted` by default                                          |
 | 3    | `validate <input>`                                       | Validate the extracted dataset tree and confirm that the required dataset blocks are present                              |
-| 4    | `sanitize <input>`                                       | Prepare a sanitized dataset tree by removing known low-level byte issues before import                                    |
+| 4    | `sanitize <input>`                                       | Normalize Receita source files into validated UTF-8 output before import                                                  |
 | 5    | `database config show` / `database config set <url>`     | Review or configure the PostgreSQL connection                                                                             |
 | 6    | `schema generate --profile full`                         | Generate the combined SQL schema with final, control, and staging tables                                                  |
 | 7    | `import <input>`                                         | Run the full pipeline: staged/direct load, staged materialization, and final summary generation                           |

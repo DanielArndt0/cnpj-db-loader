@@ -548,7 +548,7 @@ export function createSanitizeProgressReporter(): (
         `Datasets: ${event.datasets.join(" > ")}`,
         `Source encoding: ${event.sourceEncoding} > UTF8`,
         `Files: 0/${formatCount(event.totalFiles)} | Bytes: ${formatBytes(0)} / ${formatBytes(event.totalBytes)}`,
-        `Rows: ${formatCount(0)} | NUL: ${formatCount(0)} | Invalid bytes: ${formatCount(0)} | Controls: ${formatCount(0)}`,
+        `Rows: ${formatCount(0)} | NUL: ${formatCount(0)} | Invalid bytes: ${formatCount(0)} | Controls: ${formatCount(0)} | Replacement chars: ${formatCount(0)}`,
         `Current: waiting...`,
       ];
       renderBlock([
@@ -567,7 +567,7 @@ export function createSanitizeProgressReporter(): (
         currentLines[3] ?? "",
         currentLines[4] ?? "",
         `Files: ${formatCount(event.fileIndex)}/${formatCount(event.totalFiles)} | Bytes: ${formatBytes(event.bytesProcessed)} / ${formatBytes(event.totalBytes)}`,
-        `Rows: ${formatCount(event.processedRows)} | NUL: ${formatCount(event.nulBytesRemoved)} | Invalid bytes: ${formatCount(event.invalidBytesRemoved)} | Controls: ${formatCount(event.controlCharsRemoved)} | Changed: ${formatCount(event.changedFiles)}`,
+        `Rows: ${formatCount(event.processedRows)} | NUL: ${formatCount(event.nulBytesRemoved)} | Invalid bytes: ${formatCount(event.invalidBytesRemoved)} | Controls: ${formatCount(event.controlCharsRemoved)} | Replacement chars: ${formatCount(event.replacementCharactersFound)} | Changed: ${formatCount(event.changedFiles)}`,
         `Current: ${shortPath(event.currentFileDisplayPath)}`,
       ];
       renderBlock([
@@ -598,6 +598,18 @@ export function createSanitizeProgressReporter(): (
       formatKeyValue(
         "Removed control chars",
         formatCount(event.controlCharsRemoved),
+      ),
+    );
+    console.log(
+      formatKeyValue(
+        "Replacement chars found",
+        formatCount(event.replacementCharactersFound),
+      ),
+    );
+    console.log(
+      formatKeyValue(
+        "Replacement chars remaining",
+        formatCount(event.replacementCharactersRemaining),
       ),
     );
     console.log(
