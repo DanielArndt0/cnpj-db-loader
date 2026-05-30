@@ -1,8 +1,13 @@
-import { mkdir, readdir, stat } from "node:fs/promises";
+import { randomUUID } from "node:crypto";
+import { mkdir, readdir, rename, rm, stat } from "node:fs/promises";
 import path from "node:path";
-import extract from "extract-zip";
 
 import { detectOs, defaultExtractedOutputPath } from "../core/utils/index.js";
+import { extractArchiveWithSevenZip } from "./extract/archive-extractor.js";
+import {
+  archiveOutputFolderName,
+  isSupportedArchiveFileName,
+} from "./extract/archive-path.js";
 
 export type ExtractionEntry = {
   archivePath: string;
@@ -98,7 +103,7 @@ async function findZipFiles(rootPath: string): Promise<string[]> {
       continue;
     }
 
-    if (entry.isFile() && entry.name.toLowerCase().endsWith(".zip")) {
+    if (entry.isFile() && isSupportedArchiveFileName(entry.name)) {
       found.push(fullPath);
     }
   }
@@ -112,12 +117,23 @@ async function extractSingleArchive(
   archiveSizeInBytes: number,
 ): Promise<ExtractionEntry> {
   const archiveName = path.basename(zipPath);
-  const folderName = path.basename(zipPath, path.extname(zipPath));
-  const destinationPath = path.join(outputRootPath, folderName);
+  const destinationPath = path.join(
+    outputRootPath,
+    archiveOutputFolderName(zipPath),
+  );
+  const temporaryDestinationPath = path.join(
+    outputRootPath,
+    `.${archiveOutputFolderName(zipPath)}.extracting-${randomUUID()}`,
+  );
 
   try {
-    await mkdir(destinationPath, { recursive: true });
-    await extract(zipPath, { dir: destinationPath });
+    await mkdir(outputRootPath, { recursive: true });
+    await extractArchiveWithSevenZip({
+      archivePath: zipPath,
+      destinationPath: temporaryDestinationPath,
+    });
+    await rm(destinationPath, { recursive: true, force: true });
+    await rename(temporaryDestinationPath, destinationPath);
 
     return {
       archivePath: zipPath,
@@ -127,6 +143,8 @@ async function extractSingleArchive(
       sizeInBytes: archiveSizeInBytes,
     };
   } catch (error) {
+    await rm(temporaryDestinationPath, { recursive: true, force: true });
+
     return {
       archivePath: zipPath,
       archiveName,

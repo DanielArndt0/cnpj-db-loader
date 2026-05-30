@@ -103,3 +103,9 @@ The PostgreSQL direct import workflow is a hybrid execution path. It keeps file 
 The hybrid scripts reuse the same operational model as the standard importer: `import_plans`, `import_plan_files`, `import_checkpoints`, `import_materialization_checkpoints` and `import_quarantine`.
 
 The generated scripts reset staging tables, load sanitized files with `\copy`, quarantine known row-level inconsistencies, insert valid rows into staging tables, upsert domain and final tables, materialize `establishment_secondary_cnaes`, update lightweight checkpoints and refresh planner statistics with `ANALYZE`.
+
+## Extraction engine
+
+Archive extraction is isolated behind the extraction service and uses the bundled 7-Zip engine. This keeps the CLI cross-platform while improving support for large ZIP/ZIP64 files and split ZIP volumes. The extractor processes one archive at a time and stages output in a temporary directory before moving it into the final extracted tree.
+
+The archive discovery step accepts regular `.zip` files and the first volume of `.zip.001` split archives. Additional volumes are consumed by 7-Zip automatically and are not scheduled as separate archives.

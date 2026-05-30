@@ -13,7 +13,7 @@
 | `federal-revenue clean`         | Clean local Federal Revenue `.part` files, failed/partial files, or a whole reference folder.                                                                     |
 | `federal-revenue sync`          | Download, extract, validate, sanitize, and import the selected monthly CNPJ reference using the existing loader pipeline with a local sync lock.                  |
 | `inspect <input>`               | Detect whether the input is zipped, extracted, mixed, or empty.                                                                                                   |
-| `extract <input>`               | Extract every ZIP archive found inside the input directory.                                                                                                       |
+| `extract <input>`               | Extract ZIP, ZIP64, and split ZIP archives found inside the input directory using the bundled 7-Zip engine.                                                       |
 | `validate <input>`              | Validate an extracted dataset tree.                                                                                                                               |
 | `sanitize <input>`              | Prepare a sanitized dataset tree before import.                                                                                                                   |
 | `schema print`                  | Print a generated PostgreSQL schema profile (`full`, `final`, or `staging`) to stdout. The final profile is simplified for fast first-load materialization.       |

@@ -1,6 +1,8 @@
 import { readdir, stat } from "node:fs/promises";
 import path from "node:path";
 
+import { isSupportedArchiveFileName } from "./extract/archive-path.js";
+
 export type DatasetType =
   | "companies"
   | "establishments"
@@ -123,7 +125,7 @@ function inferDatasetAlias(name: string): DatasetType | undefined {
 }
 
 function inferType(relativePath: string, name: string): DatasetType {
-  if (name.toLowerCase().endsWith(".zip")) {
+  if (isSupportedArchiveFileName(name)) {
     return "zip-archive";
   }
 
@@ -155,7 +157,7 @@ async function walk(
       size: entryStat.size,
       inferredType,
       requiresExtraction:
-        entry.isFile() && entry.name.toLowerCase().endsWith(".zip"),
+        entry.isFile() && isSupportedArchiveFileName(entry.name),
     });
 
     if (entry.isDirectory()) {
@@ -211,7 +213,7 @@ export async function inspectFiles(inputPath: string): Promise<InspectSummary> {
   const resolvedInputPath = path.resolve(inputPath);
   const entries = await walk(resolvedInputPath);
   const zipArchivesFound = entries.filter((entry) =>
-    entry.entryName.toLowerCase().endsWith(".zip"),
+    isSupportedArchiveFileName(entry.entryName),
   ).length;
   const extractedEntriesFound = entries.filter(
     (entry) =>
