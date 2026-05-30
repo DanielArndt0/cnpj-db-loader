@@ -8,7 +8,7 @@ This version focuses on the real loading workflow:
 
 - inspect a downloaded directory
 - configure, check, download, retry, clean, and inspect the latest Federal Revenue CNPJ monthly ZIP archives from the public share
-- extract Receita Federal ZIP archives
+- extract Receita Federal ZIP archives, including large ZIP/ZIP64 and split ZIP volumes
 - validate an extracted tree
 - sanitize validated files into clean UTF-8 before import, removing NUL bytes, invalid bytes and problematic control characters
 - print or generate final, staging, or combined SQL schemas
@@ -120,6 +120,8 @@ The import internals are now split into dedicated modules such as planner, sourc
 The CLI now exposes a split workflow as well: `import` runs the full pipeline, `import load` stops after staging/direct writes, `import materialize` resumes from the saved plan and pushes staged rows into the final tables, and `database cleanup ...` exposes safe maintenance commands for staging tables, simplified final materialized tables, checkpoints, and saved plans.
 
 Materialization progress is now checkpointed separately from file-load checkpoints, and the materializer works in resumable chunks controlled by `--materialize-batch-size`. During long final materialization steps, the CLI keeps the live progress output on a dedicated MATERIALIZING stage while reducing per-chunk checkpoint and JSONL write overhead so resumable chunks stay fast. The simplified final schema keeps raw secondary CNAE text in establishments and also materializes `establishment_secondary_cnaes` so APIs can query one row per secondary CNAE without running a separate backfill script.
+
+The extraction service uses a bundled 7-Zip engine for robust large ZIP/ZIP64 processing and split ZIP volume support. Archives are extracted into temporary folders and moved into place only after a successful extraction, preventing partially extracted folders from being treated as complete.
 
 The Federal Revenue commands write the same structured command logs and keep the remote-download phase outside the import internals. Existing completed ZIP files are skipped by default, temporary `.part` files are used while downloads are still in progress, and each reference keeps a local manifest for `status`, `retry`, `clean`, and future runner automation.
 

@@ -34,7 +34,7 @@ By default, the latest published `YYYY-MM` folder is selected from the Federal R
 | ---- | -------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
 | 0    | `federal-revenue check/download/status/retry/clean/sync` | Optionally check, download, inspect, retry, clean, or sync the latest monthly CNPJ files before the local processing flow |
 | 1    | `inspect <input>`                                        | Detect whether the folder contains ZIP archives, extracted content, or both                                               |
-| 2    | `extract <input>`                                        | Extract every Receita ZIP archive into `./extracted` by default                                                           |
+| 2    | `extract <input>`                                        | Extract Receita ZIP, ZIP64, and split ZIP archives into `./extracted` by default                                          |
 | 3    | `validate <input>`                                       | Validate the extracted dataset tree and confirm that the required dataset blocks are present                              |
 | 4    | `sanitize <input>`                                       | Prepare a sanitized dataset tree by removing known low-level byte issues before import                                    |
 | 5    | `database config show` / `database config set <url>`     | Review or configure the PostgreSQL connection                                                                             |
@@ -42,6 +42,12 @@ By default, the latest published `YYYY-MM` folder is selected from the Federal R
 | 7    | `import <input>`                                         | Run the full pipeline: staged/direct load, staged materialization, and final summary generation                           |
 | 8    | `import load <input>`                                    | Stop after the load phase when you want staging populated without immediately materializing it                            |
 | 9    | `import materialize <input>`                             | Resume from the saved plan and materialize staged datasets into the final schema in chunks                                |
+
+## Extraction behavior
+
+`extract` uses a bundled 7-Zip engine for robust handling of large Receita archives. The extractor supports regular ZIP files, ZIP64 archives, and split ZIP volumes whose first file ends with `.zip.001`. Traditional split ZIP sets that end with a `.zip` central volume also continue to be discovered normally.
+
+Each archive is first extracted into a temporary directory. The final destination folder is replaced only after extraction succeeds, so interrupted or invalid archives do not leave a partial folder that looks complete.
 
 ## Schema profiles
 

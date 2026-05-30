@@ -1,5 +1,6 @@
 import path from "node:path";
 
+import { isSupportedArchiveFileName } from "./extract/archive-path.js";
 import type {
   DatasetType,
   FileInspection,
@@ -104,7 +105,7 @@ function selectEntriesForValidation(inspected: InspectSummary): {
   return {
     validatedPath: inspected.inputPath,
     entries: inspected.entries.filter(
-      (entry) => !entry.relativePath.toLowerCase().endsWith(".zip"),
+      (entry) => !isSupportedArchiveFileName(entry.relativePath),
     ),
   };
 }

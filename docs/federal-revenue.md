@@ -136,6 +136,8 @@ The manifest tracks:
 
 This state is intentionally local and file-based. It does not require Redis or PostgreSQL.
 
+During `sync`, extraction uses the bundled 7-Zip engine to support large ZIP/ZIP64 archives and split ZIP volumes more reliably. Extraction output is staged in a temporary directory and promoted only after the archive is processed successfully.
+
 ## Status
 
 Use `status` to inspect the local reference state without starting a new download:
