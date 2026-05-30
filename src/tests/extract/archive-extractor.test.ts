@@ -6,9 +6,9 @@ import path from "node:path";
 import { path7z } from "7zip-bin-full";
 import { afterEach, describe, expect, it } from "vitest";
 
-import { extractArchives } from "../extract.service.js";
-import { inspectFiles } from "../inspect.service.js";
-import { extractArchiveWithSevenZip } from "./archive-extractor.js";
+import { extractArchives } from "../../services/extract.service.js";
+import { inspectFiles } from "../../services/inspect.service.js";
+import { extractArchiveWithSevenZip } from "../../services/extract/archive-extractor.js";
 
 const temporaryPaths: string[] = [];
 
