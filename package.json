@@ -4,16 +4,26 @@
   "publishConfig": {
     "access": "public"
   },
-  "description": "Practical CLI for preparing Brazilian Federal Revenue CNPJ open data for PostgreSQL.",
+  "description": "CLI prática para baixar, preparar e importar dados abertos de CNPJ da Receita Federal no PostgreSQL.",
   "keywords": [
     "cnpj",
-    "federal-revenue",
+    "receita-federal",
+    "dados-abertos",
+    "dados-publicos",
+    "base-cnpj",
+    "cnpj-brasil",
+    "empresas-brasil",
+    "cadastro-empresas",
+    "importador-cnpj",
+    "etl",
     "cli",
     "command-line",
     "postgresql",
-    "database",
+    "banco-de-dados",
     "typescript",
-    "nodejs"
+    "nodejs",
+    "open-data",
+    "federal-revenue"
   ],
   "author": "Daniel Arndt",
   "license": "MIT",

@@ -1,153 +1,292 @@
 # CNPJ DB Loader
 
-O CNPJ DB Loader é uma CLI prática para preparar os conjuntos de dados públicos de CNPJ da Receita Federal do Brasil para o PostgreSQL.
+[![npm](https://img.shields.io/npm/v/@danielarndt0/cnpj-db-loader)](https://www.npmjs.com/package/@danielarndt0/cnpj-db-loader)
+[![Node.js](https://img.shields.io/badge/Node.js-%3E%3D20-339933?logo=node.js&logoColor=white)](https://nodejs.org/)
+[![Licença MIT](https://img.shields.io/badge/licen%C3%A7a-MIT-blue.svg)](./LICENSE)
 
-A versão 3.0.0 adiciona suporte ao CNPJ alfanumérico (mantendo válidos os CNPJs numéricos existentes) e gera o banco com nomes de tabelas, colunas e comentários em português. Comandos e flags da CLI permanecem em inglês.
+CLI para baixar, preparar e importar os dados públicos de CNPJ da Receita Federal do Brasil para o PostgreSQL.
 
-## Escopo atual
+O CNPJ DB Loader cuida do fluxo completo: download, extração, validação, sanitização, criação do schema e importação dos dados.
 
-Esta versão foca no fluxo real de carga:
+> A versão 3.0.0 suporta CNPJs numéricos e alfanuméricos e gera tabelas e colunas em português.
 
-- inspecionar um diretório baixado
-- configurar, verificar, baixar, repetir, limpar e inspecionar os arquivos ZIP mensais de CNPJ da Receita Federal a partir do compartilhamento público
-- extrair os arquivos ZIP da Receita Federal, incluindo ZIP/ZIP64 grandes e volumes ZIP divididos
-- validar uma árvore extraída
-- normalizar os arquivos validados da Receita de ISO-8859-1 para UTF-8 validado antes da importação, removendo bytes NUL em nível de byte e caracteres de controle problemáticos
-- imprimir ou gerar schemas SQL finais, de staging ou combinados
-- configurar e testar a URL padrão do PostgreSQL
-- importar os arquivos de dataset validados para o PostgreSQL com:
-  - varredura preparatória exata de total de linhas e total de lotes antes do início da importação
-  - planos de importação persistidos e reutilizados na retomada para a mesma entrada validada e o mesmo tamanho de lote
-  - cargas em massa de staging para os grandes datasets via COPY do PostgreSQL
-  - materialização automática de `estabelecimento_cnaes_secundarios` a partir dos dados de CNAE secundário dos estabelecimentos
-  - upserts diretos no schema final para os datasets de domínio menores
-  - retomada por checkpoint por arquivo e deslocamento de bytes
-  - quarentena de linhas para registros inválidos ou que violam constraints, sem interromper a importação
-- gerar um script de importação `psql` direto que carrega os arquivos sanitizados da Receita sem reescrever o dataset completo em outra árvore de CSV
-- comandos de inspeção da quarentena para analisar as linhas armazenadas em `quarentena_importacao`
+## O que ele faz
+
+- baixa os arquivos mensais de CNPJ da Receita Federal;
+- extrai arquivos ZIP, ZIP64 e volumes divididos;
+- valida a estrutura dos datasets;
+- converte os arquivos de ISO-8859-1 para UTF-8;
+- remove bytes NUL e caracteres de controle problemáticos;
+- gera o schema PostgreSQL em português;
+- importa arquivos grandes usando streaming e `COPY`;
+- retoma importações interrompidas por checkpoints;
+- envia registros inválidos para quarentena sem parar toda a carga;
+- gera scripts `psql` para importação direta no PostgreSQL.
+
+## Requisitos
+
+- Node.js 20 ou superior;
+- PostgreSQL;
+- espaço em disco suficiente para os arquivos mensais e o banco gerado;
+- `psql` apenas para aplicar o schema ou usar a importação direta.
+
+O motor 7-Zip usado na extração já acompanha o pacote.
 
 ## Instalação
 
+Instale globalmente pelo npm:
+
 ```bash
-npm install
+npm install -g @danielarndt0/cnpj-db-loader
 ```
 
-Durante o desenvolvimento:
+Confira a instalação:
 
 ```bash
-npm run cli -- --help
+cnpj-db-loader --help
+```
+
+Também é possível usar o alias curto:
+
+```bash
+cdl --help
+```
+
+Sem instalação global:
+
+```bash
+npx @danielarndt0/cnpj-db-loader --help
 ```
 
 ## Início rápido
 
+### 1. Configure o PostgreSQL
+
+```bash
+cnpj-db-loader database config set "postgresql://usuario:senha@localhost:5432/cnpj"
+cnpj-db-loader database config test
+```
+
+### 2. Gere e aplique o schema
+
+```bash
+cnpj-db-loader schema generate \
+  --profile full \
+  --name cnpj-schema \
+  --output ./sql
+```
+
+Aplique o arquivo SQL gerado:
+
+```bash
+psql "postgresql://usuario:senha@localhost:5432/cnpj" \
+  -f ./sql/cnpj-schema.sql
+```
+
+### 3. Configure o acesso aos arquivos da Receita Federal
+
 ```bash
 cnpj-db-loader rfb config set share-token "<token-do-compartilhamento-publico>"
 cnpj-db-loader rfb config test
+```
+
+### 4. Baixe e importe a referência mais recente
+
+O comando `sync` executa download, extração, validação, sanitização e importação:
+
+```bash
+cnpj-db-loader rfb sync \
+  --output ./downloads \
+  --db-url "postgresql://usuario:senha@localhost:5432/cnpj" \
+  --verbose-progress \
+  --force
+```
+
+## Fluxo manual
+
+Use o fluxo manual quando quiser acompanhar ou executar cada etapa separadamente.
+
+```bash
+# Verifica a referência mensal disponível
 cnpj-db-loader rfb check
-cnpj-db-loader rfb download --output ./downloads
-cnpj-db-loader rfb status --output ./downloads
+
+# Baixa os arquivos
+cnpj-db-loader rfb download --output ./downloads --force
+
+# Inspeciona e extrai a referência baixada
 cnpj-db-loader inspect ./downloads/<referencia>
 cnpj-db-loader extract ./downloads/<referencia>
+
+# Valida e converte os arquivos para UTF-8
 cnpj-db-loader validate ./downloads/<referencia>/extracted
 cnpj-db-loader sanitize ./downloads/<referencia>/extracted
-cnpj-db-loader database config set "postgresql://user:password@localhost:5432/cnpj"
+
+# Importa para o PostgreSQL
+cnpj-db-loader import \
+  ./downloads/<referencia>/sanitized \
+  --load-batch-size 500 \
+  --materialize-batch-size 50000 \
+  --verbose-progress
+```
+
+Substitua `<referencia>` pela pasta mensal baixada, por exemplo `2026-05`.
+
+## Importação retomável
+
+O comando `import` salva planos e checkpoints no PostgreSQL.
+
+Se a execução for interrompida, execute novamente o mesmo comando com os mesmos arquivos e o mesmo `--load-batch-size`. O loader continuará a partir do último ponto confirmado.
+
+Também é possível separar a carga da materialização:
+
+```bash
+cnpj-db-loader import load \
+  ./downloads/<referencia>/sanitized \
+  --load-batch-size 20000 \
+  --verbose-progress
+```
+
+```bash
+cnpj-db-loader import materialize \
+  ./downloads/<referencia>/sanitized \
+  --materialize-batch-size 50000 \
+  --verbose-progress
+```
+
+## Importação direta no PostgreSQL
+
+Para cargas completas controladas, o loader pode gerar scripts modulares para o `psql`.
+
+```bash
+cnpj-db-loader postgres generate-script \
+  ./downloads/<referencia>/sanitized \
+  --output ./downloads/<referencia>/postgres-direct \
+  --source-encoding UTF8 \
+  --transaction-mode phase \
+  --force
+```
+
+Execute o script gerado:
+
+```bash
+psql "postgresql://usuario:senha@localhost:5432/cnpj" \
+  -f ./downloads/<referencia>/postgres-direct/import-postgres-direct.sql
+```
+
+O modo `phase` confirma cada etapa separadamente. Assim, uma falha posterior não desfaz fases já concluídas.
+
+## Quarentena
+
+Registros inválidos são armazenados em `quarentena_importacao`, permitindo que a carga continue.
+
+Resumo dos erros:
+
+```bash
+cnpj-db-loader quarantine stats
+```
+
+Listar registros:
+
+```bash
+cnpj-db-loader quarantine list --limit 20
+```
+
+Ver um registro específico:
+
+```bash
+cnpj-db-loader quarantine show 42
+```
+
+Os comandos de quarentena são somente leitura.
+
+## Principais comandos
+
+| Comando | Finalidade |
+| --- | --- |
+| `rfb check` | Verifica as referências mensais disponíveis |
+| `rfb download` | Baixa os arquivos da Receita Federal |
+| `rfb sync` | Executa o fluxo completo automaticamente |
+| `inspect` | Identifica o conteúdo de um diretório |
+| `extract` | Extrai os arquivos compactados |
+| `validate` | Valida a árvore de datasets |
+| `sanitize` | Converte e valida os arquivos em UTF-8 |
+| `schema generate` | Gera o schema PostgreSQL |
+| `import` | Carrega e materializa os dados |
+| `postgres generate-script` | Gera uma importação direta para o `psql` |
+| `quarantine` | Consulta registros rejeitados |
+| `doctor` | Verifica rapidamente o ambiente |
+
+Para consultar todas as opções:
+
+```bash
+cnpj-db-loader --help
+cnpj-db-loader <comando> --help
+```
+
+## Perfis de schema
+
+| Perfil | Conteúdo |
+| --- | --- |
+| `full` | Tabelas finais, controles de importação e staging |
+| `final` | Tabelas finais e controles de importação |
+| `staging` | Apenas tabelas de staging |
+
+Para o fluxo completo, use:
+
+```bash
 cnpj-db-loader schema generate --profile full
-cnpj-db-loader import ./downloads/<referencia>/sanitized --load-batch-size 500 --materialize-batch-size 50000 --verbose-progress
-
-# Caminho híbrido opcional para carga direta no PostgreSQL
-cnpj-db-loader postgres generate-script ./downloads/<referencia>/sanitized --output ./downloads/<referencia>/postgres-direct --source-encoding UTF8 --transaction-mode phase --force
-psql -d "postgres://postgres:postgres@localhost:5432/cnpj" -f ./downloads/<referencia>/postgres-direct/import-postgres-direct.sql
 ```
 
-> O grupo `federal-revenue` foi renomeado para `rfb`. O nome antigo continua funcionando como alias nesta major, emitindo um aviso de depreciação, e será removido em uma versão futura.
+## CNPJ alfanumérico
 
-## Comandos estáveis
+A versão 3.0.0 aceita:
 
-```bash
-cnpj-db-loader rfb config set share-token "<token-do-compartilhamento-publico>"
-cnpj-db-loader rfb config test
-cnpj-db-loader rfb check [reference] [--reference <yyyy-mm>] [--current]
-cnpj-db-loader rfb download [reference] [--reference <yyyy-mm>] [--current] [--output <path>] [--retries <number>] [--overwrite] [-f]
-cnpj-db-loader rfb status [reference] [--reference <yyyy-mm>] [--current] [--output <path>]
-cnpj-db-loader rfb retry [reference] [--reference <yyyy-mm>] [--current] [--output <path>] [--retries <number>] [--overwrite] [-f]
-cnpj-db-loader rfb clean [reference] [--reference <yyyy-mm>] [--current] [--output <path>] [--partials | --failed | --all] [-f]
-cnpj-db-loader rfb sync [reference] [--reference <yyyy-mm>] [--current] [--output <path>] [--extract-output <path>] [--sanitize-output <path>] [--db-url <url>] [--dataset <name>] [--load-batch-size <size>] [--materialize-batch-size <size>] [--verbose-progress] [--force-lock] [-f]
-cnpj-db-loader inspect <input>
-cnpj-db-loader extract <input> [--output <path>]
-cnpj-db-loader validate <input>
-cnpj-db-loader sanitize <input> [--output <path>] [--dataset <name>] [--source-encoding <encoding>] [--allow-replacement-chars] [-f]
-cnpj-db-loader schema print [--profile <profile>]
-cnpj-db-loader schema generate [--name <name>] [--output <path>] [--profile <profile>]
-cnpj-db-loader database config set <url>
-cnpj-db-loader database config show
-cnpj-db-loader database config test [--db-url <url>]
-cnpj-db-loader database config reset [--force]
-cnpj-db-loader database cleanup staging [--db-url <url>] [--dataset <name>] [--validated-path <path>] [--force]
-cnpj-db-loader database cleanup materialized [--db-url <url>] [--dataset <name>] [--force]
-cnpj-db-loader database cleanup checkpoints [--db-url <url>] [--phase <phase>] [--dataset <name>] [--validated-path <path>] [--plan-id <id>] [--force]
-cnpj-db-loader database cleanup plans [--db-url <url>] [--validated-path <path>] [--plan-id <id>] [--force]
-cnpj-db-loader postgres generate-script <input> [--output <path>] [--dataset <name>] [--script-name <name>] [--source-encoding <encoding>] [--transaction-mode <mode>] [--include <items>] [--skip-indexes] [--skip-analyze] [-f]
-cnpj-db-loader postgres export-csv <input> [--output <path>] [--dataset <name>] [--script-name <name>] [-f]
-cnpj-db-loader import <input> [--db-url <url>] [--dataset <name>] [--load-batch-size <size>] [--materialize-batch-size <size>] [--verbose-progress] [-f]
-cnpj-db-loader import load <input> [--db-url <url>] [--dataset <name>] [--load-batch-size <size>] [--verbose-progress] [-f]
-cnpj-db-loader import materialize <input> [--db-url <url>] [--dataset <name>] [--materialize-batch-size <size>] [--verbose-progress] [-f]
-cnpj-db-loader doctor [--input <path>] [--db-url <url>]
-cnpj-db-loader quarantine stats [--dataset <name>] [--category <name>] [--stage <name>] [--retryable] [--terminal]
-cnpj-db-loader quarantine list [--dataset <name>] [--category <name>] [--stage <name>] [--retryable] [--terminal] [--limit <number>] [--after-id <id>]
-cnpj-db-loader quarantine show <id> [--db-url <url>]
+- 8 posições alfanuméricas no CNPJ básico;
+- 4 posições alfanuméricas na ordem;
+- 2 dígitos verificadores numéricos.
+
+Exemplo:
+
+```text
+12.ABC.345/01DE-35
 ```
 
-## Fluxo de importação direta no PostgreSQL
+CNPJs exclusivamente numéricos continuam válidos.
 
-Para benchmarks locais ou cargas completas controladas, a CLI pode gerar um script de importação `psql` direto após a sanitização:
+## Banco em português
 
-```bash
-cnpj-db-loader sanitize ./downloads/<referencia>/extracted
-cnpj-db-loader postgres generate-script ./downloads/<referencia>/sanitized --output ./downloads/<referencia>/postgres-direct --source-encoding UTF8 --transaction-mode phase --force
-psql -d "postgres://postgres:postgres@localhost:5432/cnpj" -f ./downloads/<referencia>/postgres-direct/import-postgres-direct.sql
-```
+O schema 3.0.0 utiliza nomes em português:
 
-Esse caminho mantém download, extração, validação e sanitização robusta em UTF-8 dentro do loader e, em seguida, deixa o PostgreSQL carregar os arquivos sanitizados da Receita diretamente via `\copy`, validar inconsistências conhecidas em nível de linha, reutilizar a tabela `quarentena_importacao` existente, atualizar as tabelas de checkpoint de importação existentes, converter os valores válidos em tabelas de staging e materializar as tabelas finais com SQL baseado em conjuntos. O comando `import` padrão continua sendo o caminho retomável mais completo, enquanto o modo híbrido agora preserva a compatibilidade com as mesmas tabelas operacionais.
+| Antes | Agora |
+| --- | --- |
+| `companies` | `empresas` |
+| `establishments` | `estabelecimentos` |
+| `partners` | `socios` |
+| `import_plans` | `planos_importacao` |
+| `import_quarantine` | `quarentena_importacao` |
+
+> Bancos criados pela versão 2.x não são compatíveis com o schema 3.0.0. Crie um banco novo e reimporte os dados.
 
 ## Logs
 
-Os logs de execução em JSON são gravados no diretório home do usuário em `~/.cnpjdbloader/logs`.
+Os logs ficam em:
 
-Cada entrada de log JSON e JSONL inclui um envelope estruturado com campos como `timestamp`, `level`, `severity`, `event` e `kind`. Logs de sucesso de comando são gravados com `status: "success"`, falhas de comando com `status: "failure"`, e eventos incrementais de progresso da importação são classificados com níveis como `debug`, `info`, `warning` e `error`.
+```text
+~/.cnpjdbloader/logs
+```
 
-Para o `import`, a CLI também grava um log de progresso incremental em JSONL com um evento por lote confirmado, fallback de retry, métricas de dataset, métricas de arquivo, falha de arquivo, resumo final de conclusão e falha de importação de nível superior quando a execução é abortada mais cedo.
-
-O resumo final da importação inclui métricas de tempo e vazão de referência, como duração da varredura preparatória, duração da execução, tempo de insert, tempo de retry, tempo de quarentena, linhas por segundo e lotes por minuto.
-
-Os internos da importação são divididos em módulos dedicados como planner, source reader, parser, normalizer, checkpoint manager, quarantine writer, staging writer, materializer e finalizer, para que mudanças na carga em massa de staging e na materialização final possam ser feitas sem reescrever o comando de importação inteiro.
-
-A CLI também expõe um fluxo dividido: `import` executa o pipeline completo, `import load` para após as escritas de staging/direta, `import materialize` retoma do plano salvo e envia as linhas de staging para as tabelas finais, e `database cleanup ...` expõe comandos seguros de manutenção para tabelas de staging, tabelas finais materializadas simplificadas, checkpoints e planos salvos.
-
-O progresso da materialização é registrado em checkpoint separado dos checkpoints de carga de arquivo, e o materializador trabalha em blocos retomáveis controlados por `--materialize-batch-size`. Durante etapas longas de materialização final, a CLI mantém a saída de progresso ao vivo em uma fase MATERIALIZANDO dedicada, reduzindo o custo de checkpoint e escrita JSONL por bloco para que os blocos retomáveis permaneçam rápidos. O schema final simplificado mantém o texto bruto de CNAE secundário nos estabelecimentos e também materializa `estabelecimento_cnaes_secundarios` para que APIs possam consultar uma linha por CNAE secundário sem rodar um script de backfill separado.
-
-O serviço de extração usa um motor 7-Zip embutido para o processamento robusto de ZIP/ZIP64 grandes e suporte a volumes ZIP divididos. Os arquivos são extraídos em pastas temporárias e movidos para o local final apenas após uma extração bem-sucedida, evitando que pastas parcialmente extraídas sejam tratadas como completas.
-
-O serviço de sanitização processa os arquivos de origem da Receita como streams, remove bytes NUL antes de decodificar, usa ISO-8859-1 como entrada padrão, grava a saída UTF-8 temporária e substitui o destino final apenas após a validação ser bem-sucedida. Caracteres de substituição Unicode são rejeitados por padrão para que texto corrompido não seja persistido silenciosamente antes da importação.
-
-Os comandos `rfb` gravam os mesmos logs de comando estruturados e mantêm a fase de download remoto fora dos internos da importação. Arquivos ZIP já completos são ignorados por padrão, arquivos temporários `.part` são usados enquanto os downloads estão em andamento, e cada referência mantém um manifesto local para `status`, `retry`, `clean` e futura automação de runner.
-
-O schema de banco gerado suporta três perfis:
-
-- `full`: tabelas relacionais finais, tabelas de controle de importação e tabelas de staging
-- `final`: apenas as tabelas relacionais finais e de controle
-- `staging`: apenas as tabelas leves de staging usadas pelo fluxo de carga em massa de staging
-
-`import --verbose-progress` mostra um bloco de status fixo de várias linhas em vez de poluir o terminal com uma nova linha a cada atualização de progresso.
+A importação gera logs estruturados em JSON e JSONL com progresso, erros, métricas e resumo da execução.
 
 ## Documentação
 
-- [Uso](./docs/usage.md)
-- [Arquitetura](./docs/architecture.md)
-- [Comandos](./docs/commands.md)
-- [Quarentena](./docs/quarantine.md)
-- [Sanitização](./docs/sanitize.md)
-- [Receita Federal (rfb)](./docs/federal-revenue.md)
-- [Importação direta no PostgreSQL](./docs/postgres-direct.md)
-- [Notas da versão 3.0.0](./docs/release-notes-3.0.0.md)
+- [Guia de uso](https://github.com/DanielArndt0/cnpj-db-loader/blob/main/docs/usage.md)
+- [Referência de comandos](https://github.com/DanielArndt0/cnpj-db-loader/blob/main/docs/commands.md)
+- [Integração com a Receita Federal](https://github.com/DanielArndt0/cnpj-db-loader/blob/main/docs/federal-revenue.md)
+- [Sanitização](https://github.com/DanielArndt0/cnpj-db-loader/blob/main/docs/sanitize.md)
+- [Quarentena](https://github.com/DanielArndt0/cnpj-db-loader/blob/main/docs/quarantine.md)
+- [Importação direta no PostgreSQL](https://github.com/DanielArndt0/cnpj-db-loader/blob/main/docs/postgres-direct.md)
+- [Arquitetura](https://github.com/DanielArndt0/cnpj-db-loader/blob/main/docs/architecture.md)
 
-A materialização armazena marcadores leves de validação de staging (contagem de linhas e maior staging id) na tabela de checkpoint de materialização, para que reexecuções verifiquem rapidamente o estado atual do staging e reutilizem a reconciliação de domínio quando o snapshot de staging não mudou. O runtime valida que as tabelas de importação necessárias já existem, mas não as cria nem as altera automaticamente.
+## Licença
+
+Distribuído sob a licença [MIT](./LICENSE).
