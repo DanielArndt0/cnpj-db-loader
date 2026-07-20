@@ -6,7 +6,7 @@ export function resolveInputMode(options: {
 }): InputMode {
   if (options.unzip && options.alreadyExtracted) {
     throw new Error(
-      'Choose only one input mode: use either "--unzip" or "--already-extracted".',
+      'Escolha apenas um modo de entrada: use "--unzip" ou "--already-extracted".',
     );
   }
 

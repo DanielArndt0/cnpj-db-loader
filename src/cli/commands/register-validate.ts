@@ -9,9 +9,9 @@ import { printValidationSummary } from "../ui/output.js";
 export function registerValidateCommands(program: Command): void {
   program
     .command("validate")
-    .argument("<input>", "Path to the input directory.")
+    .argument("<input>", "Caminho do diretório de entrada.")
     .description(
-      "Validate that the current dataset files are recognizable and warn about missing expected blocks.",
+      "Valida se os arquivos de dataset atuais são reconhecíveis e avisa sobre blocos esperados ausentes.",
     )
     .action(async (input: string) => {
       const summary = await validateInputDirectory(input);

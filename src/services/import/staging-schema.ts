@@ -74,13 +74,13 @@ export async function ensureStagingSchemaSupport(
 
   if (missingTables.length > 0) {
     throw new ValidationError(
-      `The staging schema is required for the selected bulk-load datasets. Missing tables: ${missingTables.join(", ")}. Run "cnpj-db-loader schema generate --profile full" or "cnpj-db-loader schema generate --profile staging" and apply the SQL before importing.`,
+      `O schema de staging é obrigatório para os conjuntos selecionados de carga em massa. Tabelas ausentes: ${missingTables.join(", ")}. Rode "cnpj-db-loader schema generate --profile full" ou "cnpj-db-loader schema generate --profile staging" e aplique o SQL antes de importar.`,
     );
   }
 
   if (invalidTables.length > 0) {
     throw new ValidationError(
-      `The staging schema is outdated for chunked materialization. Recreate or migrate these tables so they include the staging_id column: ${invalidTables.join(", ")}.`,
+      `O schema de staging está desatualizado para a materialização em blocos. Recrie ou migre estas tabelas para que incluam a coluna staging_id: ${invalidTables.join(", ")}.`,
     );
   }
 }

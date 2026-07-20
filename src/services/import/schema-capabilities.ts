@@ -1,5 +1,15 @@
 import { Client } from "pg";
 
+import {
+  COLUNA_CHAVE_DEDUPLICACAO_SOCIO,
+  COLUNA_CNPJ_COMPLETO,
+  COLUNA_CODIGO_CNAE,
+  NOMES_TABELAS_LOOKUP,
+  TABELA_ESTABELECIMENTO_CNAES_SECUNDARIOS,
+  TABELA_ESTABELECIMENTOS,
+  TABELA_EMPRESAS,
+  TABELA_SOCIOS,
+} from "../schema/table-names.js";
 import type { ImportSchemaCapabilities } from "./types.js";
 
 type ColumnCapabilityRow = {
@@ -45,15 +55,19 @@ function hasRequiredColumns(
 export async function detectImportSchemaCapabilities(
   client: Client,
 ): Promise<ImportSchemaCapabilities> {
+  const lookupTableList = Object.values(NOMES_TABELAS_LOOKUP)
+    .map((tableName) => `'${tableName}'`)
+    .join(", ");
+
   const [columnResult, lookupConstraintResult] = await Promise.all([
     client.query<ColumnCapabilityRow>(
       `select table_name, column_name, is_generated
          from information_schema.columns
         where table_schema = current_schema()
           and (
-            (table_name = 'establishments' and column_name = 'cnpj_full') or
-            (table_name = 'establishment_secondary_cnaes' and column_name in ('cnpj_full', 'cnae_code')) or
-            (table_name = 'partners' and column_name = 'partner_dedupe_key')
+            (table_name = '${TABELA_ESTABELECIMENTOS}' and column_name = '${COLUNA_CNPJ_COMPLETO}') or
+            (table_name = '${TABELA_ESTABELECIMENTO_CNAES_SECUNDARIOS}' and column_name in ('${COLUNA_CNPJ_COMPLETO}', '${COLUNA_CODIGO_CNAE}')) or
+            (table_name = '${TABELA_SOCIOS}' and column_name = '${COLUNA_CHAVE_DEDUPLICACAO_SOCIO}')
           )`,
     ),
     client.query<LookupConstraintRow>(
@@ -65,20 +79,8 @@ export async function detectImportSchemaCapabilities(
            inner join pg_class target_table on target_table.oid = constraint_item.confrelid
           where constraint_item.contype = 'f'
             and source_namespace.nspname = current_schema()
-            and source_table.relname in ('companies', 'establishments', 'partners', 'establishment_secondary_cnaes')
-            and target_table.relname in (
-              'countries',
-              'cities',
-              'partner_qualifications',
-              'legal_natures',
-              'cnaes',
-              'reasons',
-              'company_sizes',
-              'branch_types',
-              'registration_statuses',
-              'partner_types',
-              'age_groups'
-            )
+            and source_table.relname in ('${TABELA_EMPRESAS}', '${TABELA_ESTABELECIMENTOS}', '${TABELA_SOCIOS}', '${TABELA_ESTABELECIMENTO_CNAES_SECUNDARIOS}')
+            and target_table.relname in (${lookupTableList})
        ) as requires_lookup_reconciliation`,
     ),
   ]);
@@ -86,18 +88,18 @@ export async function detectImportSchemaCapabilities(
   return {
     includeEstablishmentCnpjFullInInsert: canInsertIntoColumn(
       columnResult.rows,
-      "establishments",
-      "cnpj_full",
+      TABELA_ESTABELECIMENTOS,
+      COLUNA_CNPJ_COMPLETO,
     ),
     includeEstablishmentSecondaryCnaesTable: hasRequiredColumns(
       columnResult.rows,
-      "establishment_secondary_cnaes",
-      ["cnpj_full", "cnae_code"],
+      TABELA_ESTABELECIMENTO_CNAES_SECUNDARIOS,
+      [COLUNA_CNPJ_COMPLETO, COLUNA_CODIGO_CNAE],
     ),
     includePartnerDedupeKeyInInsert: canInsertIntoColumn(
       columnResult.rows,
-      "partners",
-      "partner_dedupe_key",
+      TABELA_SOCIOS,
+      COLUNA_CHAVE_DEDUPLICACAO_SOCIO,
     ),
     requiresLookupReconciliation:
       lookupConstraintResult.rows[0]?.requires_lookup_reconciliation ?? false,

@@ -27,7 +27,7 @@ export function createSimpleDomainTableSql(layout: TableLayout): string {
   return [
     `create table if not exists ${layout.tableName} (`,
     columns + ",",
-    "  primary key (code)",
+    "  primary key (codigo)",
     ");",
   ].join("\n");
 }
@@ -38,14 +38,14 @@ export function createLookupSeedSql(
 ): string {
   const values = rows
     .map(
-      ([code, description]) =>
-        `  ('${code.replace(/'/g, "''")}', '${description.replace(/'/g, "''")}')`,
+      ([codigo, descricao]) =>
+        `  ('${codigo.replace(/'/g, "''")}', '${descricao.replace(/'/g, "''")}')`,
     )
     .join(",\n");
 
   return [
-    `insert into ${tableName} (code, description) values`,
+    `insert into ${tableName} (codigo, descricao) values`,
     values,
-    "on conflict (code) do update set description = excluded.description;",
+    "on conflict (codigo) do update set descricao = excluded.descricao;",
   ].join("\n");
 }

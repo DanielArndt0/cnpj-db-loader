@@ -1,6 +1,6 @@
-# Usage
+# Uso
 
-## Recommended flow
+## Fluxo recomendado
 
 ```bash
 cnpj-db-loader inspect ./downloads
@@ -14,50 +14,50 @@ cnpj-db-loader import load ./downloads/sanitized --load-batch-size 20000
 cnpj-db-loader import materialize ./downloads/sanitized --materialize-batch-size 50000
 ```
 
-## Federal Revenue monthly download
+## Download mensal da Receita Federal
 
-The `federal-revenue` command group automates only the remote monthly dataset phase. It does not replace the existing loader pipeline; `sync` reuses the same extract, validate, sanitize, and import services that the manual flow uses.
+O grupo de comandos `rfb` automatiza apenas a fase do dataset mensal remoto. Não substitui o pipeline existente do loader; `sync` reutiliza os mesmos serviços de extract, validate, sanitize e import que o fluxo manual usa.
 
 ```bash
-cnpj-db-loader federal-revenue check
-cnpj-db-loader federal-revenue download --output ./downloads --force
-cnpj-db-loader federal-revenue status --output ./downloads
-cnpj-db-loader federal-revenue retry --output ./downloads --force
-cnpj-db-loader federal-revenue sync --output ./downloads --db-url "postgresql://user:password@localhost:5432/cnpj" --force
+cnpj-db-loader rfb check
+cnpj-db-loader rfb download --output ./downloads --force
+cnpj-db-loader rfb status --output ./downloads
+cnpj-db-loader rfb retry --output ./downloads --force
+cnpj-db-loader rfb sync --output ./downloads --db-url "postgresql://user:password@localhost:5432/cnpj" --force
 ```
 
-By default, the latest published `YYYY-MM` folder is selected from the Federal Revenue public share. Use `--current` to target the current calendar month, `--reference 2026-05`, or the positional shorthand `federal-revenue check 2026-05` to force a specific reference. Downloads are written to `<output>/<reference>`, completed local files are skipped, in-progress transfers use `.part` files, and local state is stored in `<output>/<reference>/.cnpj-db-loader/federal-revenue/manifest.json`.
+Por padrão, a última pasta `YYYY-MM` publicada é selecionada no compartilhamento público da Receita Federal. Use `--current` para atingir o mês calendário atual, `--reference 2026-05`, ou o atalho posicional `rfb check 2026-05` para forçar uma referência específica. Os downloads são gravados em `<output>/<referencia>`, os arquivos locais completos são ignorados, as transferências em andamento usam arquivos `.part`, e o estado local é armazenado em `<output>/<referencia>/.cnpj-db-loader/federal-revenue/manifest.json`.
 
-## What each step does
+## O que cada passo faz
 
-| Step | Command                                                  | Purpose                                                                                                                   |
-| ---- | -------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
-| 0    | `federal-revenue check/download/status/retry/clean/sync` | Optionally check, download, inspect, retry, clean, or sync the latest monthly CNPJ files before the local processing flow |
-| 1    | `inspect <input>`                                        | Detect whether the folder contains ZIP archives, extracted content, or both                                               |
-| 2    | `extract <input>`                                        | Extract Receita ZIP, ZIP64, and split ZIP archives into `./extracted` by default                                          |
-| 3    | `validate <input>`                                       | Validate the extracted dataset tree and confirm that the required dataset blocks are present                              |
-| 4    | `sanitize <input>`                                       | Normalize Receita source files into validated UTF-8 output before import                                                  |
-| 5    | `database config show` / `database config set <url>`     | Review or configure the PostgreSQL connection                                                                             |
-| 6    | `schema generate --profile full`                         | Generate the combined SQL schema with final, control, and staging tables                                                  |
-| 7    | `import <input>`                                         | Run the full pipeline: staged/direct load, staged materialization, and final summary generation                           |
-| 8    | `import load <input>`                                    | Stop after the load phase when you want staging populated without immediately materializing it                            |
-| 9    | `import materialize <input>`                             | Resume from the saved plan and materialize staged datasets into the final schema in chunks                                |
+| Passo | Comando                                              | Objetivo                                                                                                                |
+| ----- | ---------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
+| 0     | `rfb check/download/status/retry/clean/sync`         | Opcionalmente verifica, baixa, inspeciona, repete, limpa ou sincroniza os arquivos mensais de CNPJ antes do fluxo local |
+| 1     | `inspect <input>`                                    | Detecta se a pasta contém arquivos ZIP, conteúdo extraído ou ambos                                                      |
+| 2     | `extract <input>`                                    | Extrai os arquivos ZIP, ZIP64 e ZIP divididos da Receita para `./extracted` por padrão                                  |
+| 3     | `validate <input>`                                   | Valida a árvore de dataset extraído e confirma que os blocos de dataset necessários estão presentes                     |
+| 4     | `sanitize <input>`                                   | Normaliza os arquivos de origem da Receita em saída UTF-8 validada antes da importação                                  |
+| 5     | `database config show` / `database config set <url>` | Revisa ou configura a conexão PostgreSQL                                                                                |
+| 6     | `schema generate --profile full`                     | Gera o schema SQL combinado com tabelas finais, de controle e de staging                                                |
+| 7     | `import <input>`                                     | Executa o pipeline completo: carga de staging/direta, materialização de staging e geração do resumo final               |
+| 8     | `import load <input>`                                | Para após a fase de carga quando você quer o staging populado sem materializá-lo imediatamente                          |
+| 9     | `import materialize <input>`                         | Retoma do plano salvo e materializa os datasets de staging no schema final em blocos                                    |
 
-## Extraction behavior
+## Comportamento da extração
 
-`extract` uses a bundled 7-Zip engine for robust handling of large Receita archives. The extractor supports regular ZIP files, ZIP64 archives, and split ZIP volumes whose first file ends with `.zip.001`. Traditional split ZIP sets that end with a `.zip` central volume also continue to be discovered normally.
+`extract` usa um motor 7-Zip embutido para o tratamento robusto de arquivos grandes da Receita. O extrator suporta arquivos ZIP regulares, arquivos ZIP64 e volumes ZIP divididos cujo primeiro arquivo termina com `.zip.001`. Conjuntos ZIP divididos tradicionais que terminam com um volume central `.zip` também continuam sendo descobertos normalmente.
 
-Each archive is first extracted into a temporary directory. The final destination folder is replaced only after extraction succeeds, so interrupted or invalid archives do not leave a partial folder that looks complete.
+Cada arquivo é primeiro extraído em um diretório temporário. A pasta de destino final é substituída apenas após a extração ser bem-sucedida, então arquivos interrompidos ou inválidos não deixam uma pasta parcial que pareça completa.
 
-## Schema profiles
+## Perfis de schema
 
-Use the schema command profile that matches the database shape you want to prepare:
+Use o perfil do comando schema que corresponde ao formato de banco que você quer preparar:
 
-- `full`: final tables, import control tables, and staging tables
-- `final`: only the final relational and control tables
-- `staging`: only the lightweight `staging_*` tables used by the staged bulk-load steps before final materialization
+- `full`: tabelas finais, tabelas de controle de importação e tabelas de staging
+- `final`: apenas as tabelas relacionais finais e de controle
+- `staging`: apenas as tabelas leves `staging_*` usadas pelas etapas de carga em massa de staging antes da materialização final
 
-Examples:
+Exemplos:
 
 ```bash
 cnpj-db-loader schema generate --profile full
@@ -65,28 +65,28 @@ cnpj-db-loader schema generate --profile final
 cnpj-db-loader schema generate --profile staging
 ```
 
-## Important behavior of import
+## Comportamento importante da importação
 
-`import` is designed to be safe for large datasets. The CLI now also exposes `import load`, `import materialize`, and `database cleanup ...` so the heavy phases and safe reset operations can be automated separately.
+`import` foi projetado para ser seguro com grandes datasets. A CLI também expõe `import load`, `import materialize` e `database cleanup ...` para que as fases pesadas e as operações seguras de reset possam ser automatizadas separadamente.
 
-- it starts with an exact preparatory scan that counts source rows and planned batches when no saved plan exists
-- it persists the import plan in the database and reuses it on resume when the validated source files and batch size match
-- it reads files in streaming mode
-- it loads the large datasets into lightweight staging tables through PostgreSQL COPY with only light normalization in the hot path and defers heavier work to the materialization stage in dependency order
-- during establishment materialization, it also populates `establishment_secondary_cnaes` from `secondary_cnaes_raw`, replacing the previous need for a separate API-side backfill script
-- before each staged dataset is materialized into the final schema, the importer only reconciles missing lookup/domain codes when the current final schema still requires those lookup foreign keys
-- once the file import phase ends, the terminal switches to a dedicated MATERIALIZING stage and the JSONL progress log emits heartbeat entries during long staged-to-final upserts
-- it still upserts the smaller domain datasets directly into the final schema
-- it commits per load unit instead of holding one giant transaction
-- it stores file-load progress in `import_checkpoints`
-- it stores materialization progress in `import_materialization_checkpoints`
-- rows that still fail validation or database constraints are written to `import_quarantine` and skipped
-- if a batch fails, rerunning the same command resumes from the last committed byte offset
-- new import plans truncate the selected staging tables before loading, while resumed plans reuse staged rows that already match saved checkpoints before the final materialization pass runs again
+- começa com uma varredura preparatória exata que conta as linhas de origem e os lotes planejados quando não existe plano salvo
+- persiste o plano de importação no banco e o reutiliza na retomada quando os arquivos de origem validados e o tamanho de lote coincidem
+- lê os arquivos em modo de streaming
+- carrega os grandes datasets em tabelas de staging leves via COPY do PostgreSQL, com apenas normalização leve no hot path, e adia o trabalho mais pesado para a etapa de materialização em ordem de dependência
+- durante a materialização de estabelecimentos, também popula `estabelecimento_cnaes_secundarios` a partir de `cnae_fiscal_secundaria_raw`, substituindo a antiga necessidade de um script de backfill separado do lado da API
+- antes de cada dataset de staging ser materializado no schema final, o importador só reconcilia os códigos de lookup/domínio ausentes quando o schema final atual ainda exige essas chaves estrangeiras de lookup
+- assim que a fase de importação de arquivos termina, o terminal muda para uma fase MATERIALIZANDO dedicada e o log de progresso JSONL emite entradas de heartbeat durante os upserts longos de staging para final
+- ainda faz upsert dos datasets de domínio menores diretamente no schema final
+- confirma por unidade de carga em vez de manter uma única transação gigante
+- armazena o progresso de carga de arquivo em `checkpoints_importacao`
+- armazena o progresso de materialização em `checkpoints_materializacao`
+- as linhas que ainda falham na validação ou nas constraints do banco são gravadas em `quarentena_importacao` e ignoradas
+- se um lote falha, reexecutar o mesmo comando retoma a partir do último deslocamento de bytes confirmado
+- novos planos de importação truncam as tabelas de staging selecionadas antes da carga, enquanto planos retomados reutilizam as linhas de staging que já correspondem aos checkpoints salvos antes de a passagem de materialização final rodar novamente
 
-## Recommended import settings
+## Configurações de importação recomendadas
 
-For large first loads, sanitize first and then start with:
+Para grandes primeiras cargas, sanitize primeiro e depois comece com:
 
 ```bash
 cnpj-db-loader sanitize ./downloads/extracted
@@ -95,51 +95,51 @@ cnpj-db-loader import load ./downloads/sanitized --load-batch-size 20000
 cnpj-db-loader import materialize ./downloads/sanitized --materialize-batch-size 50000
 ```
 
-Increase `--load-batch-size` only after you confirm that your PostgreSQL instance and memory budget can handle larger COPY load units. Use `--materialize-batch-size` to control how many staged rows each materialization chunk processes before saving a materialization checkpoint. The saved import plan keeps the original load batch size used during planning/loading, so changing only `--materialize-batch-size` does not create a new plan; the UI now shows both values separately during resume/materialization runs.
+Aumente `--load-batch-size` apenas após confirmar que a sua instância PostgreSQL e o seu orçamento de memória aguentam unidades de carga COPY maiores. Use `--materialize-batch-size` para controlar quantas linhas de staging cada bloco de materialização processa antes de salvar um checkpoint de materialização. O plano de importação salvo mantém o tamanho de lote de carga original usado no planejamento/carga, então mudar apenas `--materialize-batch-size` não cria um novo plano; a interface mostra os dois valores separadamente durante execuções de retomada/materialização.
 
-## PostgreSQL and Docker recommendations
+## Recomendações de PostgreSQL e Docker
 
-For a machine with 32 GB RAM, start conservatively:
+Para uma máquina com 32 GB de RAM, comece de forma conservadora:
 
-- `shared_buffers = 512MB` to `1GB`
-- `work_mem = 8MB` to `16MB`
+- `shared_buffers = 512MB` a `1GB`
+- `work_mem = 8MB` a `16MB`
 - `maintenance_work_mem = 256MB`
-- make sure Docker Desktop is not over-allocating memory to the container
+- garanta que o Docker Desktop não esteja superalocando memória ao contêiner
 
-These are starting points, not absolute rules. The safest optimization is still keeping `--load-batch-size` modest until you validate your PostgreSQL limits.
+Estes são pontos de partida, não regras absolutas. A otimização mais segura ainda é manter `--load-batch-size` modesto até você validar os limites do seu PostgreSQL.
 
-## Import progress visibility
+## Visibilidade do progresso da importação
 
-`import` writes two kinds of logs inside `~/.cnpjdbloader/logs`:
+`import` grava dois tipos de log dentro de `~/.cnpjdbloader/logs`:
 
-- a final JSON summary log
-- an incremental JSONL progress log for every committed batch, retry fallback, file metrics, dataset metrics, final completion summary, and top-level import failure when execution aborts early
+- um log de resumo final em JSON
+- um log de progresso incremental em JSONL para cada lote confirmado, fallback de retry, métricas de arquivo, métricas de dataset, resumo final de conclusão e falha de importação de nível superior quando a execução é abortada mais cedo
 
-Every JSON and JSONL log now carries a structured envelope with `timestamp`, `level`, `severity`, `event`, and `kind`. This makes it easier to filter informational events versus warnings and errors in JSON viewers and JSONL extensions.
+Cada log JSON e JSONL carrega um envelope estruturado com `timestamp`, `level`, `severity`, `event` e `kind`. Isso facilita filtrar eventos informativos versus avisos e erros em visualizadores JSON e extensões JSONL.
 
-Use `--verbose-progress` when you want a fixed multi-line status block with dataset, file, committed rows, total batches, and file progress while the import is running.
+Use `--verbose-progress` quando quiser um bloco de status fixo de várias linhas com dataset, arquivo, linhas confirmadas, total de lotes e progresso do arquivo enquanto a importação está rodando.
 
-The final import summary also includes baseline metrics for preparatory scan time, execution time, insert time, retry time, quarantine time, materialization time, rows per second, and batches per minute.
+O resumo final da importação também inclui métricas de referência de tempo de varredura preparatória, tempo de execução, tempo de insert, tempo de retry, tempo de quarentena, tempo de materialização, linhas por segundo e lotes por minuto.
 
-The exact preparatory scan runs only when no saved import plan exists for the same validated source files and batch size. On resume, the importer reuses the saved plan and then reuses the checkpoint table to continue from the last committed byte offset instead of restarting the data load itself. Rows that fail after retries are written to `import_quarantine`, so a few bad rows do not stop the entire dataset. Running `sanitize` first reduces how often the importer has to fall back to those slower recovery paths.
+A varredura preparatória exata roda apenas quando não existe plano de importação salvo para os mesmos arquivos de origem validados e o mesmo tamanho de lote. Na retomada, o importador reutiliza o plano salvo e depois reutiliza a tabela de checkpoint para continuar a partir do último deslocamento de bytes confirmado, em vez de reiniciar a própria carga de dados. As linhas que falham após as repetições são gravadas em `quarentena_importacao`, então algumas linhas ruins não interrompem o dataset inteiro. Rodar `sanitize` primeiro reduz a frequência com que o importador precisa recorrer a esses caminhos de recuperação mais lentos.
 
-## Hybrid PostgreSQL direct import
+## Importação direta híbrida no PostgreSQL
 
-After sanitization, you can generate a direct `psql` script and let PostgreSQL load the sanitized Receita files without rewriting the full dataset into another CSV tree:
+Após a sanitização, você pode gerar um script `psql` direto e deixar o PostgreSQL carregar os arquivos sanitizados da Receita sem reescrever o dataset completo em outra árvore de CSV:
 
 ```bash
-cnpj-db-loader sanitize ./downloads/<reference>/extracted
-cnpj-db-loader postgres generate-script ./downloads/<reference>/sanitized --output ./downloads/<reference>/postgres-direct --force
-psql "postgres://postgres:postgres@localhost:5432/cnpj" -f ./downloads/<reference>/postgres-direct/import-postgres-direct.sql
+cnpj-db-loader sanitize ./downloads/<referencia>/extracted
+cnpj-db-loader postgres generate-script ./downloads/<referencia>/sanitized --output ./downloads/<referencia>/postgres-direct --force
+psql "postgres://postgres:postgres@localhost:5432/cnpj" -f ./downloads/<referencia>/postgres-direct/import-postgres-direct.sql
 ```
 
-Use this flow when you want PostgreSQL to perform the heavy bulk load and set-based materialization directly. Use `postgres export-csv` only when you need an intermediate normalized CSV tree for audit/debug purposes. Use the standard `import` command when you need checkpoint-based resume and row quarantine recovery.
+Use esse fluxo quando quiser que o PostgreSQL faça a carga pesada em massa e a materialização baseada em conjuntos diretamente. Use `postgres export-csv` apenas quando precisar de uma árvore de CSV normalizada intermediária para fins de auditoria/debug. Use o comando `import` padrão quando precisar de retomada por checkpoint e recuperação por quarentena de linhas.
 
-See [PostgreSQL Direct Import](./postgres-direct.md) for details.
+Veja [Importação direta no PostgreSQL](./postgres-direct.md) para detalhes.
 
-## Quarantine analysis
+## Análise da quarentena
 
-Use the `quarantine` service after a long-running import when you want to inspect the rows that could not be inserted.
+Use o serviço `quarantine` após uma importação demorada quando quiser inspecionar as linhas que não puderam ser inseridas.
 
 ```bash
 cnpj-db-loader quarantine stats
@@ -147,15 +147,15 @@ cnpj-db-loader quarantine list --dataset establishments --limit 20
 cnpj-db-loader quarantine show 42
 ```
 
-`quarantine stats` is useful for understanding the scale of a problem by dataset, error category, or error stage.
+`quarantine stats` é útil para entender a escala de um problema por dataset, categoria de erro ou etapa de erro.
 
-`quarantine list` is useful for paging through rows with filters such as `--retryable`, `--terminal`, `--category`, and `--stage`.
+`quarantine list` é útil para paginar as linhas com filtros como `--retryable`, `--terminal`, `--category` e `--stage`.
 
-`quarantine show` loads one quarantined row in detail, including the raw line and parsed payload when available.
+`quarantine show` carrega uma linha em quarentena em detalhe, incluindo a linha bruta e o payload parseado quando disponíveis.
 
-## Database maintenance commands
+## Comandos de manutenção do banco
 
-The `database` command family now separates connection configuration from destructive maintenance actions:
+A família de comandos `database` separa a configuração de conexão das ações destrutivas de manutenção:
 
 ```bash
 cnpj-db-loader database config show
@@ -165,6 +165,6 @@ cnpj-db-loader database cleanup checkpoints --phase all --validated-path ./downl
 cnpj-db-loader database cleanup plans --validated-path ./downloads/sanitized --force
 ```
 
-Use `--force` to skip confirmation prompts. Without it, cleanup commands always ask before changing the database.
+Use `--force` para pular as confirmações interativas. Sem ela, os comandos de limpeza sempre perguntam antes de alterar o banco.
 
-- Materialization now stores lightweight staging validation markers (row count and max staging id) in the materialization checkpoint table so reruns can verify the live staging state quickly and reuse lookup reconciliation when the staging snapshot is unchanged. The runtime validates that the required import tables already exist but no longer creates or alters them automatically.
+- A materialização armazena marcadores leves de validação de staging (contagem de linhas e maior staging id) na tabela de checkpoint de materialização, para que reexecuções verifiquem rapidamente o estado atual do staging e reutilizem a reconciliação de domínio quando o snapshot de staging não mudou. O runtime valida que as tabelas de importação necessárias já existem, mas não as cria nem as altera automaticamente.

@@ -49,32 +49,32 @@ export function registerDatabaseCommands(program: Command): void {
     .command("database")
     .alias("db")
     .description(
-      "Manage PostgreSQL connection settings and safe maintenance operations.",
+      "Gerencia as configurações de conexão PostgreSQL e operações seguras de manutenção.",
     );
 
   const config = database
     .command("config")
     .description(
-      "Read, persist, test, or reset the default PostgreSQL connection.",
+      "Lê, persiste, testa ou redefine a conexão PostgreSQL padrão.",
     );
 
   config
     .command("set")
-    .argument("<url>", "PostgreSQL connection string to persist as default.")
+    .argument("<url>", "String de conexão PostgreSQL a persistir como padrão.")
     .description(
-      "Persist the default PostgreSQL connection string for future commands.",
+      "Persiste a string de conexão PostgreSQL padrão para os próximos comandos.",
     )
     .action(async (url: string) => {
       await setDefaultDbUrl(url);
       const logFilePath = await writeCommandLog("database-config-set", {
         defaultDbUrl: url,
       });
-      printInfoWithLog("DATABASE", "Default database URL saved.", logFilePath);
+      printInfoWithLog("DATABASE", "URL padrão do banco salva.", logFilePath);
     });
 
   config
     .command("show")
-    .description("Show the currently persisted database configuration.")
+    .description("Mostra a configuração de banco atualmente persistida.")
     .action(async () => {
       const currentConfig = await readDatabaseConfig();
       const logFilePath = await writeCommandLog(
@@ -86,14 +86,14 @@ export function registerDatabaseCommands(program: Command): void {
 
   config
     .command("test")
-    .option("--db-url <url>", "Override the default PostgreSQL connection URL.")
-    .description("Test the PostgreSQL connection.")
+    .option("--db-url <url>", "Sobrescreve a URL de conexão PostgreSQL padrão.")
+    .description("Testa a conexão PostgreSQL.")
     .action(async (options: { dbUrl?: string }) => {
       const currentConfig = await readDatabaseConfig();
       const url = options.dbUrl ?? currentConfig.defaultDbUrl;
 
       if (!url) {
-        console.log("No database URL available for the connection test.");
+        console.log("Nenhuma URL de banco disponível para o teste de conexão.");
         process.exitCode = 1;
         return;
       }
@@ -105,22 +105,22 @@ export function registerDatabaseCommands(program: Command): void {
       });
       printInfoWithLog(
         "DATABASE",
-        "Database connection succeeded.",
+        "Conexão com o banco bem-sucedida.",
         logFilePath,
       );
     });
 
   config
     .command("reset")
-    .option("-f, --force", "Skip the confirmation prompt.")
-    .description("Remove the persisted default database connection.")
+    .option("-f, --force", "Pula a confirmação interativa.")
+    .description("Remove a conexão de banco padrão persistida.")
     .action(async (options: { force?: boolean }) => {
       const confirmed = await confirmDatabaseAction(
-        "Remove the persisted default database configuration?",
+        "Remover a configuração de banco padrão persistida?",
         options.force,
       );
       if (!confirmed) {
-        console.log("Database reset cancelled.");
+        console.log("Redefinição do banco cancelada.");
         return;
       }
 
@@ -130,7 +130,7 @@ export function registerDatabaseCommands(program: Command): void {
       });
       printInfoWithLog(
         "DATABASE",
-        "Default database URL removed.",
+        "URL padrão do banco removida.",
         logFilePath,
       );
     });
@@ -138,31 +138,31 @@ export function registerDatabaseCommands(program: Command): void {
   const cleanup = database
     .command("cleanup")
     .description(
-      "Safely clear staging data, final materialized tables, checkpoints, or saved import plans.",
+      "Limpa com segurança dados de staging, tabelas finais materializadas, checkpoints ou planos de importação salvos.",
     );
 
   cleanup
     .command("staging")
-    .option("--db-url <url>", "Override the default PostgreSQL connection URL.")
+    .option("--db-url <url>", "Sobrescreve a URL de conexão PostgreSQL padrão.")
     .option(
       "--dataset <dataset>",
-      "Restrict the cleanup to one staging dataset (companies, establishments, partners, simples_options).",
+      "Restringe a limpeza a um dataset de staging (companies, establishments, partners, simples_options).",
     )
     .option(
       "--validated-path <path>",
-      "Also clear materialization checkpoints linked to the latest saved plan(s) for this validated path.",
+      "Também limpa os checkpoints de materialização vinculados ao(s) último(s) plano(s) salvo(s) deste caminho validado.",
     )
-    .option("-f, --force", "Skip the confirmation prompt.")
+    .option("-f, --force", "Pula a confirmação interativa.")
     .description(
-      "Truncate staging tables so a fresh bulk load can restart from a clean intermediate state.",
+      "Trunca as tabelas de staging para que uma nova carga em massa reinicie a partir de um estado intermediário limpo.",
     )
     .action(async (options: DatabaseGlobalOptions) => {
       const confirmed = await confirmDatabaseAction(
-        "Truncate staging tables now? This removes intermediate bulk-load data and may also clear materialization checkpoints when --validated-path is used.",
+        "Truncar agora as tabelas de staging? Isto remove os dados intermediários da carga em massa e pode também limpar os checkpoints de materialização quando --validated-path é usado.",
         options.force,
       );
       if (!confirmed) {
-        console.log("Staging cleanup cancelled.");
+        console.log("Limpeza de staging cancelada.");
         return;
       }
 
@@ -192,22 +192,22 @@ export function registerDatabaseCommands(program: Command): void {
   cleanup
     .command("materialized")
     .alias("final")
-    .option("--db-url <url>", "Override the default PostgreSQL connection URL.")
+    .option("--db-url <url>", "Sobrescreve a URL de conexão PostgreSQL padrão.")
     .option(
       "--dataset <dataset>",
-      "Restrict the cleanup to one simplified final materialized dataset (companies, establishments, partners, simples_options).",
+      "Restringe a limpeza a um dataset final materializado simplificado (companies, establishments, partners, simples_options).",
     )
-    .option("-f, --force", "Skip the confirmation prompt.")
+    .option("-f, --force", "Pula a confirmação interativa.")
     .description(
-      "Truncate simplified final relational tables populated by materialization in safe order for the current schema.",
+      "Trunca as tabelas relacionais finais simplificadas populadas pela materialização, em ordem segura para o schema atual.",
     )
     .action(async (options: DatabaseGlobalOptions) => {
       const confirmed = await confirmDatabaseAction(
-        "Truncate simplified final materialized tables now? This removes relational data already consolidated from staging.",
+        "Truncar agora as tabelas finais materializadas simplificadas? Isto remove os dados relacionais já consolidados a partir do staging.",
         options.force,
       );
       if (!confirmed) {
-        console.log("Materialized-table cleanup cancelled.");
+        console.log("Limpeza das tabelas materializadas cancelada.");
         return;
       }
 
@@ -232,27 +232,27 @@ export function registerDatabaseCommands(program: Command): void {
 
   cleanup
     .command("checkpoints")
-    .option("--db-url <url>", "Override the default PostgreSQL connection URL.")
+    .option("--db-url <url>", "Sobrescreve a URL de conexão PostgreSQL padrão.")
     .option(
       "--phase <phase>",
-      "Choose which checkpoint family to clear: load, materialization, or all. Defaults to all.",
+      "Escolhe qual família de checkpoints limpar: load, materialization ou all. Padrão: all.",
     )
     .option(
       "--dataset <dataset>",
-      "Restrict the cleanup to one dataset. Load checkpoints accept any import dataset; materialization checkpoints accept staged datasets only.",
+      "Restringe a limpeza a um dataset. Checkpoints de carga aceitam qualquer dataset de importação; checkpoints de materialização aceitam apenas datasets de staging.",
     )
     .option(
       "--validated-path <path>",
-      "Limit materialization checkpoint cleanup to plan(s) associated with this validated path.",
+      "Limita a limpeza de checkpoints de materialização ao(s) plano(s) associado(s) a este caminho validado.",
     )
     .option(
       "--plan-id <id>",
-      "Limit materialization checkpoint cleanup to a specific import plan id.",
+      "Limita a limpeza de checkpoints de materialização a um id de plano de importação específico.",
       (value) => Number.parseInt(value, 10),
     )
-    .option("-f, --force", "Skip the confirmation prompt.")
+    .option("-f, --force", "Pula a confirmação interativa.")
     .description(
-      "Clear load checkpoints, materialization checkpoints, or both without truncating data tables.",
+      "Limpa checkpoints de carga, de materialização, ou ambos, sem truncar as tabelas de dados.",
     )
     .action(
       async (
@@ -262,11 +262,11 @@ export function registerDatabaseCommands(program: Command): void {
       ) => {
         const phase = options.phase ?? "all";
         const confirmed = await confirmDatabaseAction(
-          `Clear ${phase} checkpoint data now? This affects saved resume state but does not truncate staging or final tables.`,
+          `Limpar agora os dados de checkpoint da fase ${phase}? Isto afeta o estado de retomada salvo, mas não trunca as tabelas de staging ou finais.`,
           options.force,
         );
         if (!confirmed) {
-          console.log("Checkpoint cleanup cancelled.");
+          console.log("Limpeza de checkpoints cancelada.");
           return;
         }
 
@@ -304,27 +304,27 @@ export function registerDatabaseCommands(program: Command): void {
 
   cleanup
     .command("plans")
-    .option("--db-url <url>", "Override the default PostgreSQL connection URL.")
+    .option("--db-url <url>", "Sobrescreve a URL de conexão PostgreSQL padrão.")
     .option(
       "--validated-path <path>",
-      "Delete saved import plan(s) associated with this validated path for the selected database.",
+      "Exclui o(s) plano(s) de importação salvo(s) associado(s) a este caminho validado no banco selecionado.",
     )
     .option(
       "--plan-id <id>",
-      "Delete only one saved import plan by id.",
+      "Exclui apenas um plano de importação salvo, por id.",
       (value) => Number.parseInt(value, 10),
     )
-    .option("-f, --force", "Skip the confirmation prompt.")
+    .option("-f, --force", "Pula a confirmação interativa.")
     .description(
-      "Delete saved import plans. Related plan files and materialization checkpoints are removed by database cascade.",
+      "Exclui os planos de importação salvos. Os arquivos de plano e os checkpoints de materialização relacionados são removidos por cascata do banco.",
     )
     .action(async (options: DatabaseGlobalOptions) => {
       const confirmed = await confirmDatabaseAction(
-        "Delete saved import plans now? This removes orchestration metadata and linked materialization checkpoints.",
+        "Excluir agora os planos de importação salvos? Isto remove os metadados de orquestração e os checkpoints de materialização vinculados.",
         options.force,
       );
       if (!confirmed) {
-        console.log("Plan cleanup cancelled.");
+        console.log("Limpeza de planos cancelada.");
         return;
       }
 

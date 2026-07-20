@@ -1,5 +1,6 @@
 import { Client } from "pg";
 
+import { TABELA_QUARENTENA_IMPORTACAO } from "../schema/table-names.js";
 import { ensureTableShape } from "./schema-validation.js";
 import type { ImportDatasetType } from "./types.js";
 
@@ -13,7 +14,9 @@ function classifyQuarantineError(error: unknown): {
       ? String((error as { code?: string }).code ?? "QUARANTINED_ROW")
       : "QUARANTINED_ROW";
   const errorMessage =
-    error instanceof Error ? error.message : String(error ?? "Unknown error");
+    error instanceof Error
+      ? error.message
+      : String(error ?? "Erro desconhecido");
   const normalizedMessage = errorMessage.toLowerCase();
 
   if (normalizedMessage.includes("invalid byte sequence for encoding")) {
@@ -40,7 +43,10 @@ function classifyQuarantineError(error: unknown): {
     };
   }
 
-  if (normalizedMessage.includes("field count")) {
+  if (
+    normalizedMessage.includes("campos inesperado") ||
+    normalizedMessage.includes("field count")
+  ) {
     return {
       code: errorCode,
       category: "invalid_field_count",
@@ -65,25 +71,25 @@ function classifyQuarantineError(error: unknown): {
 
 export async function ensureQuarantineTable(client: Client): Promise<void> {
   await ensureTableShape(client, {
-    tableName: "import_quarantine",
+    tableName: TABELA_QUARENTENA_IMPORTACAO,
     requiredColumns: [
-      "dataset",
-      "file_path",
-      "row_number",
-      "checkpoint_offset",
-      "error_code",
-      "error_category",
-      "error_stage",
-      "error_message",
-      "raw_line",
-      "parsed_payload",
-      "sanitizations_applied",
-      "retry_count",
-      "can_retry_later",
-      "created_at",
+      "conjunto",
+      "caminho_arquivo",
+      "numero_linha",
+      "deslocamento_checkpoint",
+      "codigo_erro",
+      "categoria_erro",
+      "etapa_erro",
+      "mensagem_erro",
+      "linha_bruta",
+      "payload_parseado",
+      "sanitizacoes_aplicadas",
+      "total_tentativas",
+      "pode_tentar_novamente",
+      "criado_em",
     ],
     helpMessage:
-      'The import quarantine schema is required. Run "cnpj-db-loader schema generate --profile full" and apply the SQL before importing.',
+      'O schema de quarentena de importação é obrigatório. Rode "cnpj-db-loader schema generate --profile full" e aplique o SQL antes de importar.',
   });
 }
 
@@ -111,21 +117,21 @@ export async function writeQuarantineRow(
     input.error instanceof Error ? input.error.message : String(input.error);
 
   await client.query(
-    `insert into import_quarantine (
-       dataset,
-       file_path,
-       row_number,
-       checkpoint_offset,
-       error_code,
-       error_category,
-       error_stage,
-       error_message,
-       raw_line,
-       parsed_payload,
-       sanitizations_applied,
-       retry_count,
-       can_retry_later,
-       created_at
+    `insert into ${TABELA_QUARENTENA_IMPORTACAO} (
+       conjunto,
+       caminho_arquivo,
+       numero_linha,
+       deslocamento_checkpoint,
+       codigo_erro,
+       categoria_erro,
+       etapa_erro,
+       mensagem_erro,
+       linha_bruta,
+       payload_parseado,
+       sanitizacoes_aplicadas,
+       total_tentativas,
+       pode_tentar_novamente,
+       criado_em
      ) values (
        $1, $2, $3, $4, $5, $6, $7, $8, $9, $10::jsonb, $11::jsonb, $12, $13, now()
      )`,

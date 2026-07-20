@@ -28,17 +28,21 @@ describe("generatePostgresDirectScriptFiles", () => {
     const partners = generated.scripts["load-partners.sql"] ?? "";
     const materialize = generated.scripts["materialize.sql"] ?? "";
 
-    expect(setup).toContain("insert into import_plans");
-    expect(setup).toContain("insert into import_plan_files");
-    expect(partners).toContain("insert into import_checkpoints");
-    expect(partners).toContain("insert into import_quarantine");
-    expect(partners).toContain("Missing required value for partner_name.");
+    expect(setup).toContain("insert into planos_importacao");
+    expect(setup).toContain("insert into arquivos_plano_importacao");
+
+    expect(partners).toContain("insert into checkpoints_importacao");
+    expect(partners).toContain("insert into quarentena_importacao");
+    expect(partners).toContain(
+      "Missing required value for nome_socio_razao_social.",
+    );
+    expect(partners).toContain("HYBRID_INVALID_DATE_VALUE");
+    expect(partners).toContain("pg_temp.cdl_safe_date");
     expect(partners).toContain("postgres_direct_staging_validation");
     expect(partners).toContain("where (case");
     expect(partners).toContain("is null;");
-    expect(materialize).toContain(
-      "insert into import_materialization_checkpoints",
-    );
+
+    expect(materialize).toMatch(/insert into [^\n;]*materializa/i);
   });
 
   it("generates generic quarantine validation for required and transformed values", () => {
@@ -65,6 +69,8 @@ describe("generatePostgresDirectScriptFiles", () => {
     expect(companies).toContain("HYBRID_REQUIRED_VALUE_MISSING");
     expect(companies).toContain("HYBRID_INVALID_NUMERIC_VALUE");
     expect(companies).toContain("pg_temp.cdl_safe_numeric");
-    expect(companies).toContain("rows_committed = :hybrid_valid_rows");
+    expect(companies).toContain("linhas_confirmadas = :hybrid_valid_rows");
+
+    expect(companies).not.toContain(":hybrid_quarantined_rows+ delete");
   });
 });

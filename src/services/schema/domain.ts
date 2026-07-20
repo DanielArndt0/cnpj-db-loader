@@ -12,6 +12,7 @@ import {
   registrationStatusesLayout,
 } from "../../dictionary/layouts/index.js";
 import { createLookupSeedSql, createSimpleDomainTableSql } from "./shared.js";
+import { NOMES_TABELAS_LOOKUP } from "./table-names.js";
 
 const domainTables = [
   countriesLayout,
@@ -28,45 +29,48 @@ const domainTables = [
 ];
 
 export function createDomainSchemaParts(): string[] {
-  return ["-- Domain tables", ...domainTables.map(createSimpleDomainTableSql)];
+  return [
+    "-- Tabelas de domínio",
+    ...domainTables.map(createSimpleDomainTableSql),
+  ];
 }
 
 export function createDomainSeedParts(): string[] {
   return [
-    "-- Domain seed data",
-    createLookupSeedSql("company_sizes", [
-      ["00", "Not informed"],
-      ["01", "Micro company"],
-      ["03", "Small business"],
-      ["05", "Other"],
+    "-- Dados iniciais das tabelas de domínio",
+    createLookupSeedSql(NOMES_TABELAS_LOOKUP.company_sizes, [
+      ["00", "Não informado"],
+      ["01", "Micro empresa"],
+      ["03", "Empresa de pequeno porte"],
+      ["05", "Demais"],
     ]),
-    createLookupSeedSql("branch_types", [
-      ["1", "Headquarters"],
-      ["2", "Branch"],
+    createLookupSeedSql(NOMES_TABELAS_LOOKUP.branch_types, [
+      ["1", "Matriz"],
+      ["2", "Filial"],
     ]),
-    createLookupSeedSql("registration_statuses", [
-      ["01", "Null"],
-      ["2", "Active"],
-      ["3", "Suspended"],
-      ["4", "Inactive"],
-      ["08", "Closed"],
+    createLookupSeedSql(NOMES_TABELAS_LOOKUP.registration_statuses, [
+      ["01", "Nula"],
+      ["2", "Ativa"],
+      ["3", "Suspensa"],
+      ["4", "Inapta"],
+      ["08", "Baixada"],
     ]),
-    createLookupSeedSql("partner_types", [
-      ["1", "Legal entity"],
-      ["2", "Natural person"],
-      ["3", "Foreign person/entity"],
+    createLookupSeedSql(NOMES_TABELAS_LOOKUP.partner_types, [
+      ["1", "Pessoa jurídica"],
+      ["2", "Pessoa física"],
+      ["3", "Estrangeiro"],
     ]),
-    createLookupSeedSql("age_groups", [
-      ["0", "Not applicable"],
-      ["1", "0 to 12 years"],
-      ["2", "13 to 20 years"],
-      ["3", "21 to 30 years"],
-      ["4", "31 to 40 years"],
-      ["5", "41 to 50 years"],
-      ["6", "51 to 60 years"],
-      ["7", "61 to 70 years"],
-      ["8", "71 to 80 years"],
-      ["9", "Over 80 years"],
+    createLookupSeedSql(NOMES_TABELAS_LOOKUP.age_groups, [
+      ["0", "Não se aplica"],
+      ["1", "0 a 12 anos"],
+      ["2", "13 a 20 anos"],
+      ["3", "21 a 30 anos"],
+      ["4", "31 a 40 anos"],
+      ["5", "41 a 50 anos"],
+      ["6", "51 a 60 anos"],
+      ["7", "61 a 70 anos"],
+      ["8", "71 a 80 anos"],
+      ["9", "Maiores de 80 anos"],
     ]),
   ];
 }

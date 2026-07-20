@@ -14,26 +14,26 @@ import {
 export function registerSanitizeCommands(program: Command): void {
   program
     .command("sanitize")
-    .argument("<input>", "Path to the validated extracted dataset directory.")
+    .argument("<input>", "Caminho do diretório do dataset extraído e validado.")
     .option(
       "--output <path>",
-      "Custom output directory for the sanitized dataset tree.",
+      "Diretório de saída personalizado para a árvore de dataset sanitizado.",
     )
     .option(
       "--dataset <dataset>",
-      "Sanitize only one validated dataset block (for example: establishments or companies).",
+      "Sanitiza apenas um bloco de dataset validado (por exemplo: establishments ou companies).",
     )
     .option(
       "--source-encoding <encoding>",
-      "Source file encoding used while reading Receita files. Defaults to LATIN1 (ISO-8859-1) and writes validated UTF-8 output.",
+      "Encoding dos arquivos de origem usado ao ler os arquivos da Receita. Padrão: LATIN1 (ISO-8859-1); grava saída UTF-8 validada.",
     )
     .option(
       "--allow-replacement-chars",
-      "Allow Unicode replacement characters in sanitized output instead of failing validation.",
+      "Permite caracteres de substituição Unicode na saída sanitizada em vez de falhar a validação.",
     )
-    .option("-f, --force", "Skip the confirmation prompt.")
+    .option("-f, --force", "Pula a confirmação interativa.")
     .description(
-      "Normalize Receita source files into validated UTF-8 output before import.",
+      "Normaliza os arquivos de origem da Receita em saída UTF-8 validada antes da importação.",
     )
     .action(
       async (
@@ -48,10 +48,10 @@ export function registerSanitizeCommands(program: Command): void {
       ) => {
         if (!options.force) {
           const confirmed = await confirm(
-            `Prepare a sanitized dataset tree from ${input} now? This command creates a new output tree for faster imports.`,
+            `Preparar agora uma árvore de dataset sanitizado a partir de ${input}? Este comando cria uma nova árvore de saída para importações mais rápidas.`,
           );
           if (!confirmed) {
-            console.log("Sanitization cancelled.");
+            console.log("Sanitização cancelada.");
             return;
           }
         }

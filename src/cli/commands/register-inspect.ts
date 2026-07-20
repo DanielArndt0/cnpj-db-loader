@@ -6,9 +6,9 @@ import { printInspectSummary } from "../ui/output.js";
 export function registerInspectCommands(program: Command): void {
   program
     .command("inspect")
-    .argument("<input>", "Path to the input directory.")
+    .argument("<input>", "Caminho do diretório de entrada.")
     .description(
-      "Inspect files and directories, report recognized dataset blocks, and suggest the next command.",
+      "Inspeciona arquivos e diretórios, informa os blocos de dataset reconhecidos e sugere o próximo comando.",
     )
     .action(async (input: string) => {
       const summary = await inspectFiles(input);

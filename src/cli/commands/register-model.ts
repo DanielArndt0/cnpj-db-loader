@@ -6,18 +6,18 @@ import { getAllLayouts, getLayoutSummary } from "../../services/index.js";
 export function registerModelCommands(program: Command): void {
   const model = program
     .command("model")
-    .description("Inspect the internal data model.");
+    .description("Inspeciona o modelo de dados interno.");
 
   model
     .command("show")
-    .description("Print the full internal layout dictionary.")
+    .description("Imprime o dicionário completo de layouts internos.")
     .action(() => {
       console.log(prettyJson(getAllLayouts()));
     });
 
   model
     .command("summary")
-    .description("Print a compact summary of dataset blocks.")
+    .description("Imprime um resumo compacto dos blocos de dataset.")
     .action(() => {
       console.log(prettyJson(getLayoutSummary()));
     });

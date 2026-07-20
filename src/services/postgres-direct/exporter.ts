@@ -110,13 +110,15 @@ export async function exportPostgresCsvDataset(
   options: PostgresCsvExportOptions = {},
 ): Promise<PostgresCsvExportSummary> {
   if (options.dataset && !isImportDatasetType(options.dataset)) {
-    throw new ValidationError(`Unsupported dataset type: ${options.dataset}.`);
+    throw new ValidationError(
+      `Tipo de dataset não suportado: ${options.dataset}.`,
+    );
   }
 
   const validation = await validateInputDirectory(inputPath);
   if (!validation.ok) {
     throw new ValidationError(
-      `The input directory is not ready for PostgreSQL CSV export. ${validation.errors.join(" ")}`,
+      `O diretório de entrada não está pronto para a exportação de CSV do PostgreSQL. ${validation.errors.join(" ")}`,
     );
   }
 
@@ -142,7 +144,7 @@ export async function exportPostgresCsvDataset(
 
   if (recognizedFiles.length === 0) {
     throw new ValidationError(
-      "No recognized dataset files were found for PostgreSQL CSV export.",
+      "Nenhum arquivo de dataset reconhecido foi encontrado para a exportação de CSV do PostgreSQL.",
     );
   }
 
@@ -262,7 +264,7 @@ export async function exportPostgresCsvDataset(
     totalRows,
     datasets: summaryDatasets,
     warnings: [
-      "PostgreSQL-ready CSV export is intended for hybrid bulk imports after extraction, validation and sanitization.",
+      "A exportação de CSV pronto para o PostgreSQL destina-se a importações híbridas em massa após extração, validação e sanitização.",
       "The generated SQL script resets staging tables and then upserts final tables. Review it before running against production databases.",
     ],
     nextStep: inferNextStep(scriptPath),

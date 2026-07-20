@@ -240,7 +240,7 @@ export async function extractArchives(
         completedArchives: completedArchivesCount,
         extractedBytes: extractedArchiveBytes,
         totalBytes: totalArchiveBytes,
-        errorMessage: result.errorMessage ?? "Unknown extraction error",
+        errorMessage: result.errorMessage ?? "Erro de extração desconhecido",
       });
     }
   }

@@ -41,14 +41,14 @@ async function runFederalRevenueSyncPipeline(
 
   if (download.failedFiles > 0) {
     throw new ValidationError(
-      `Federal Revenue sync cannot continue because ${download.failedFiles} file(s) failed to download. Run federal-revenue retry ${download.reference} after fixing the cause.`,
+      `O sync da Receita Federal não pode continuar porque ${download.failedFiles} arquivo(s) falharam no download. Execute rfb retry ${download.reference} após corrigir a causa.`,
       { reference: download.reference, outputPath: download.outputPath },
     );
   }
 
   if (download.partialFiles > 0 || download.missingFiles > 0) {
     throw new ValidationError(
-      `Federal Revenue sync cannot continue because the local reference is incomplete. Partial files: ${download.partialFiles}. Missing files: ${download.missingFiles}.`,
+      `O sync da Receita Federal não pode continuar porque a referência local está incompleta. Arquivos parciais: ${download.partialFiles}. Arquivos ausentes: ${download.missingFiles}.`,
       {
         reference: download.reference,
         outputPath: download.outputPath,
@@ -66,7 +66,7 @@ async function runFederalRevenueSyncPipeline(
 
   if (extraction.failedArchives.length > 0) {
     throw new ValidationError(
-      `Federal Revenue sync cannot continue because ${extraction.failedArchives.length} archive(s) failed to extract.`,
+      `O sync da Receita Federal não pode continuar porque ${extraction.failedArchives.length} arquivo(s) falharam na extração.`,
       {
         reference: download.reference,
         failedArchives: extraction.failedArchives,
@@ -78,7 +78,7 @@ async function runFederalRevenueSyncPipeline(
   const validation = await validateInputDirectory(extraction.outputPath);
   if (!validation.ok) {
     throw new ValidationError(
-      `Federal Revenue sync cannot continue because the extracted dataset is not valid. ${validation.errors.join(" ")}`,
+      `O sync da Receita Federal não pode continuar porque o dataset extraído não é válido. ${validation.errors.join(" ")}`,
       { reference: download.reference, errors: validation.errors },
     );
   }

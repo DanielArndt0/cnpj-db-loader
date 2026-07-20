@@ -31,21 +31,21 @@ export function printInspectSummary(
   summary: InspectSummary,
   logFilePath: string,
 ): void {
-  console.log(theme.successLabel("INSPECT"), "Inspection completed.");
-  console.log(formatKeyValue("Input path", summary.inputPath));
-  console.log(formatKeyValue("Detected mode", summary.detectedInputMode));
-  console.log(formatKeyValue("Total entries", summary.totalEntries));
-  console.log(formatKeyValue("Zip archives", summary.zipArchivesFound));
+  console.log(theme.successLabel("INSPECT"), "Inspeção concluída.");
+  console.log(formatKeyValue("Caminho de entrada", summary.inputPath));
+  console.log(formatKeyValue("Modo detectado", summary.detectedInputMode));
+  console.log(formatKeyValue("Total de entradas", summary.totalEntries));
+  console.log(formatKeyValue("Arquivos ZIP", summary.zipArchivesFound));
   console.log(
     formatKeyValue(
-      "Recognized extracted entries",
+      "Entradas extraídas reconhecidas",
       summary.extractedEntriesFound,
     ),
   );
 
   const recognizedDatasets = Object.entries(summary.recognizedDatasets);
   if (recognizedDatasets.length > 0) {
-    console.log(theme.infoLabel("DATASETS"));
+    console.log(theme.infoLabel("CONJUNTOS"));
     for (const [dataset, count] of recognizedDatasets) {
       console.log(`  ${theme.blue("•")} ${dataset}: ${count}`);
     }
@@ -53,28 +53,34 @@ export function printInspectSummary(
 
   printWarnings(summary.warnings);
   if (summary.nextStep) {
-    console.log(`${theme.infoLabel("NEXT")} ${summary.nextStep}`);
+    console.log(`${theme.infoLabel("PRÓXIMO")} ${summary.nextStep}`);
   }
 
-  console.log(`${theme.muted("Log file:")} ${resolveLogFilePath(logFilePath)}`);
+  console.log(
+    `${theme.muted("Arquivo de log:")} ${resolveLogFilePath(logFilePath)}`,
+  );
 }
 
 export function printExtractionSummary(
   summary: ExtractionSummary,
   logFilePath: string,
 ): void {
-  console.log(theme.successLabel("EXTRACT"), "Extraction completed.");
-  console.log(formatKeyValue("Input path", summary.inputPath));
-  console.log(formatKeyValue("Output path", summary.outputPath));
-  console.log(formatKeyValue("Operating system", summary.operatingSystem));
-  console.log(formatKeyValue("Zip files found", summary.zipFilesFound));
+  console.log(theme.successLabel("EXTRACT"), "Extração concluída.");
+  console.log(formatKeyValue("Caminho de entrada", summary.inputPath));
+  console.log(formatKeyValue("Caminho de saída", summary.outputPath));
+  console.log(formatKeyValue("Sistema operacional", summary.operatingSystem));
   console.log(
-    formatKeyValue("Archives extracted", summary.extractedArchives.length),
+    formatKeyValue("Arquivos ZIP encontrados", summary.zipFilesFound),
   );
-  console.log(formatKeyValue("Failed archives", summary.failedArchives.length));
+  console.log(
+    formatKeyValue("Arquivos extraídos", summary.extractedArchives.length),
+  );
+  console.log(
+    formatKeyValue("Arquivos com falha", summary.failedArchives.length),
+  );
   console.log(
     formatKeyValue(
-      "Processed archive bytes",
+      "Bytes de arquivos processados",
       `${formatBytes(summary.extractedArchiveBytes)} / ${formatBytes(summary.totalArchiveBytes)}`,
     ),
   );
@@ -82,12 +88,14 @@ export function printExtractionSummary(
   printWarnings(
     summary.failedArchives.length > 0
       ? [
-          "Some archives could not be extracted. Check the log file for details.",
+          "Alguns arquivos não puderam ser extraídos. Verifique o arquivo de log para detalhes.",
         ]
       : [],
   );
 
-  console.log(`${theme.muted("Log file:")} ${resolveLogFilePath(logFilePath)}`);
+  console.log(
+    `${theme.muted("Arquivo de log:")} ${resolveLogFilePath(logFilePath)}`,
+  );
 }
 
 export function printValidationSummary(
@@ -96,32 +104,36 @@ export function printValidationSummary(
 ): void {
   console.log(
     theme.successLabel("VALIDATE"),
-    summary.ok ? "Validation completed." : "Validation completed with errors.",
-  );
-  console.log(formatKeyValue("Input path", summary.inspected.inputPath));
-  console.log(formatKeyValue("Validated path", summary.validatedPath));
-  console.log(
-    formatKeyValue("Detected mode", summary.inspected.detectedInputMode),
-  );
-  console.log(formatKeyValue("Total entries", summary.inspected.totalEntries));
-  console.log(
-    formatKeyValue("Recognized datasets", summary.presentDatasets.length),
+    summary.ok ? "Validação concluída." : "Validação concluída com erros.",
   );
   console.log(
-    formatKeyValue("Missing datasets", summary.missingDatasets.length),
+    formatKeyValue("Caminho de entrada", summary.inspected.inputPath),
+  );
+  console.log(formatKeyValue("Caminho validado", summary.validatedPath));
+  console.log(
+    formatKeyValue("Modo detectado", summary.inspected.detectedInputMode),
+  );
+  console.log(
+    formatKeyValue("Total de entradas", summary.inspected.totalEntries),
+  );
+  console.log(
+    formatKeyValue("Conjuntos reconhecidos", summary.presentDatasets.length),
+  );
+  console.log(
+    formatKeyValue("Conjuntos ausentes", summary.missingDatasets.length),
   );
   console.log(formatKeyValue("Errors", summary.errors.length));
   console.log(formatKeyValue("Warnings", summary.warnings.length));
 
   if (summary.presentDatasets.length > 0) {
-    console.log(theme.infoLabel("DATASETS"));
+    console.log(theme.infoLabel("CONJUNTOS"));
     for (const dataset of summary.presentDatasets) {
       console.log(`  ${theme.blue("•")} ${dataset}`);
     }
   }
 
   if (summary.missingDatasets.length > 0) {
-    console.log(theme.warningLabel("MISSING"));
+    console.log(theme.warningLabel("AUSENTES"));
     for (const dataset of summary.missingDatasets) {
       console.log(`  ${theme.yellow("•")} ${dataset}`);
     }
@@ -130,23 +142,30 @@ export function printValidationSummary(
   printErrors(summary.errors);
   printWarnings(summary.warnings);
   if (summary.nextStep) {
-    console.log(`${theme.infoLabel("NEXT")} ${summary.nextStep}`);
+    console.log(`${theme.infoLabel("PRÓXIMO")} ${summary.nextStep}`);
   }
-  console.log(`${theme.muted("Log file:")} ${resolveLogFilePath(logFilePath)}`);
+  console.log(
+    `${theme.muted("Arquivo de log:")} ${resolveLogFilePath(logFilePath)}`,
+  );
 }
 
 export function printDatabaseConfigSummary(
   config: { defaultDbUrl?: string },
   logFilePath: string,
 ): void {
-  console.log(theme.successLabel("DATABASE"), "Database configuration loaded.");
+  console.log(
+    theme.successLabel("DATABASE"),
+    "Configuração de banco carregada.",
+  );
   console.log(
     formatKeyValue(
-      "Default database URL",
-      config.defaultDbUrl ?? "not configured",
+      "URL padrão do banco",
+      config.defaultDbUrl ?? "não configurado",
     ),
   );
-  console.log(`${theme.muted("Log file:")} ${resolveLogFilePath(logFilePath)}`);
+  console.log(
+    `${theme.muted("Arquivo de log:")} ${resolveLogFilePath(logFilePath)}`,
+  );
 }
 
 export function printFederalRevenueConfigSummary(
@@ -163,25 +182,30 @@ export function printFederalRevenueConfigSummary(
   logFilePath: string,
 ): void {
   console.log(
-    theme.successLabel("FEDERAL REVENUE"),
-    "Federal Revenue configuration loaded.",
+    theme.successLabel("RECEITA FEDERAL"),
+    "Configuração da Receita Federal carregada.",
   );
   console.log(
     formatKeyValue(
       "WebDAV URL",
-      `${config.webdavUrl}${config.configured.webdavUrl ? "" : " (default)"}`,
+      `${config.webdavUrl}${config.configured.webdavUrl ? "" : " (padrão)"}`,
     ),
   );
   console.log(
     formatKeyValue(
       "User agent",
-      `${config.userAgent}${config.configured.userAgent ? "" : " (default)"}`,
+      `${config.userAgent}${config.configured.userAgent ? "" : " (padrão)"}`,
     ),
   );
   console.log(
-    formatKeyValue("Share token", config.shareToken ?? "not configured"),
+    formatKeyValue(
+      "Token de compartilhamento",
+      config.shareToken ?? "não configurado",
+    ),
   );
-  console.log(`${theme.muted("Log file:")} ${resolveLogFilePath(logFilePath)}`);
+  console.log(
+    `${theme.muted("Arquivo de log:")} ${resolveLogFilePath(logFilePath)}`,
+  );
 }
 
 export function printDatabaseCleanupSummary(
@@ -202,58 +226,63 @@ export function printDatabaseCleanupSummary(
 ): void {
   console.log(
     theme.successLabel("DATABASE"),
-    `Cleanup completed for ${summary.scope}.`,
+    `Limpeza concluída para ${summary.scope}.`,
   );
-  console.log(formatKeyValue("Target database", summary.targetDatabase));
-  console.log(formatKeyValue("Scope", summary.scope));
+  console.log(formatKeyValue("Banco de destino", summary.targetDatabase));
+  console.log(formatKeyValue("Escopo", summary.scope));
 
   if (summary.dataset) {
     console.log(formatKeyValue("Dataset", summary.dataset));
   }
 
   if (summary.phase) {
-    console.log(formatKeyValue("Checkpoint phase", summary.phase));
+    console.log(formatKeyValue("Fase do checkpoint", summary.phase));
   }
 
   if (summary.planId !== undefined) {
-    console.log(formatKeyValue("Plan id", summary.planId));
+    console.log(formatKeyValue("Id do plano", summary.planId));
   }
 
   if (summary.validatedPath) {
-    console.log(formatKeyValue("Validated path", summary.validatedPath));
+    console.log(formatKeyValue("Caminho validado", summary.validatedPath));
   }
 
   console.log(
     formatKeyValue(
-      "Staging/final tables truncated",
+      "Tabelas de staging/finais truncadas",
       summary.truncatedTables.length,
     ),
   );
   console.log(
     formatKeyValue(
-      "Load checkpoints deleted",
+      "Checkpoints de carga excluídos",
       formatCount(summary.deletedLoadCheckpoints),
     ),
   );
   console.log(
     formatKeyValue(
-      "Materialization checkpoints deleted",
+      "Checkpoints de materialização excluídos",
       formatCount(summary.deletedMaterializationCheckpoints),
     ),
   );
   console.log(
-    formatKeyValue("Import plans deleted", formatCount(summary.deletedPlans)),
+    formatKeyValue(
+      "Planos de importação excluídos",
+      formatCount(summary.deletedPlans),
+    ),
   );
 
   if (summary.truncatedTables.length > 0) {
-    console.log(theme.warningLabel("TABLES"));
+    console.log(theme.warningLabel("TABELAS"));
     for (const tableName of summary.truncatedTables) {
       console.log(`  ${theme.yellow("•")} ${tableName}`);
     }
   }
 
   printNotes(summary.notes);
-  console.log(`${theme.muted("Log file:")} ${resolveLogFilePath(logFilePath)}`);
+  console.log(
+    `${theme.muted("Arquivo de log:")} ${resolveLogFilePath(logFilePath)}`,
+  );
 }
 
 export function printInfoWithLog(
@@ -262,7 +291,9 @@ export function printInfoWithLog(
   logFilePath: string,
 ): void {
   console.log(theme.successLabel(label), message);
-  console.log(`${theme.muted("Log file:")} ${resolveLogFilePath(logFilePath)}`);
+  console.log(
+    `${theme.muted("Arquivo de log:")} ${resolveLogFilePath(logFilePath)}`,
+  );
 }
 
 export function printSanitizeSummary(
@@ -271,52 +302,52 @@ export function printSanitizeSummary(
 ): void {
   console.log(
     theme.successLabel("SANITIZE"),
-    "Dataset sanitization completed.",
+    "Sanitização do dataset concluída.",
   );
-  console.log(formatKeyValue("Input path", summary.inputPath));
-  console.log(formatKeyValue("Validated path", summary.validatedPath));
-  console.log(formatKeyValue("Output path", summary.outputPath));
-  console.log(formatKeyValue("Processed files", summary.processedFiles));
+  console.log(formatKeyValue("Caminho de entrada", summary.inputPath));
+  console.log(formatKeyValue("Caminho validado", summary.validatedPath));
+  console.log(formatKeyValue("Caminho de saída", summary.outputPath));
+  console.log(formatKeyValue("Arquivos processados", summary.processedFiles));
   console.log(
-    formatKeyValue("Rows counted", formatCount(summary.processedRows)),
+    formatKeyValue("Linhas contadas", formatCount(summary.processedRows)),
   );
   console.log(
-    formatKeyValue("Processed bytes", formatBytes(summary.totalBytes)),
+    formatKeyValue("Bytes processados", formatBytes(summary.totalBytes)),
   );
-  console.log(formatKeyValue("Source encoding", summary.sourceEncoding));
-  console.log(formatKeyValue("Output encoding", "UTF8"));
+  console.log(formatKeyValue("Encoding de origem", summary.sourceEncoding));
+  console.log(formatKeyValue("Encoding de saída", "UTF8"));
   console.log(
-    formatKeyValue("Removed NUL bytes", formatCount(summary.nulBytesRemoved)),
+    formatKeyValue("Bytes NUL removidos", formatCount(summary.nulBytesRemoved)),
   );
   console.log(
     formatKeyValue(
-      "Removed invalid bytes",
+      "Bytes inválidos removidos",
       formatCount(summary.invalidBytesRemoved),
     ),
   );
   console.log(
     formatKeyValue(
-      "Removed control chars",
+      "Caracteres de controle removidos",
       formatCount(summary.controlCharsRemoved),
     ),
   );
   console.log(
     formatKeyValue(
-      "Replacement chars found",
+      "Caracteres de substituição encontrados",
       formatCount(summary.replacementCharactersFound),
     ),
   );
   console.log(
     formatKeyValue(
-      "Replacement chars remaining",
+      "Caracteres de substituição restantes",
       formatCount(summary.replacementCharactersRemaining),
     ),
   );
-  console.log(formatKeyValue("Changed files", summary.changedFiles));
-  console.log(formatKeyValue("Unchanged files", summary.unchangedFiles));
+  console.log(formatKeyValue("Arquivos alterados", summary.changedFiles));
+  console.log(formatKeyValue("Arquivos inalterados", summary.unchangedFiles));
 
   if (summary.datasets.length > 0) {
-    console.log(theme.infoLabel("DATASETS"));
+    console.log(theme.infoLabel("CONJUNTOS"));
     for (const dataset of summary.datasets) {
       console.log(`  ${theme.blue("•")} ${dataset}`);
     }
@@ -324,10 +355,12 @@ export function printSanitizeSummary(
 
   printWarnings(summary.warnings);
   if (summary.nextStep) {
-    console.log(`${theme.infoLabel("NEXT")} ${summary.nextStep}`);
+    console.log(`${theme.infoLabel("PRÓXIMO")} ${summary.nextStep}`);
   }
 
-  console.log(`${theme.muted("Log file:")} ${resolveLogFilePath(logFilePath)}`);
+  console.log(
+    `${theme.muted("Arquivo de log:")} ${resolveLogFilePath(logFilePath)}`,
+  );
 }
 
 export function printImportSummary(
@@ -336,116 +369,126 @@ export function printImportSummary(
 ): void {
   const headline =
     summary.executionMode === "load"
-      ? "Staging/direct load completed."
+      ? "Carga de staging/direta concluída."
       : summary.executionMode === "materialize"
-        ? "Staged materialization completed."
-        : "Database import completed.";
+        ? "Materialização do staging concluída."
+        : "Importação para o banco concluída.";
 
   console.log(theme.successLabel("IMPORT"), headline);
-  console.log(formatKeyValue("Input path", summary.inputPath));
-  console.log(formatKeyValue("Validated path", summary.validatedPath));
-  console.log(formatKeyValue("Target database", summary.targetDatabase));
+  console.log(formatKeyValue("Caminho de entrada", summary.inputPath));
+  console.log(formatKeyValue("Caminho validado", summary.validatedPath));
+  console.log(formatKeyValue("Banco de destino", summary.targetDatabase));
   console.log(
-    formatKeyValue("Imported datasets", summary.importedDatasets.length),
+    formatKeyValue("Conjuntos importados", summary.importedDatasets.length),
   );
-  console.log(formatKeyValue("Imported files", summary.importedFiles));
+  console.log(formatKeyValue("Arquivos importados", summary.importedFiles));
   console.log(
-    formatKeyValue("Rows committed", formatCount(summary.processedRows)),
+    formatKeyValue("Linhas confirmadas", formatCount(summary.processedRows)),
   );
-  console.log(formatKeyValue("Rows planned", formatCount(summary.plannedRows)));
+  console.log(
+    formatKeyValue("Linhas planejadas", formatCount(summary.plannedRows)),
+  );
   console.log(
     formatKeyValue(
-      "Batches committed",
+      "Lotes confirmados",
       `${formatCount(summary.committedBatches)} / ${formatCount(summary.plannedBatches)}`,
     ),
   );
   console.log(
-    formatKeyValue("Quarantined rows", formatCount(summary.quarantinedRows)),
+    formatKeyValue(
+      "Linhas em quarentena",
+      formatCount(summary.quarantinedRows),
+    ),
   );
-  console.log(formatKeyValue("Resumed files", summary.resumedFiles));
+  console.log(formatKeyValue("Arquivos retomados", summary.resumedFiles));
   console.log(
-    formatKeyValue("Checkpoint-complete files", summary.skippedCompletedFiles),
+    formatKeyValue(
+      "Arquivos com checkpoint completo",
+      summary.skippedCompletedFiles,
+    ),
   );
 
   if (summary.datasetSummaries.length > 0) {
-    console.log(theme.infoLabel("DATASETS"));
+    console.log(theme.infoLabel("CONJUNTOS"));
     for (const datasetSummary of summary.datasetSummaries) {
       console.log(
-        `  ${theme.blue("•")} ${datasetSummary.dataset}: ${datasetSummary.files} file(s), ${formatCount(datasetSummary.rows)} row(s)`,
+        `  ${theme.blue("•")} ${datasetSummary.dataset}: ${datasetSummary.files} arquivo(s), ${formatCount(datasetSummary.rows)} linha(s)`,
       );
     }
   }
 
-  console.log(theme.infoLabel("PERFORMANCE"));
+  console.log(theme.infoLabel("DESEMPENHO"));
   console.log(
     formatKeyValue(
-      "Total duration",
+      "Duração total",
       formatDuration(summary.performance.totalDurationMs),
     ),
   );
   console.log(
     formatKeyValue(
-      "Preparatory scan",
+      "Varredura preparatória",
       formatDuration(summary.performance.scanDurationMs),
     ),
   );
   console.log(
     formatKeyValue(
-      "Import execution",
+      "Execução da importação",
       formatDuration(summary.performance.executionDurationMs),
     ),
   );
   console.log(
     formatKeyValue(
-      "Lookup loading",
+      "Carga de lookups",
       formatDuration(summary.performance.lookupLoadDurationMs),
     ),
   );
   console.log(
     formatKeyValue(
-      "Insert path",
+      "Caminho de insert",
       formatDuration(summary.performance.insertDurationMs),
     ),
   );
   console.log(
     formatKeyValue(
-      "Retry path",
+      "Caminho de retry",
       formatDuration(summary.performance.retryDurationMs),
     ),
   );
   console.log(
     formatKeyValue(
-      "Quarantine path",
+      "Caminho de quarentena",
       formatDuration(summary.performance.quarantineDurationMs),
     ),
   );
   console.log(
     formatKeyValue(
-      "Materialization",
+      "Materialização",
       formatDuration(summary.performance.materializationDurationMs),
     ),
   );
   console.log(
     formatKeyValue(
-      "Throughput",
+      "Vazão",
       `${formatRate(summary.performance.rowsPerSecond, "rows/s")} | ${formatRate(summary.performance.batchesPerMinute, "batches/min")}`,
     ),
   );
 
   if (summary.performance.datasets.length > 0) {
-    console.log(theme.infoLabel("DATASET PERFORMANCE"));
+    console.log(theme.infoLabel("DESEMPENHO POR CONJUNTO"));
     for (const datasetPerformance of summary.performance.datasets) {
       console.log(
-        `  ${theme.blue("•")} ${datasetPerformance.dataset}: ${formatCount(datasetPerformance.importedRows)} row(s), ${formatCount(datasetPerformance.committedBatches)} batch(es), ${formatDuration(datasetPerformance.importDurationMs)}, ${formatRate(datasetPerformance.rowsPerSecond, "rows/s")}`,
+        `  ${theme.blue("•")} ${datasetPerformance.dataset}: ${formatCount(datasetPerformance.importedRows)} linha(s), ${formatCount(datasetPerformance.committedBatches)} lote(s), ${formatDuration(datasetPerformance.importDurationMs)}, ${formatRate(datasetPerformance.rowsPerSecond, "rows/s")}`,
       );
       console.log(
-        `    scan ${formatDuration(datasetPerformance.scanDurationMs)} | insert ${formatDuration(datasetPerformance.insertDurationMs)} | materialize ${formatDuration(datasetPerformance.materializationDurationMs)} | retry ${formatDuration(datasetPerformance.retryDurationMs)} | quarantine ${formatDuration(datasetPerformance.quarantineDurationMs)} | resumed ${formatCount(datasetPerformance.resumedFiles)} | skipped ${formatCount(datasetPerformance.skippedCompletedFiles)}`,
+        `    varredura ${formatDuration(datasetPerformance.scanDurationMs)} | insert ${formatDuration(datasetPerformance.insertDurationMs)} | materialização ${formatDuration(datasetPerformance.materializationDurationMs)} | retry ${formatDuration(datasetPerformance.retryDurationMs)} | quarentena ${formatDuration(datasetPerformance.quarantineDurationMs)} | retomados ${formatCount(datasetPerformance.resumedFiles)} | ignorados ${formatCount(datasetPerformance.skippedCompletedFiles)}`,
       );
     }
   }
 
   printNotes(summary.warnings);
-  console.log(`${theme.muted("Log file:")} ${resolveLogFilePath(logFilePath)}`);
+  console.log(
+    `${theme.muted("Arquivo de log:")} ${resolveLogFilePath(logFilePath)}`,
+  );
   console.log(
     `${theme.muted("Progress log:")} ${resolveLogFilePath(summary.progressLogPath)}`,
   );
@@ -456,36 +499,43 @@ export function printFederalRevenueCheckSummary(
   logFilePath: string,
 ): void {
   console.log(
-    theme.successLabel("FEDERAL REVENUE"),
-    "Remote dataset check completed.",
+    theme.successLabel("RECEITA FEDERAL"),
+    "Verificação do dataset remoto concluída.",
   );
-  console.log(formatKeyValue("Remote base URL", summary.remoteBaseUrl));
-  console.log(formatKeyValue("Selected reference", summary.selectedReference));
-  console.log(formatKeyValue("Selection mode", summary.selectionMode));
+  console.log(formatKeyValue("URL base remota", summary.remoteBaseUrl));
   console.log(
-    formatKeyValue("Available references", summary.availableReferences.length),
+    formatKeyValue("Referência selecionada", summary.selectedReference),
   );
-  console.log(formatKeyValue("ZIP files", summary.totalFiles));
-  console.log(formatKeyValue("Remote bytes", formatBytes(summary.totalBytes)));
+  console.log(formatKeyValue("Modo de seleção", summary.selectionMode));
+  console.log(
+    formatKeyValue(
+      "Referências disponíveis",
+      summary.availableReferences.length,
+    ),
+  );
+  console.log(formatKeyValue("Arquivos ZIP", summary.totalFiles));
+  console.log(formatKeyValue("Bytes remotos", formatBytes(summary.totalBytes)));
 
   if (summary.files.length > 0) {
-    console.log(theme.infoLabel("FILES"));
+    console.log(theme.infoLabel("ARQUIVOS"));
     for (const file of summary.files.slice(0, 20)) {
       const sizeLabel =
         file.sizeInBytes === undefined
-          ? "unknown size"
+          ? "tamanho desconhecido"
           : formatBytes(file.sizeInBytes);
       console.log(`  ${theme.blue("•")} ${file.name} (${sizeLabel})`);
     }
 
     if (summary.files.length > 20) {
       console.log(
-        `  ${theme.muted(`... ${summary.files.length - 20} additional file(s) omitted from terminal output`)}`,
+        `  ${theme.muted(`... ${summary.files.length - 20} arquivo(s) adicional(is) omitido(s) da saída do terminal`)}`,
       );
     }
   }
 
-  console.log(`${theme.muted("Log file:")} ${resolveLogFilePath(logFilePath)}`);
+  console.log(
+    `${theme.muted("Arquivo de log:")} ${resolveLogFilePath(logFilePath)}`,
+  );
 }
 
 export function printFederalRevenueDownloadSummary(
@@ -493,34 +543,36 @@ export function printFederalRevenueDownloadSummary(
   logFilePath: string,
 ): void {
   console.log(
-    theme.successLabel("FEDERAL REVENUE"),
+    theme.successLabel("RECEITA FEDERAL"),
     summary.failedFiles > 0
-      ? "Download completed with errors."
-      : "Download completed.",
+      ? "Download concluído com erros."
+      : "Download concluído.",
   );
-  console.log(formatKeyValue("Reference", summary.reference));
-  console.log(formatKeyValue("Selection mode", summary.selectionMode));
-  console.log(formatKeyValue("Output path", summary.outputPath));
-  console.log(formatKeyValue("Manifest", summary.manifestPath));
+  console.log(formatKeyValue("Referência", summary.reference));
+  console.log(formatKeyValue("Modo de seleção", summary.selectionMode));
+  console.log(formatKeyValue("Caminho de saída", summary.outputPath));
+  console.log(formatKeyValue("Manifesto", summary.manifestPath));
   console.log(formatKeyValue("ZIP files found", summary.filesFound));
-  console.log(formatKeyValue("Downloaded files", summary.downloadedFiles));
-  console.log(formatKeyValue("Skipped files", summary.skippedFiles));
-  console.log(formatKeyValue("Failed files", summary.failedFiles));
-  console.log(formatKeyValue("Partial files", summary.partialFiles));
-  console.log(formatKeyValue("Missing files", summary.missingFiles));
+  console.log(formatKeyValue("Arquivos baixados", summary.downloadedFiles));
+  console.log(formatKeyValue("Arquivos ignorados", summary.skippedFiles));
+  console.log(formatKeyValue("Arquivos falhos", summary.failedFiles));
+  console.log(formatKeyValue("Arquivos parciais", summary.partialFiles));
+  console.log(formatKeyValue("Arquivos ausentes", summary.missingFiles));
   console.log(
     formatKeyValue(
-      "Processed bytes",
+      "Bytes processados",
       `${formatBytes(summary.downloadedBytes)} / ${formatBytes(summary.totalBytes)}`,
     ),
   );
 
   printWarnings(summary.warnings);
   if (summary.nextStep) {
-    console.log(`${theme.infoLabel("NEXT")} ${summary.nextStep}`);
+    console.log(`${theme.infoLabel("PRÓXIMO")} ${summary.nextStep}`);
   }
 
-  console.log(`${theme.muted("Log file:")} ${resolveLogFilePath(logFilePath)}`);
+  console.log(
+    `${theme.muted("Arquivo de log:")} ${resolveLogFilePath(logFilePath)}`,
+  );
 }
 
 export function printFederalRevenueStatusSummary(
@@ -529,52 +581,55 @@ export function printFederalRevenueStatusSummary(
 ): void {
   console.log(
     summary.isComplete
-      ? theme.successLabel("FEDERAL REVENUE")
-      : theme.warningLabel("FEDERAL REVENUE"),
+      ? theme.successLabel("RECEITA FEDERAL")
+      : theme.warningLabel("RECEITA FEDERAL"),
     summary.isComplete
-      ? "Local reference is complete."
-      : "Local reference is incomplete.",
+      ? "A referência local está completa."
+      : "A referência local está incompleta.",
   );
-  console.log(formatKeyValue("Reference", summary.reference));
-  console.log(formatKeyValue("Selection mode", summary.selectionMode));
-  console.log(formatKeyValue("Output path", summary.outputPath));
-  console.log(formatKeyValue("Manifest", summary.manifestPath));
-  console.log(
-    formatKeyValue("Manifest found", summary.manifestFound ? "yes" : "no"),
-  );
-  console.log(formatKeyValue("ZIP files", summary.filesFound));
-  console.log(formatKeyValue("Downloaded files", summary.downloadedFiles));
-  console.log(formatKeyValue("Failed files", summary.failedFiles));
-  console.log(formatKeyValue("Partial files", summary.partialFiles));
-  console.log(formatKeyValue("Missing files", summary.missingFiles));
+  console.log(formatKeyValue("Referência", summary.reference));
+  console.log(formatKeyValue("Modo de seleção", summary.selectionMode));
+  console.log(formatKeyValue("Caminho de saída", summary.outputPath));
+  console.log(formatKeyValue("Manifesto", summary.manifestPath));
   console.log(
     formatKeyValue(
-      "Local bytes",
+      "Manifesto encontrado",
+      summary.manifestFound ? "sim" : "não",
+    ),
+  );
+  console.log(formatKeyValue("Arquivos ZIP", summary.filesFound));
+  console.log(formatKeyValue("Arquivos baixados", summary.downloadedFiles));
+  console.log(formatKeyValue("Arquivos falhos", summary.failedFiles));
+  console.log(formatKeyValue("Arquivos parciais", summary.partialFiles));
+  console.log(formatKeyValue("Arquivos ausentes", summary.missingFiles));
+  console.log(
+    formatKeyValue(
+      "Bytes locais",
       `${formatBytes(summary.localBytes)} / ${formatBytes(summary.totalBytes)}`,
     ),
   );
 
   if (summary.lastCommand) {
-    console.log(formatKeyValue("Last command", summary.lastCommand));
+    console.log(formatKeyValue("Último comando", summary.lastCommand));
   }
 
   if (summary.lastStatus) {
-    console.log(formatKeyValue("Last status", summary.lastStatus));
+    console.log(formatKeyValue("Último status", summary.lastStatus));
   }
 
   if (summary.updatedAt) {
-    console.log(formatKeyValue("Updated at", summary.updatedAt));
+    console.log(formatKeyValue("Atualizado em", summary.updatedAt));
   }
 
   const problematicEntries = summary.entries.filter(
     (entry) => entry.status !== "downloaded",
   );
   if (problematicEntries.length > 0) {
-    console.log(theme.warningLabel("FILES"));
+    console.log(theme.warningLabel("ARQUIVOS"));
     for (const entry of problematicEntries.slice(0, 20)) {
       const sizeLabel =
         entry.localSizeInBytes === undefined
-          ? "no local bytes"
+          ? "sem bytes locais"
           : formatBytes(entry.localSizeInBytes);
       console.log(
         `  ${theme.yellow("•")} ${entry.fileName} (${entry.status}, ${sizeLabel})`,
@@ -583,45 +638,49 @@ export function printFederalRevenueStatusSummary(
 
     if (problematicEntries.length > 20) {
       console.log(
-        `  ${theme.muted(`... ${problematicEntries.length - 20} additional incomplete file(s) omitted from terminal output`)}`,
+        `  ${theme.muted(`... ${problematicEntries.length - 20} arquivo(s) incompleto(s) adicional(is) omitido(s) da saída do terminal`)}`,
       );
     }
   }
 
   printWarnings(summary.warnings);
-  console.log(`${theme.muted("Log file:")} ${resolveLogFilePath(logFilePath)}`);
+  console.log(
+    `${theme.muted("Arquivo de log:")} ${resolveLogFilePath(logFilePath)}`,
+  );
 }
 
 export function printFederalRevenueCleanSummary(
   summary: FederalRevenueCleanSummary,
   logFilePath: string,
 ): void {
-  console.log(theme.successLabel("FEDERAL REVENUE"), "Cleanup completed.");
-  console.log(formatKeyValue("Reference", summary.reference));
-  console.log(formatKeyValue("Selection mode", summary.selectionMode));
-  console.log(formatKeyValue("Mode", summary.mode));
-  console.log(formatKeyValue("Output path", summary.outputPath));
-  console.log(formatKeyValue("Manifest", summary.manifestPath));
-  console.log(formatKeyValue("Removed files", summary.removedFiles));
+  console.log(theme.successLabel("RECEITA FEDERAL"), "Limpeza concluída.");
+  console.log(formatKeyValue("Referência", summary.reference));
+  console.log(formatKeyValue("Modo de seleção", summary.selectionMode));
+  console.log(formatKeyValue("Modo", summary.mode));
+  console.log(formatKeyValue("Caminho de saída", summary.outputPath));
+  console.log(formatKeyValue("Manifesto", summary.manifestPath));
+  console.log(formatKeyValue("Arquivos removidos", summary.removedFiles));
   console.log(
-    formatKeyValue("Removed bytes", formatBytes(summary.removedBytes)),
+    formatKeyValue("Bytes removidos", formatBytes(summary.removedBytes)),
   );
 
   if (summary.removedPaths.length > 0) {
-    console.log(theme.infoLabel("REMOVED"));
+    console.log(theme.infoLabel("REMOVIDOS"));
     for (const removedPath of summary.removedPaths.slice(0, 20)) {
       console.log(`  ${theme.blue("•")} ${removedPath}`);
     }
 
     if (summary.removedPaths.length > 20) {
       console.log(
-        `  ${theme.muted(`... ${summary.removedPaths.length - 20} additional path(s) omitted from terminal output`)}`,
+        `  ${theme.muted(`... ${summary.removedPaths.length - 20} caminho(s) adicional(is) omitido(s) da saída do terminal`)}`,
       );
     }
   }
 
   printWarnings(summary.warnings);
-  console.log(`${theme.muted("Log file:")} ${resolveLogFilePath(logFilePath)}`);
+  console.log(
+    `${theme.muted("Arquivo de log:")} ${resolveLogFilePath(logFilePath)}`,
+  );
 }
 
 export function printFederalRevenueSyncSummary(
@@ -629,41 +688,54 @@ export function printFederalRevenueSyncSummary(
   logFilePath: string,
 ): void {
   console.log(
-    theme.successLabel("FEDERAL REVENUE"),
-    "Full remote sync completed.",
+    theme.successLabel("RECEITA FEDERAL"),
+    "Sync remoto completo concluído.",
   );
-  console.log(formatKeyValue("Reference", summary.reference));
-  console.log(formatKeyValue("Download path", summary.download.outputPath));
-  console.log(formatKeyValue("Extracted path", summary.extraction.outputPath));
+  console.log(formatKeyValue("Referência", summary.reference));
   console.log(
-    formatKeyValue("Sanitized path", summary.sanitization.outputPath),
+    formatKeyValue("Caminho de download", summary.download.outputPath),
   );
-  console.log(formatKeyValue("Target database", summary.import.targetDatabase));
-  console.log(formatKeyValue("ZIP files", summary.download.filesFound));
+  console.log(
+    formatKeyValue("Caminho extraído", summary.extraction.outputPath),
+  );
+  console.log(
+    formatKeyValue("Caminho sanitizado", summary.sanitization.outputPath),
+  );
+  console.log(
+    formatKeyValue("Banco de destino", summary.import.targetDatabase),
+  );
+  console.log(formatKeyValue("Arquivos ZIP", summary.download.filesFound));
   console.log(
     formatKeyValue(
-      "Extracted archives",
+      "Arquivos extraídos",
       summary.extraction.extractedArchives.length,
     ),
   );
   console.log(
-    formatKeyValue("Sanitized files", summary.sanitization.processedFiles),
+    formatKeyValue("Arquivos sanitizados", summary.sanitization.processedFiles),
   );
-  console.log(formatKeyValue("Imported files", summary.import.importedFiles));
   console.log(
-    formatKeyValue("Rows committed", formatCount(summary.import.processedRows)),
+    formatKeyValue("Arquivos importados", summary.import.importedFiles),
   );
   console.log(
     formatKeyValue(
-      "Quarantined rows",
+      "Linhas confirmadas",
+      formatCount(summary.import.processedRows),
+    ),
+  );
+  console.log(
+    formatKeyValue(
+      "Linhas em quarentena",
       formatCount(summary.import.quarantinedRows),
     ),
   );
 
   printNotes(summary.warnings);
-  console.log(`${theme.muted("Log file:")} ${resolveLogFilePath(logFilePath)}`);
   console.log(
-    `${theme.muted("Import progress log:")} ${resolveLogFilePath(summary.import.progressLogPath)}`,
+    `${theme.muted("Arquivo de log:")} ${resolveLogFilePath(logFilePath)}`,
+  );
+  console.log(
+    `${theme.muted("Log de progresso da importação:")} ${resolveLogFilePath(summary.import.progressLogPath)}`,
   );
 }
 
@@ -673,31 +745,35 @@ export function printPostgresCsvExportSummary(
 ): void {
   console.log(
     theme.successLabel("POSTGRES"),
-    "PostgreSQL-ready CSV export completed.",
+    "Exportação de CSV pronto para o PostgreSQL concluída.",
   );
-  console.log(formatKeyValue("Input path", summary.inputPath));
-  console.log(formatKeyValue("Validated path", summary.validatedPath));
-  console.log(formatKeyValue("Output path", summary.outputPath));
-  console.log(formatKeyValue("Generated script", summary.scriptPath));
-  console.log(formatKeyValue("Manifest", summary.manifestPath));
-  console.log(formatKeyValue("Exported files", summary.totalFiles));
-  console.log(formatKeyValue("Exported rows", formatCount(summary.totalRows)));
+  console.log(formatKeyValue("Caminho de entrada", summary.inputPath));
+  console.log(formatKeyValue("Caminho validado", summary.validatedPath));
+  console.log(formatKeyValue("Caminho de saída", summary.outputPath));
+  console.log(formatKeyValue("Script gerado", summary.scriptPath));
+  console.log(formatKeyValue("Manifesto", summary.manifestPath));
+  console.log(formatKeyValue("Arquivos exportados", summary.totalFiles));
+  console.log(
+    formatKeyValue("Linhas exportadas", formatCount(summary.totalRows)),
+  );
 
   if (summary.datasets.length > 0) {
-    console.log(theme.infoLabel("DATASETS"));
+    console.log(theme.infoLabel("CONJUNTOS"));
     for (const dataset of summary.datasets) {
       console.log(
-        `  ${theme.blue("•")} ${dataset.dataset}: ${dataset.files} file(s), ${formatCount(dataset.rows)} row(s)`,
+        `  ${theme.blue("•")} ${dataset.dataset}: ${dataset.files} arquivo(s), ${formatCount(dataset.rows)} linha(s)`,
       );
     }
   }
 
   printWarnings(summary.warnings);
   if (summary.nextStep) {
-    console.log(`${theme.infoLabel("NEXT")} ${summary.nextStep}`);
+    console.log(`${theme.infoLabel("PRÓXIMO")} ${summary.nextStep}`);
   }
 
-  console.log(`${theme.muted("Log file:")} ${resolveLogFilePath(logFilePath)}`);
+  console.log(
+    `${theme.muted("Arquivo de log:")} ${resolveLogFilePath(logFilePath)}`,
+  );
 }
 
 export function printPostgresDirectScriptSummary(
@@ -706,43 +782,47 @@ export function printPostgresDirectScriptSummary(
 ): void {
   console.log(
     theme.successLabel("POSTGRES"),
-    "Direct PostgreSQL import script generated.",
+    "Script de importação direta do PostgreSQL gerado.",
   );
-  console.log(formatKeyValue("Input path", summary.inputPath));
-  console.log(formatKeyValue("Validated path", summary.validatedPath));
-  console.log(formatKeyValue("Output path", summary.outputPath));
-  console.log(formatKeyValue("Generated script", summary.scriptPath));
-  console.log(formatKeyValue("Manifest", summary.manifestPath));
-  console.log(formatKeyValue("Source encoding", summary.sourceEncoding));
-  console.log(formatKeyValue("Transaction mode", summary.transactionMode));
+  console.log(formatKeyValue("Caminho de entrada", summary.inputPath));
+  console.log(formatKeyValue("Caminho validado", summary.validatedPath));
+  console.log(formatKeyValue("Caminho de saída", summary.outputPath));
+  console.log(formatKeyValue("Script gerado", summary.scriptPath));
+  console.log(formatKeyValue("Manifesto", summary.manifestPath));
+  console.log(formatKeyValue("Encoding de origem", summary.sourceEncoding));
+  console.log(formatKeyValue("Modo de transação", summary.transactionMode));
   console.log(
-    formatKeyValue("Generated SQL files", summary.scriptFiles.length),
+    formatKeyValue("Arquivos SQL gerados", summary.scriptFiles.length),
   );
   console.log(
     formatKeyValue(
-      "Included steps",
+      "Etapas incluídas",
       summary.steps
         .filter((step) => step.included)
         .map((step) => step.name)
         .join(", "),
     ),
   );
-  console.log(formatKeyValue("Source files", summary.totalFiles));
-  console.log(formatKeyValue("Source bytes", formatBytes(summary.totalBytes)));
+  console.log(formatKeyValue("Arquivos de origem", summary.totalFiles));
+  console.log(
+    formatKeyValue("Bytes de origem", formatBytes(summary.totalBytes)),
+  );
 
   if (summary.datasets.length > 0) {
-    console.log(theme.infoLabel("DATASETS"));
+    console.log(theme.infoLabel("CONJUNTOS"));
     for (const dataset of summary.datasets) {
       console.log(
-        `  ${theme.blue("•")} ${dataset.dataset}: ${dataset.files} file(s), ${formatBytes(dataset.totalBytes)}`,
+        `  ${theme.blue("•")} ${dataset.dataset}: ${dataset.files} arquivo(s), ${formatBytes(dataset.totalBytes)}`,
       );
     }
   }
 
   printWarnings(summary.warnings);
   if (summary.nextStep) {
-    console.log(`${theme.infoLabel("NEXT")} ${summary.nextStep}`);
+    console.log(`${theme.infoLabel("PRÓXIMO")} ${summary.nextStep}`);
   }
 
-  console.log(`${theme.muted("Log file:")} ${resolveLogFilePath(logFilePath)}`);
+  console.log(
+    `${theme.muted("Arquivo de log:")} ${resolveLogFilePath(logFilePath)}`,
+  );
 }

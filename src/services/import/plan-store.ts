@@ -1,5 +1,9 @@
 import { Client } from "pg";
 
+import {
+  TABELA_ARQUIVOS_PLANO_IMPORTACAO,
+  TABELA_PLANOS_IMPORTACAO,
+} from "../schema/table-names.js";
 import { ensureTableShape } from "./schema-validation.js";
 import type {
   ImportDatasetPlan,
@@ -9,107 +13,108 @@ import type {
   ImportPlanStatus,
 } from "./types.js";
 
+const PLAN_SCHEMA_HELP_MESSAGE =
+  'O schema de plano de importação é obrigatório. Rode "cnpj-db-loader schema generate --profile full" e aplique o SQL antes de importar.';
+
 export async function ensureImportPlanTables(client: Client): Promise<void> {
   await ensureTableShape(client, {
-    tableName: "import_plans",
+    tableName: TABELA_PLANOS_IMPORTACAO,
     requiredColumns: [
-      "source_fingerprint",
-      "input_path",
-      "validated_path",
-      "batch_size",
-      "target_database",
-      "total_datasets",
-      "total_files",
-      "total_rows",
-      "total_batches",
-      "execution_order",
+      "impressao_digital_origem",
+      "caminho_entrada",
+      "caminho_validado",
+      "tamanho_lote",
+      "banco_destino",
+      "total_conjuntos",
+      "total_arquivos",
+      "total_linhas",
+      "total_lotes",
+      "ordem_execucao",
       "status",
-      "load_status",
-      "materialization_status",
-      "last_phase",
-      "last_error",
-      "created_at",
-      "updated_at",
-      "last_used_at",
+      "status_carga",
+      "status_materializacao",
+      "ultima_fase",
+      "ultimo_erro",
+      "criado_em",
+      "atualizado_em",
+      "ultimo_uso_em",
     ],
-    helpMessage:
-      'The import plan schema is required. Run "cnpj-db-loader schema generate --profile full" and apply the SQL before importing.',
+    helpMessage: PLAN_SCHEMA_HELP_MESSAGE,
   });
 
   await ensureTableShape(client, {
-    tableName: "import_plan_files",
+    tableName: TABELA_ARQUIVOS_PLANO_IMPORTACAO,
     requiredColumns: [
-      "plan_id",
-      "dataset",
-      "dataset_index",
-      "file_index",
-      "file_path",
-      "file_display_path",
-      "file_size",
-      "file_mtime",
-      "total_rows",
-      "total_batches",
+      "plano_id",
+      "conjunto",
+      "indice_conjunto",
+      "indice_arquivo",
+      "caminho_arquivo",
+      "caminho_exibicao_arquivo",
+      "tamanho_arquivo",
+      "modificado_em",
+      "total_linhas",
+      "total_lotes",
     ],
-    helpMessage:
-      'The import plan schema is required. Run "cnpj-db-loader schema generate --profile full" and apply the SQL before importing.',
+    helpMessage: PLAN_SCHEMA_HELP_MESSAGE,
   });
 }
 
 type ImportPlanRow = {
   id: string;
-  source_fingerprint: string;
-  input_path: string;
-  validated_path: string;
-  batch_size: string;
-  target_database: string;
-  total_datasets: string;
-  total_files: string;
-  total_rows: string;
-  total_batches: string;
-  execution_order: ImportDatasetType[];
+  impressao_digital_origem: string;
+  caminho_entrada: string;
+  caminho_validado: string;
+  tamanho_lote: string;
+  banco_destino: string;
+  total_conjuntos: string;
+  total_arquivos: string;
+  total_linhas: string;
+  total_lotes: string;
+  ordem_execucao: ImportDatasetType[];
   status: ImportPlanStatus;
-  load_status: ImportPhaseStatus;
-  materialization_status: ImportPhaseStatus;
-  last_phase: string | null;
-  last_error: string | null;
-  created_at: Date;
-  updated_at: Date;
-  last_used_at: Date;
+  status_carga: ImportPhaseStatus;
+  status_materializacao: ImportPhaseStatus;
+  ultima_fase: string | null;
+  ultimo_erro: string | null;
+  criado_em: Date;
+  atualizado_em: Date;
+  ultimo_uso_em: Date;
 };
 
 type ImportPlanFileRow = {
-  dataset: ImportDatasetType;
-  file_path: string;
-  file_display_path: string;
-  file_size: string;
-  file_mtime: Date;
-  total_rows: string;
-  total_batches: string;
-  dataset_index: string;
-  file_index: string;
+  conjunto: ImportDatasetType;
+  caminho_arquivo: string;
+  caminho_exibicao_arquivo: string;
+  tamanho_arquivo: string;
+  modificado_em: Date;
+  total_linhas: string;
+  total_lotes: string;
+  indice_conjunto: string;
+  indice_arquivo: string;
 };
 
 function mapImportPlanRow(row: ImportPlanRow): ImportPlanRecord {
   return {
     id: Number.parseInt(row.id, 10),
-    sourceFingerprint: row.source_fingerprint,
-    inputPath: row.input_path,
-    validatedPath: row.validated_path,
-    batchSize: Number.parseInt(row.batch_size, 10),
-    targetDatabase: row.target_database,
-    totalDatasets: Number.parseInt(row.total_datasets, 10),
-    totalFiles: Number.parseInt(row.total_files, 10),
-    totalRows: Number.parseInt(row.total_rows, 10),
-    totalBatches: Number.parseInt(row.total_batches, 10),
-    executionOrder: row.execution_order,
+    sourceFingerprint: row.impressao_digital_origem,
+    inputPath: row.caminho_entrada,
+    validatedPath: row.caminho_validado,
+    batchSize: Number.parseInt(row.tamanho_lote, 10),
+    targetDatabase: row.banco_destino,
+    totalDatasets: Number.parseInt(row.total_conjuntos, 10),
+    totalFiles: Number.parseInt(row.total_arquivos, 10),
+    totalRows: Number.parseInt(row.total_linhas, 10),
+    totalBatches: Number.parseInt(row.total_lotes, 10),
+    executionOrder: row.ordem_execucao,
     status: row.status,
-    loadStatus: row.load_status,
-    materializationStatus: row.materialization_status,
-    lastPhase: row.last_phase,
-    lastError: row.last_error,
-    createdAt: new Date(row.created_at),
-    updatedAt: new Date(row.updated_at),
-    lastUsedAt: new Date(row.last_used_at),
+    loadStatus: row.status_carga,
+    materializationStatus: row.status_materializacao,
+    lastPhase: row.ultima_fase,
+    lastError: row.ultimo_erro,
+    createdAt: new Date(row.criado_em),
+    updatedAt: new Date(row.atualizado_em),
+    lastUsedAt: new Date(row.ultimo_uso_em),
   };
 }
 
@@ -119,46 +124,46 @@ async function readPlanDatasets(
 ): Promise<ImportDatasetPlan[]> {
   const filesResult = await client.query<ImportPlanFileRow>(
     `select
-        dataset,
-        file_path,
-        file_display_path,
-        file_size,
-        file_mtime,
-        total_rows,
-        total_batches,
-        dataset_index,
-        file_index
-      from import_plan_files
-      where plan_id = $1
-      order by dataset_index asc, file_index asc`,
+        conjunto,
+        caminho_arquivo,
+        caminho_exibicao_arquivo,
+        tamanho_arquivo,
+        modificado_em,
+        total_linhas,
+        total_lotes,
+        indice_conjunto,
+        indice_arquivo
+      from ${TABELA_ARQUIVOS_PLANO_IMPORTACAO}
+      where plano_id = $1
+      order by indice_conjunto asc, indice_arquivo asc`,
     [plan.id],
   );
 
   const grouped = new Map<ImportDatasetType, ImportDatasetPlan>();
 
   for (const row of filesResult.rows) {
-    const current = grouped.get(row.dataset) ?? {
-      dataset: row.dataset,
+    const current = grouped.get(row.conjunto) ?? {
+      dataset: row.conjunto,
       files: [],
       totalRows: 0,
       totalBatches: 0,
     };
 
-    const fileTotalRows = Number.parseInt(row.total_rows, 10);
-    const fileTotalBatches = Number.parseInt(row.total_batches, 10);
+    const fileTotalRows = Number.parseInt(row.total_linhas, 10);
+    const fileTotalBatches = Number.parseInt(row.total_lotes, 10);
 
     current.files.push({
-      dataset: row.dataset,
-      absolutePath: row.file_path,
-      displayPath: row.file_display_path,
-      fileSize: Number.parseInt(row.file_size, 10),
-      fileMtime: new Date(row.file_mtime),
+      dataset: row.conjunto,
+      absolutePath: row.caminho_arquivo,
+      displayPath: row.caminho_exibicao_arquivo,
+      fileSize: Number.parseInt(row.tamanho_arquivo, 10),
+      fileMtime: new Date(row.modificado_em),
       totalRows: fileTotalRows,
       totalBatches: fileTotalBatches,
     });
     current.totalRows += fileTotalRows;
     current.totalBatches += fileTotalBatches;
-    grouped.set(row.dataset, current);
+    grouped.set(row.conjunto, current);
   }
 
   return plan.executionOrder
@@ -184,12 +189,33 @@ async function readPlanRecordByQuery(
   const datasets = await readPlanDatasets(client, plan);
 
   await client.query(
-    `update import_plans set last_used_at = now(), updated_at = now() where id = $1`,
+    `update ${TABELA_PLANOS_IMPORTACAO} set ultimo_uso_em = now(), atualizado_em = now() where id = $1`,
     [plan.id],
   );
 
   return { plan, datasets };
 }
+
+const IMPORT_PLAN_SELECT_COLUMNS = `
+        id,
+        impressao_digital_origem,
+        caminho_entrada,
+        caminho_validado,
+        tamanho_lote,
+        banco_destino,
+        total_conjuntos,
+        total_arquivos,
+        total_linhas,
+        total_lotes,
+        ordem_execucao,
+        status,
+        status_carga,
+        status_materializacao,
+        ultima_fase,
+        ultimo_erro,
+        criado_em,
+        atualizado_em,
+        ultimo_uso_em`;
 
 export async function readSavedImportPlan(
   client: Client,
@@ -200,28 +226,9 @@ export async function readSavedImportPlan(
 } | null> {
   return readPlanRecordByQuery(
     client,
-    `select
-        id,
-        source_fingerprint,
-        input_path,
-        validated_path,
-        batch_size,
-        target_database,
-        total_datasets,
-        total_files,
-        total_rows,
-        total_batches,
-        execution_order,
-        status,
-        load_status,
-        materialization_status,
-        last_phase,
-        last_error,
-        created_at,
-        updated_at,
-        last_used_at
-      from import_plans
-      where source_fingerprint = $1`,
+    `select ${IMPORT_PLAN_SELECT_COLUMNS}
+      from ${TABELA_PLANOS_IMPORTACAO}
+      where impressao_digital_origem = $1`,
     [sourceFingerprint],
   );
 }
@@ -236,30 +243,11 @@ export async function readLatestImportPlanForValidatedPath(
 } | null> {
   return readPlanRecordByQuery(
     client,
-    `select
-        id,
-        source_fingerprint,
-        input_path,
-        validated_path,
-        batch_size,
-        target_database,
-        total_datasets,
-        total_files,
-        total_rows,
-        total_batches,
-        execution_order,
-        status,
-        load_status,
-        materialization_status,
-        last_phase,
-        last_error,
-        created_at,
-        updated_at,
-        last_used_at
-      from import_plans
-      where validated_path = $1
-        and target_database = $2
-      order by last_used_at desc, updated_at desc, id desc
+    `select ${IMPORT_PLAN_SELECT_COLUMNS}
+      from ${TABELA_PLANOS_IMPORTACAO}
+      where caminho_validado = $1
+        and banco_destino = $2
+      order by ultimo_uso_em desc, atualizado_em desc, id desc
       limit 1`,
     [validatedPath, targetDatabase],
   );
@@ -282,77 +270,59 @@ export async function saveImportPlan(
   await client.query("begin");
   try {
     const existing = await client.query<{ id: string }>(
-      `select id from import_plans where source_fingerprint = $1`,
+      `select id from ${TABELA_PLANOS_IMPORTACAO} where impressao_digital_origem = $1`,
       [input.sourceFingerprint],
     );
 
     if ((existing.rowCount ?? 0) > 0) {
-      await client.query(`delete from import_plan_files where plan_id = $1`, [
-        existing.rows[0]!.id,
-      ]);
+      await client.query(
+        `delete from ${TABELA_ARQUIVOS_PLANO_IMPORTACAO} where plano_id = $1`,
+        [existing.rows[0]!.id],
+      );
     }
 
     const planResult = await client.query<ImportPlanRow>(
-      `insert into import_plans (
-          source_fingerprint,
-          input_path,
-          validated_path,
-          batch_size,
-          target_database,
-          total_datasets,
-          total_files,
-          total_rows,
-          total_batches,
-          execution_order,
+      `insert into ${TABELA_PLANOS_IMPORTACAO} (
+          impressao_digital_origem,
+          caminho_entrada,
+          caminho_validado,
+          tamanho_lote,
+          banco_destino,
+          total_conjuntos,
+          total_arquivos,
+          total_linhas,
+          total_lotes,
+          ordem_execucao,
           status,
-          load_status,
-          materialization_status,
-          last_phase,
-          last_error,
-          created_at,
-          updated_at,
-          last_used_at
+          status_carga,
+          status_materializacao,
+          ultima_fase,
+          ultimo_erro,
+          criado_em,
+          atualizado_em,
+          ultimo_uso_em
         ) values (
           $1, $2, $3, $4, $5, $6, $7, $8, $9, $10::jsonb, 'planned', 'pending', 'pending', 'planning', null, now(), now(), now()
         )
-        on conflict (source_fingerprint)
+        on conflict (impressao_digital_origem)
         do update set
-          input_path = excluded.input_path,
-          validated_path = excluded.validated_path,
-          batch_size = excluded.batch_size,
-          target_database = excluded.target_database,
-          total_datasets = excluded.total_datasets,
-          total_files = excluded.total_files,
-          total_rows = excluded.total_rows,
-          total_batches = excluded.total_batches,
-          execution_order = excluded.execution_order,
+          caminho_entrada = excluded.caminho_entrada,
+          caminho_validado = excluded.caminho_validado,
+          tamanho_lote = excluded.tamanho_lote,
+          banco_destino = excluded.banco_destino,
+          total_conjuntos = excluded.total_conjuntos,
+          total_arquivos = excluded.total_arquivos,
+          total_linhas = excluded.total_linhas,
+          total_lotes = excluded.total_lotes,
+          ordem_execucao = excluded.ordem_execucao,
           status = 'planned',
-          load_status = 'pending',
-          materialization_status = 'pending',
-          last_phase = 'planning',
-          last_error = null,
-          updated_at = now(),
-          last_used_at = now()
-        returning
-          id,
-          source_fingerprint,
-          input_path,
-          validated_path,
-          batch_size,
-          target_database,
-          total_datasets,
-          total_files,
-          total_rows,
-          total_batches,
-          execution_order,
-          status,
-          load_status,
-          materialization_status,
-          last_phase,
-          last_error,
-          created_at,
-          updated_at,
-          last_used_at`,
+          status_carga = 'pending',
+          status_materializacao = 'pending',
+          ultima_fase = 'planning',
+          ultimo_erro = null,
+          atualizado_em = now(),
+          ultimo_uso_em = now()
+        returning ${IMPORT_PLAN_SELECT_COLUMNS}`,
       [
         input.sourceFingerprint,
         input.inputPath,
@@ -374,28 +344,28 @@ export async function saveImportPlan(
       for (const filePlan of datasetPlan.files) {
         fileIndex += 1;
         await client.query(
-          `insert into import_plan_files (
-              plan_id,
-              dataset,
-              dataset_index,
-              file_index,
-              file_path,
-              file_display_path,
-              file_size,
-              file_mtime,
-              total_rows,
-              total_batches
+          `insert into ${TABELA_ARQUIVOS_PLANO_IMPORTACAO} (
+              plano_id,
+              conjunto,
+              indice_conjunto,
+              indice_arquivo,
+              caminho_arquivo,
+              caminho_exibicao_arquivo,
+              tamanho_arquivo,
+              modificado_em,
+              total_linhas,
+              total_lotes
             ) values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
-            on conflict (plan_id, file_path)
+            on conflict (plano_id, caminho_arquivo)
             do update set
-              dataset = excluded.dataset,
-              dataset_index = excluded.dataset_index,
-              file_index = excluded.file_index,
-              file_display_path = excluded.file_display_path,
-              file_size = excluded.file_size,
-              file_mtime = excluded.file_mtime,
-              total_rows = excluded.total_rows,
-              total_batches = excluded.total_batches`,
+              conjunto = excluded.conjunto,
+              indice_conjunto = excluded.indice_conjunto,
+              indice_arquivo = excluded.indice_arquivo,
+              caminho_exibicao_arquivo = excluded.caminho_exibicao_arquivo,
+              tamanho_arquivo = excluded.tamanho_arquivo,
+              modificado_em = excluded.modificado_em,
+              total_linhas = excluded.total_linhas,
+              total_lotes = excluded.total_lotes`,
           [
             plan.id,
             datasetPlan.dataset,
@@ -426,10 +396,10 @@ export async function updateImportPlanStatus(
   status: ImportPlanStatus,
 ): Promise<void> {
   await client.query(
-    `update import_plans
+    `update ${TABELA_PLANOS_IMPORTACAO}
         set status = $2,
-            updated_at = now(),
-            last_used_at = now()
+            atualizado_em = now(),
+            ultimo_uso_em = now()
       where id = $1`,
     [planId, status],
   );
@@ -445,36 +415,39 @@ export async function updateImportPlanPhaseState(
     lastError?: string | null;
   },
 ): Promise<void> {
-  const assignments: string[] = ["updated_at = now()", "last_used_at = now()"];
+  const assignments: string[] = [
+    "atualizado_em = now()",
+    "ultimo_uso_em = now()",
+  ];
   const values: unknown[] = [input.planId];
   let nextIndex = 2;
 
   if (input.loadStatus !== undefined) {
-    assignments.push(`load_status = $${nextIndex}`);
+    assignments.push(`status_carga = $${nextIndex}`);
     values.push(input.loadStatus);
     nextIndex += 1;
   }
 
   if (input.materializationStatus !== undefined) {
-    assignments.push(`materialization_status = $${nextIndex}`);
+    assignments.push(`status_materializacao = $${nextIndex}`);
     values.push(input.materializationStatus);
     nextIndex += 1;
   }
 
   if (input.lastPhase !== undefined) {
-    assignments.push(`last_phase = $${nextIndex}`);
+    assignments.push(`ultima_fase = $${nextIndex}`);
     values.push(input.lastPhase);
     nextIndex += 1;
   }
 
   if (input.lastError !== undefined) {
-    assignments.push(`last_error = $${nextIndex}`);
+    assignments.push(`ultimo_erro = $${nextIndex}`);
     values.push(input.lastError);
     nextIndex += 1;
   }
 
   await client.query(
-    `update import_plans set ${assignments.join(", ")} where id = $1`,
+    `update ${TABELA_PLANOS_IMPORTACAO} set ${assignments.join(", ")} where id = $1`,
     values,
   );
 }

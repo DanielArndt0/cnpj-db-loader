@@ -26,7 +26,7 @@ function getShareToken(value?: string): string {
 
   if (!shareToken) {
     throw new ValidationError(
-      "Federal Revenue public share token is not configured. Run `cnpj-db-loader federal-revenue config set share-token <token>` or pass --share-token.",
+      "O token do compartilhamento público da Receita Federal não está configurado. Execute `cnpj-db-loader rfb config set share-token <token>` ou passe --share-token.",
     );
   }
 
@@ -148,14 +148,14 @@ async function propfind(
     });
   } catch (error) {
     throw new ValidationError(
-      `Federal Revenue WebDAV request failed before receiving a response: ${error instanceof Error ? error.message : String(error)}.`,
+      `A requisição WebDAV da Receita Federal falhou antes de receber uma resposta: ${error instanceof Error ? error.message : String(error)}.`,
       { baseUrl, pathSegments },
     );
   }
 
   if (!response.ok) {
     throw new ValidationError(
-      `Federal Revenue WebDAV request failed with status ${response.status} ${response.statusText}.`,
+      `A requisição WebDAV da Receita Federal falhou com status ${response.status} ${response.statusText}.`,
       { status: response.status, statusText: response.statusText },
     );
   }
@@ -171,7 +171,7 @@ async function propfind(
 export function validateFederalRevenueReference(reference: string): void {
   if (!REFERENCE_PATTERN.test(reference)) {
     throw new ValidationError(
-      `Federal Revenue reference is invalid: ${reference}. Expected YYYY-MM.`,
+      `Referência da Receita Federal inválida: ${reference}. Esperado YYYY-MM.`,
     );
   }
 }
@@ -212,7 +212,7 @@ export async function resolveFederalRevenueReference(
 
   if (!latest) {
     throw new ValidationError(
-      "Federal Revenue reference discovery failed: no monthly references were found in the public share.",
+      "A descoberta de referências da Receita Federal falhou: nenhuma referência mensal foi encontrada no compartilhamento público.",
     );
   }
 
@@ -221,7 +221,7 @@ export async function resolveFederalRevenueReference(
 
     if (!availableReferences.includes(input.reference)) {
       throw new ValidationError(
-        `Federal Revenue reference not found: ${input.reference}. Latest available reference is ${latest}.`,
+        `Referência da Receita Federal não encontrada: ${input.reference}. A última referência disponível é ${latest}.`,
         {
           requestedReference: input.reference,
           latestAvailableReference: latest,
@@ -242,7 +242,7 @@ export async function resolveFederalRevenueReference(
 
     if (!availableReferences.includes(currentReference)) {
       throw new ValidationError(
-        `Federal Revenue current reference is not available yet: ${currentReference}. Latest available reference is ${latest}.`,
+        `A referência atual da Receita Federal ainda não está disponível: ${currentReference}. A última referência disponível é ${latest}.`,
         {
           requestedReference: currentReference,
           latestAvailableReference: latest,

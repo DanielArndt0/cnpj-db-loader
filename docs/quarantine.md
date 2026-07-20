@@ -1,31 +1,31 @@
-# Quarantine
+# Quarentena
 
-The `quarantine` service is a read-only CLI surface for inspecting rows written to the `import_quarantine` table during import.
+O serviço `quarantine` é uma superfície de CLI somente leitura para inspecionar as linhas gravadas na tabela `quarentena_importacao` durante a importação.
 
-Both the standard Node-driven import flow and the hybrid PostgreSQL direct import flow reuse this same table. The hybrid flow writes known row-level validation inconsistencies to quarantine before inserting valid rows into staging tables.
+Tanto o fluxo de importação padrão orientado por Node quanto o fluxo de importação direta híbrida no PostgreSQL reutilizam essa mesma tabela. O fluxo híbrido grava na quarentena as inconsistências conhecidas de validação em nível de linha antes de inserir as linhas válidas nas tabelas de staging.
 
-## Commands
+## Comandos
 
-| Command                | Purpose                                                 |
-| ---------------------- | ------------------------------------------------------- |
-| `quarantine stats`     | Show totals and grouped counts for quarantine rows.     |
-| `quarantine list`      | List quarantined rows with optional filters and paging. |
-| `quarantine show <id>` | Show one quarantined row in detail.                     |
+| Comando                | Objetivo                                                         |
+| ---------------------- | ---------------------------------------------------------------- |
+| `quarantine stats`     | Mostra totais e contagens agrupadas das linhas de quarentena.    |
+| `quarantine list`      | Lista as linhas em quarentena com filtros e paginação opcionais. |
+| `quarantine show <id>` | Mostra em detalhe uma linha em quarentena.                       |
 
-## Supported filters
+## Filtros suportados
 
-| Option              | Commands                | Description                                            |
-| ------------------- | ----------------------- | ------------------------------------------------------ |
-| `--db-url <url>`    | `stats`, `list`, `show` | Override the persisted PostgreSQL URL.                 |
-| `--dataset <name>`  | `stats`, `list`         | Filter rows by dataset name.                           |
-| `--category <name>` | `stats`, `list`         | Filter rows by error category.                         |
-| `--stage <name>`    | `stats`, `list`         | Filter rows by error stage.                            |
-| `--retryable`       | `stats`, `list`         | Keep only rows marked as retryable.                    |
-| `--terminal`        | `stats`, `list`         | Keep only rows marked as terminal.                     |
-| `--limit <number>`  | `list`                  | Limit the number of returned rows. Defaults to `20`.   |
-| `--after-id <id>`   | `list`                  | Return rows strictly after the provided quarantine id. |
+| Opção               | Comandos                | Descrição                                                         |
+| ------------------- | ----------------------- | ----------------------------------------------------------------- |
+| `--db-url <url>`    | `stats`, `list`, `show` | Sobrescreve a URL PostgreSQL persistida.                          |
+| `--dataset <name>`  | `stats`, `list`         | Filtra as linhas pelo nome do dataset.                            |
+| `--category <name>` | `stats`, `list`         | Filtra as linhas pela categoria de erro.                          |
+| `--stage <name>`    | `stats`, `list`         | Filtra as linhas pela etapa de erro.                              |
+| `--retryable`       | `stats`, `list`         | Mantém apenas as linhas marcadas como reprocessáveis.             |
+| `--terminal`        | `stats`, `list`         | Mantém apenas as linhas marcadas como terminais.                  |
+| `--limit <number>`  | `list`                  | Limita o número de linhas retornadas. Padrão: `20`.               |
+| `--after-id <id>`   | `list`                  | Retorna as linhas estritamente após o id de quarentena informado. |
 
-## Examples
+## Exemplos
 
 ```bash
 cnpj-db-loader quarantine stats
@@ -35,12 +35,12 @@ cnpj-db-loader quarantine list --terminal --after-id 500
 cnpj-db-loader quarantine show 42
 ```
 
-## Notes
+## Notas
 
-- `quarantine` is intentionally read-only. It does not retry or mutate quarantined rows.
-- The service automatically ensures that the `import_quarantine` table and its newer columns exist before querying.
-- A future replay/recovery command can reuse the same filters to target retryable or terminal rows.
-- Hybrid PostgreSQL validation rows use the `postgres_direct_staging_validation` stage.
-- Hybrid mode keeps the existing quarantine schema. It does not create a second quarantine table.
-- For SQL-side hybrid validation rows, `raw_line` contains the JSON text representation of the temporary raw row and `checkpoint_offset` can be `NULL` when the exact source byte offset is unavailable after `\copy`.
-- Structural CSV or low-level `\copy` failures still stop the phase before SQL-side row quarantine can run; execute `validate` and `sanitize` first.
+- `quarantine` é intencionalmente somente leitura. Não reprocessa nem altera as linhas em quarentena.
+- O serviço garante automaticamente que a tabela `quarentena_importacao` e suas colunas mais recentes existam antes de consultar.
+- Um futuro comando de replay/recuperação pode reutilizar os mesmos filtros para atingir linhas reprocessáveis ou terminais.
+- As linhas de validação híbrida do PostgreSQL usam a etapa `postgres_direct_staging_validation`.
+- O modo híbrido mantém o schema de quarentena existente. Não cria uma segunda tabela de quarentena.
+- Para as linhas de validação híbrida do lado do SQL, `linha_bruta` contém a representação em texto JSON da linha bruta temporária e `deslocamento_checkpoint` pode ser `NULL` quando o deslocamento exato de bytes da origem não está disponível após o `\copy`.
+- Falhas estruturais de CSV ou falhas de baixo nível no `\copy` ainda interrompem a fase antes que a quarentena de linha do lado do SQL possa rodar; execute `validate` e `sanitize` primeiro.

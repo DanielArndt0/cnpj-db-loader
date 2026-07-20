@@ -41,7 +41,7 @@ export async function ensureTableShape(
 
   if (!exists) {
     throw new ValidationError(
-      `${input.helpMessage} Missing table: ${input.tableName}.`,
+      `${input.helpMessage} Tabela ausente: ${input.tableName}.`,
     );
   }
 
@@ -52,7 +52,7 @@ export async function ensureTableShape(
 
   if (missingColumns.length > 0) {
     throw new ValidationError(
-      `${input.helpMessage} Table ${input.tableName} is missing required columns: ${missingColumns.join(", ")}.`,
+      `${input.helpMessage} A tabela ${input.tableName} não possui as colunas obrigatórias: ${missingColumns.join(", ")}.`,
     );
   }
 }

@@ -117,7 +117,7 @@ export async function writeCommandFailureLog(
       event: "command_failed",
       level: input?.fatal ? "fatal" : "error",
       status: "failure",
-      message: "Command execution failed.",
+      message: "A execução do comando falhou.",
     },
   );
 }

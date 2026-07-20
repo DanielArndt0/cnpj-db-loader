@@ -148,3 +148,7 @@ logs/
 
 # VSCode settings
 .vscode
+
+# Agents
+CLAUDE.md
+.claude

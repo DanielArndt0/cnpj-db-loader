@@ -1,105 +1,105 @@
-# PostgreSQL direct import workflow
+# Fluxo de importação direta no PostgreSQL
 
-The PostgreSQL direct import workflow is a hybrid path for environments where the standard resumable importer is too expensive for a full monthly load.
+O fluxo de importação direta no PostgreSQL é um caminho híbrido para ambientes em que o importador retomável padrão é caro demais para uma carga mensal completa.
 
-It keeps the safe preparation steps inside CNPJ DB Loader and moves the heaviest database load/materialization work into generated `psql` scripts.
+Ele mantém os passos seguros de preparação dentro do CNPJ DB Loader e move o trabalho mais pesado de carga/materialização do banco para scripts `psql` gerados.
 
-## Intended flow
+## Fluxo pretendido
 
 ```bash
-cnpj-db-loader federal-revenue download --output ./downloads
-cnpj-db-loader extract ./downloads/<reference>
-cnpj-db-loader validate ./downloads/<reference>/extracted
-cnpj-db-loader sanitize ./downloads/<reference>/extracted
-cnpj-db-loader postgres generate-script ./downloads/<reference>/sanitized --output ./downloads/<reference>/postgres-direct --source-encoding UTF8 --transaction-mode phase --force
-psql -d "postgres://postgres:postgres@localhost:5432/cnpj" -f ./downloads/<reference>/postgres-direct/import-postgres-direct.sql
+cnpj-db-loader rfb download --output ./downloads
+cnpj-db-loader extract ./downloads/<referencia>
+cnpj-db-loader validate ./downloads/<referencia>/extracted
+cnpj-db-loader sanitize ./downloads/<referencia>/extracted
+cnpj-db-loader postgres generate-script ./downloads/<referencia>/sanitized --output ./downloads/<referencia>/postgres-direct --source-encoding UTF8 --transaction-mode phase --force
+psql -d "postgres://postgres:postgres@localhost:5432/cnpj" -f ./downloads/<referencia>/postgres-direct/import-postgres-direct.sql
 ```
 
-The loader remains responsible for:
+O loader continua responsável por:
 
-- Federal Revenue download and local manifest control
-- extraction
-- validation
-- sanitization
-- preserving the sanitized Receita files without rewriting the whole dataset
-- generating the modular `psql` import scripts
-- optionally exporting PostgreSQL-ready CSV files through `postgres export-csv` when an audit/debug CSV tree is useful
+- download da Receita Federal e controle do manifesto local
+- extração
+- validação
+- sanitização
+- preservar os arquivos sanitizados da Receita sem reescrever o dataset inteiro
+- gerar os scripts `psql` de importação modulares
+- opcionalmente exportar arquivos CSV prontos para o PostgreSQL via `postgres export-csv` quando uma árvore de CSV para auditoria/debug for útil
 
-PostgreSQL is then responsible for:
+O PostgreSQL fica então responsável por:
 
-- `\copy` loading sanitized Receita files into temporary raw tables
-- SQL-side conversion of dates, numeric values and nullable fields
-- quarantining known row-level inconsistencies in the existing `import_quarantine` table
-- updating the existing `import_plans`, `import_plan_files`, `import_checkpoints` and `import_materialization_checkpoints` tables
-- staging table population using only valid rows
-- set-based final table upserts
-- `establishment_secondary_cnaes` materialization
-- planner statistics refresh through `ANALYZE`
+- carregar os arquivos sanitizados da Receita em tabelas brutas temporárias via `\copy`
+- conversão do lado do SQL de datas, valores numéricos e campos anuláveis
+- colocar em quarentena as inconsistências conhecidas de nível de linha na tabela `quarentena_importacao` existente
+- atualizar as tabelas `planos_importacao`, `arquivos_plano_importacao`, `checkpoints_importacao` e `checkpoints_materializacao` existentes
+- popular as tabelas de staging usando apenas linhas válidas
+- upserts baseados em conjuntos nas tabelas finais
+- materialização de `estabelecimento_cnaes_secundarios`
+- atualização das estatísticas do planejador via `ANALYZE`
 
-## Command
+## Comando
 
 ```bash
 cnpj-db-loader postgres generate-script <input> [--output <path>] [--dataset <dataset>] [--script-name <name>] [--source-encoding <encoding>] [--transaction-mode <mode>] [--include <items>] [--skip-indexes] [--skip-analyze] [-f]
 ```
 
-### Arguments
+### Argumentos
 
-| Argument  | Description                              |
-| --------- | ---------------------------------------- |
-| `<input>` | Path to the sanitized dataset directory. |
+| Argumento | Descrição                                   |
+| --------- | ------------------------------------------- |
+| `<input>` | Caminho do diretório de dataset sanitizado. |
 
-### Options
+### Opções
 
-| Option                         | Description                                                                                                                                                                                                                                          |
-| ------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `--output <path>`              | Custom output directory for the generated SQL scripts and manifest.                                                                                                                                                                                  |
-| `--dataset <dataset>`          | Generate scripts only for one dataset block. Useful for debugging.                                                                                                                                                                                   |
-| `--script-name <name>`         | Name of the generated orchestrator script. Defaults to `import-postgres-direct.sql`.                                                                                                                                                                 |
-| `--source-encoding <encoding>` | Source file encoding used by `psql` while reading the sanitized Receita files. Defaults to `UTF8` because the current `sanitize` command writes UTF-8 output. Use `WIN1252` or `LATIN1` only for legacy sanitized files generated by older versions. |
-| `--transaction-mode <mode>`    | Transaction strategy for generated scripts: `single`, `phase` or `none`. Defaults to `single`.                                                                                                                                                       |
-| `--include <items>`            | Comma-separated steps to include: `domains`, `companies`, `establishments`, `partners`, `simples`, `secondary-cnaes`, `indexes`, `analyze`.                                                                                                          |
-| `--skip-indexes`               | Do not generate the `indexes.sql` step.                                                                                                                                                                                                              |
-| `--skip-analyze`               | Do not generate the `analyze.sql` step.                                                                                                                                                                                                              |
-| `-f, --force`                  | Skip the confirmation prompt.                                                                                                                                                                                                                        |
+| Opção                          | Descrição                                                                                                                                                                                                                                                         |
+| ------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `--output <path>`              | Diretório de saída personalizado para os scripts SQL gerados e o manifesto.                                                                                                                                                                                       |
+| `--dataset <dataset>`          | Gera scripts apenas para um bloco de dataset. Útil para debug.                                                                                                                                                                                                    |
+| `--script-name <name>`         | Nome do script orquestrador gerado. Padrão: `import-postgres-direct.sql`.                                                                                                                                                                                         |
+| `--source-encoding <encoding>` | Encoding dos arquivos de origem usado pelo `psql` ao ler os arquivos sanitizados da Receita. Padrão: `UTF8`, porque o comando `sanitize` atual grava saída UTF-8. Use `WIN1252` ou `LATIN1` apenas para arquivos sanitizados legados gerados por versões antigas. |
+| `--transaction-mode <mode>`    | Estratégia de transação dos scripts gerados: `single`, `phase` ou `none`. Padrão: `single`.                                                                                                                                                                       |
+| `--include <items>`            | Etapas a incluir, separadas por vírgula: `domains`, `companies`, `establishments`, `partners`, `simples`, `secondary-cnaes`, `indexes`, `analyze`.                                                                                                                |
+| `--skip-indexes`               | Não gera a etapa `indexes.sql`.                                                                                                                                                                                                                                   |
+| `--skip-analyze`               | Não gera a etapa `analyze.sql`.                                                                                                                                                                                                                                   |
+| `-f, --force`                  | Pula a confirmação interativa.                                                                                                                                                                                                                                    |
 
-## Transaction modes
+## Modos de transação
 
 ### `single`
 
-The orchestrator wraps all included steps in one transaction:
+O orquestrador envolve todas as etapas incluídas em uma única transação:
 
 ```text
 BEGIN
   setup
-  load domains
-  load companies
-  load establishments
-  load partners
-  load simples
-  materialize
-  materialize secondary CNAEs
-  indexes
+  carrega domínios
+  carrega empresas
+  carrega estabelecimentos
+  carrega sócios
+  carrega simples
+  materializa
+  materializa CNAEs secundários
+  índices
   analyze
 COMMIT
 ```
 
-This is the safest mode because a failure rolls back the whole run, but it is also the least convenient for very large imports because a late failure requires starting over.
+Este é o modo mais seguro, porque uma falha faz rollback de toda a execução, mas também é o menos conveniente para importações muito grandes, porque uma falha tardia exige recomeçar do zero.
 
 ### `phase`
 
-Each generated phase script wraps its own work in a transaction.
+Cada script de fase gerado envolve o seu próprio trabalho em uma transação.
 
-This is the recommended mode for long local runs because completed phases remain committed if a later phase fails.
+Este é o modo recomendado para execuções locais longas, porque as fases concluídas permanecem confirmadas se uma fase posterior falhar.
 
 ### `none`
 
-No generated transaction wrapper is added.
+Nenhum wrapper de transação gerado é adicionado.
 
-This mode is useful for aggressive benchmark scenarios, but it can leave partial data if a command fails.
+Este modo é útil para cenários agressivos de benchmark, mas pode deixar dados parciais se um comando falhar.
 
-## Output structure
+## Estrutura de saída
 
-The command now creates a modular PostgreSQL direct output directory:
+O comando cria um diretório de saída direto do PostgreSQL modular:
 
 ```text
 postgres-direct/
@@ -117,94 +117,94 @@ postgres-direct/
   analyze.sql
 ```
 
-The `import-postgres-direct.sql` file is an orchestrator that runs the included phase scripts in the correct order with `\ir`.
+O arquivo `import-postgres-direct.sql` é um orquestrador que executa os scripts de fase incluídos na ordem correta com `\ir`.
 
-You can execute the full flow:
+Você pode executar o fluxo completo:
 
 ```bash
 psql -d "postgres://postgres:postgres@localhost:5432/cnpj" -f ./postgres-direct/import-postgres-direct.sql
 ```
 
-Or execute individual phase scripts:
+Ou executar scripts de fase individuais:
 
 ```bash
 psql -d "postgres://postgres:postgres@localhost:5432/cnpj" -f ./postgres-direct/load-domains.sql
 psql -d "postgres://postgres:postgres@localhost:5432/cnpj" -f ./postgres-direct/load-establishments.sql
 ```
 
-## Partial generation
+## Geração parcial
 
-Generate only domain scripts:
-
-```bash
-cnpj-db-loader postgres generate-script ./downloads/<reference>/sanitized --output ./downloads/<reference>/postgres-direct --include domains --transaction-mode phase --force
-```
-
-Generate without indexes and analyze:
+Gerar apenas os scripts de domínio:
 
 ```bash
-cnpj-db-loader postgres generate-script ./downloads/<reference>/sanitized --output ./downloads/<reference>/postgres-direct --skip-indexes --skip-analyze --force
+cnpj-db-loader postgres generate-script ./downloads/<referencia>/sanitized --output ./downloads/<referencia>/postgres-direct --include domains --transaction-mode phase --force
 ```
 
-Generate only establishments and secondary CNAEs:
+Gerar sem índices e analyze:
 
 ```bash
-cnpj-db-loader postgres generate-script ./downloads/<reference>/sanitized --output ./downloads/<reference>/postgres-direct --include establishments,secondary-cnaes,analyze --transaction-mode phase --force
+cnpj-db-loader postgres generate-script ./downloads/<referencia>/sanitized --output ./downloads/<referencia>/postgres-direct --skip-indexes --skip-analyze --force
 ```
 
-## Generated script behavior
+Gerar apenas estabelecimentos e CNAEs secundários:
 
-The generated scripts:
+```bash
+cnpj-db-loader postgres generate-script ./downloads/<referencia>/sanitized --output ./downloads/<referencia>/postgres-direct --include establishments,secondary-cnaes,analyze --transaction-mode phase --force
+```
 
-1. enable `ON_ERROR_STOP` for `psql`;
-2. set the configured client encoding for `psql` copy operations;
-3. register the hybrid execution using the existing import plan tables;
-4. load each sanitized Receita file into a temporary raw text table;
-5. validate known row-level inconsistencies before staging insertion;
-6. write invalid rows to the existing `import_quarantine` table instead of silently discarding them;
-7. update the existing file checkpoints after each completed source file;
-8. convert valid values inside PostgreSQL and insert them into `staging_companies`, `staging_establishments`, `staging_partners` and `staging_simples_options`;
-9. materialize final `companies`, `establishments`, `partners` and `simples_options` tables using set-based SQL while updating the existing materialization checkpoints;
-10. populate `establishment_secondary_cnaes` from `secondary_cnaes_raw`;
-11. optionally generate an indexes phase;
-12. optionally run `ANALYZE` on the affected tables.
+## Comportamento dos scripts gerados
 
-The scripts do not recreate the schema. Run the normal schema first:
+Os scripts gerados:
+
+1. habilitam `ON_ERROR_STOP` para o `psql`;
+2. definem o client encoding configurado para as operações de copy do `psql`;
+3. registram a execução híbrida usando as tabelas de plano de importação existentes;
+4. carregam cada arquivo sanitizado da Receita em uma tabela de texto bruto temporária;
+5. validam as inconsistências conhecidas de nível de linha antes da inserção no staging;
+6. gravam as linhas inválidas na tabela `quarentena_importacao` existente em vez de descartá-las silenciosamente;
+7. atualizam os checkpoints de arquivo existentes após cada arquivo de origem concluído;
+8. convertem os valores válidos dentro do PostgreSQL e os inserem em `staging_empresas`, `staging_estabelecimentos`, `staging_socios` e `staging_simples`;
+9. materializam as tabelas finais `empresas`, `estabelecimentos`, `socios` e `simples` usando SQL baseado em conjuntos, atualizando os checkpoints de materialização existentes;
+10. populam `estabelecimento_cnaes_secundarios` a partir de `cnae_fiscal_secundaria_raw`;
+11. opcionalmente geram uma fase de índices;
+12. opcionalmente executam `ANALYZE` nas tabelas afetadas.
+
+Os scripts não recriam o schema. Rode o schema normal primeiro:
 
 ```bash
 cnpj-db-loader schema generate --profile full --output ./sql/schema.sql
 psql -d "postgres://postgres:postgres@localhost:5432/cnpj" -f ./sql/schema.sql
 ```
 
-## Quarantine and checkpoint compatibility
+## Compatibilidade de quarentena e checkpoint
 
-The hybrid mode reuses the same operational tables already created by the `full` schema profile:
+O modo híbrido reutiliza as mesmas tabelas operacionais já criadas pelo perfil de schema `full`:
 
 ```text
-import_plans
-import_plan_files
-import_checkpoints
-import_materialization_checkpoints
-import_quarantine
+planos_importacao
+arquivos_plano_importacao
+checkpoints_importacao
+checkpoints_materializacao
+quarentena_importacao
 ```
 
-Known row-level inconsistencies, such as missing required values or invalid transformed numeric/date values, are written to `import_quarantine`. Valid rows continue to staging in the same execution.
+Inconsistências conhecidas de nível de linha, como valores obrigatórios ausentes ou valores numéricos/de data transformados inválidos, são gravadas em `quarentena_importacao`. As linhas válidas seguem para o staging na mesma execução.
 
-Because the direct SQL path validates rows after `\copy` has loaded them into a temporary raw table, the existing quarantine columns remain compatible but some source-level details are represented differently: `raw_line` stores the JSON text representation of the loaded raw row and `checkpoint_offset` is left `NULL` when the exact original byte offset is not available.
+Como o caminho SQL direto valida as linhas depois que o `\copy` as carregou em uma tabela bruta temporária, as colunas de quarentena existentes permanecem compatíveis, mas alguns detalhes de nível de origem são representados de forma diferente: `linha_bruta` armazena a representação em texto JSON da linha bruta carregada e `deslocamento_checkpoint` fica `NULL` quando o deslocamento de bytes original exato não está disponível.
 
-The direct scripts intentionally avoid creating a second quarantine model or new permanent operational tables. The generated SQL only reuses the existing loader schema.
+Os scripts diretos intencionalmente evitam criar um segundo modelo de quarentena ou novas tabelas operacionais permanentes. O SQL gerado apenas reutiliza o schema existente do loader.
 
-### Important limitation
+### Limitação importante
 
-Malformed CSV structure or low-level `\copy` failures still stop the current phase because PostgreSQL rejects the source stream before row-level SQL validation can run. The normal `validate` and `sanitize` steps must run before `postgres generate-script` so structural and encoding problems are handled earlier in the pipeline.
+Estrutura de CSV malformada ou falhas de baixo nível no `\copy` ainda interrompem a fase atual, porque o PostgreSQL rejeita o stream de origem antes que a validação SQL de nível de linha possa rodar. Os passos normais `validate` e `sanitize` devem rodar antes de `postgres generate-script` para que problemas estruturais e de encoding sejam tratados mais cedo no pipeline.
 
-When running individual phase scripts manually, execute `setup.sql` first so the existing import plan tables are initialized for the hybrid execution.
+Ao executar scripts de fase individuais manualmente, execute `setup.sql` primeiro para que as tabelas de plano de importação existentes sejam inicializadas para a execução híbrida.
 
-## Monitoring PostgreSQL while the import runs
+## Monitorando o PostgreSQL enquanto a importação roda
 
-The hybrid mode intentionally keeps loader checkpoints lightweight. Use PostgreSQL native views to monitor heavy work.
+O modo híbrido mantém os checkpoints do loader leves intencionalmente. Use as views nativas do PostgreSQL para monitorar o trabalho pesado.
 
-### Active queries
+### Queries ativas
 
 ```sql
 SELECT
@@ -220,7 +220,7 @@ WHERE datname = current_database()
 ORDER BY query_start;
 ```
 
-### COPY progress
+### Progresso do COPY
 
 ```sql
 SELECT
@@ -238,7 +238,7 @@ SELECT
 FROM pg_stat_progress_copy;
 ```
 
-With auto-refresh in `psql`:
+Com auto-refresh no `psql`:
 
 ```sql
 SELECT
@@ -285,7 +285,7 @@ JOIN pg_catalog.pg_stat_activity blocking_activity
 WHERE NOT blocked.granted;
 ```
 
-### Main table sizes
+### Tamanhos das tabelas principais
 
 ```sql
 SELECT
@@ -293,16 +293,16 @@ SELECT
   pg_size_pretty(pg_total_relation_size(relid)) AS total_size
 FROM pg_catalog.pg_statio_user_tables
 WHERE relname IN (
-  'companies',
-  'establishments',
-  'partners',
-  'simples_options',
-  'establishment_secondary_cnaes'
+  'empresas',
+  'estabelecimentos',
+  'socios',
+  'simples',
+  'estabelecimento_cnaes_secundarios'
 )
 ORDER BY pg_total_relation_size(relid) DESC;
 ```
 
-### Estimated rows by table
+### Estimativa de linhas por tabela
 
 ```sql
 SELECT
@@ -315,7 +315,7 @@ FROM pg_stat_user_tables
 ORDER BY n_live_tup DESC;
 ```
 
-### PostgreSQL logs on Windows
+### Logs do PostgreSQL no Windows
 
 ```powershell
 Get-ChildItem "C:\Program Files\PostgreSQL\16\data\log" |
@@ -324,7 +324,7 @@ Get-ChildItem "C:\Program Files\PostgreSQL\16\data\log" |
   Get-Content -Tail 120
 ```
 
-Event Viewer logs through PowerShell:
+Logs do Visualizador de Eventos via PowerShell:
 
 ```powershell
 Get-EventLog -LogName Application -Newest 80 |
@@ -332,29 +332,29 @@ Get-EventLog -LogName Application -Newest 80 |
   Format-List TimeGenerated, Source, EntryType, Message
 ```
 
-## Windows usage
+## Uso no Windows
 
-On Windows, the script uses `\copy`, not server-side `COPY`.
+No Windows, o script usa `\copy`, não o `COPY` do lado do servidor.
 
-This is intentional. With `\copy`, the `psql` client reads local files and streams them to PostgreSQL. This avoids common Windows service permission issues where the PostgreSQL service user cannot read files from your working directory.
+Isso é intencional. Com `\copy`, o cliente `psql` lê os arquivos locais e os envia em stream para o PostgreSQL. Isso evita problemas comuns de permissão do serviço no Windows, em que o usuário do serviço PostgreSQL não consegue ler arquivos do seu diretório de trabalho.
 
-Example:
+Exemplo:
 
 ```powershell
 psql -d "postgres://postgres:postgres@localhost:5432/cnpj" -f "D:/cnpj-data/2026-05/postgres-direct/import-postgres-direct.sql"
 ```
 
-## Recommended comparison benchmark
+## Benchmark de comparação recomendado
 
-To compare the standard and hybrid paths:
+Para comparar os caminhos padrão e híbrido:
 
 ```bash
-# Standard path
-cnpj-db-loader import ./downloads/<reference>/sanitized --load-batch-size 500 --materialize-batch-size 50000 --verbose-progress
+# Caminho padrão
+cnpj-db-loader import ./downloads/<referencia>/sanitized --load-batch-size 500 --materialize-batch-size 50000 --verbose-progress
 
-# Hybrid path
-cnpj-db-loader postgres generate-script ./downloads/<reference>/sanitized --output ./downloads/<reference>/postgres-direct --source-encoding UTF8 --transaction-mode phase --force
-psql -d "postgres://postgres:postgres@localhost:5432/cnpj" -f ./downloads/<reference>/postgres-direct/import-postgres-direct.sql
+# Caminho híbrido
+cnpj-db-loader postgres generate-script ./downloads/<referencia>/sanitized --output ./downloads/<referencia>/postgres-direct --source-encoding UTF8 --transaction-mode phase --force
+psql -d "postgres://postgres:postgres@localhost:5432/cnpj" -f ./downloads/<referencia>/postgres-direct/import-postgres-direct.sql
 ```
 
-Compare total duration, disk usage, PostgreSQL CPU usage, WAL growth and final row counts.
+Compare a duração total, o uso de disco, o uso de CPU do PostgreSQL, o crescimento do WAL e as contagens finais de linhas.

@@ -50,7 +50,9 @@ export function resolveRequestedDatasets(
   }
 
   if (!isImportDatasetType(requestedDataset)) {
-    throw new ValidationError(`Unsupported dataset type: ${requestedDataset}.`);
+    throw new ValidationError(
+      `Tipo de dataset não suportado: ${requestedDataset}.`,
+    );
   }
 
   return IMPORT_ORDER.filter((dataset) => dataset === requestedDataset);
@@ -93,7 +95,7 @@ export async function prepareImportPlan(input: {
 
   if (datasetEntries.length === 0) {
     throw new ValidationError(
-      "No validated dataset files were found for the requested import.",
+      "Nenhum arquivo de dataset validado foi encontrado para a importação solicitada.",
     );
   }
 

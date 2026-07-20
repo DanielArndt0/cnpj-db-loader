@@ -72,10 +72,10 @@ export function createExtractionProgressReporter(): (
 
     lastStableLine =
       `${theme.infoLabel("EXTRACT")} __SPINNER__ ${percentage}% ` +
-      `| ${completedArchives}/${totalArchives} archives ` +
-      `| remaining ${remainingArchives} ` +
+      `| ${completedArchives}/${totalArchives} arquivos ` +
+      `| restantes ${remainingArchives} ` +
       `| ${bytesProgress} ` +
-      `| current ${archiveLabel}`;
+      `| atual ${archiveLabel}`;
 
     const spinner = frames[frameIndex % frames.length] ?? "⠋";
     renderLine(lastStableLine.replace("__SPINNER__", theme.blue(spinner)));
@@ -114,12 +114,15 @@ export function createExtractionProgressReporter(): (
     currentEvent = event;
 
     if (event.kind === "start") {
-      console.log(theme.infoLabel("EXTRACT"), "Starting archive extraction...");
-      console.log(formatKeyValue("Input path", event.inputPath));
-      console.log(formatKeyValue("Output path", event.outputPath));
-      console.log(formatKeyValue("Archives queued", event.totalArchives));
       console.log(
-        formatKeyValue("Archive bytes", formatBytes(event.totalBytes)),
+        theme.infoLabel("EXTRACT"),
+        "Iniciando a extração dos arquivos...",
+      );
+      console.log(formatKeyValue("Caminho de entrada", event.inputPath));
+      console.log(formatKeyValue("Caminho de saída", event.outputPath));
+      console.log(formatKeyValue("Arquivos na fila", event.totalArchives));
+      console.log(
+        formatKeyValue("Bytes dos arquivos", formatBytes(event.totalBytes)),
       );
       lastRenderedLine = "";
       lastStableLine = "";
@@ -145,7 +148,7 @@ export function createExtractionProgressReporter(): (
       renderFromState();
       finalizeDynamicLine();
       console.log(
-        `${theme.warningLabel("WARNING")} Failed to extract ${event.currentArchiveName}: ${event.errorMessage}`,
+        `${theme.warningLabel("AVISO")} Falha ao extrair ${event.currentArchiveName}: ${event.errorMessage}`,
       );
       return;
     }
@@ -154,12 +157,12 @@ export function createExtractionProgressReporter(): (
       finalizeDynamicLine();
       console.log(
         theme.successLabel("EXTRACT"),
-        `Processed ${event.completedArchives}/${event.totalArchives} archives (${event.failedArchives} failed).`,
+        `Processados ${event.completedArchives}/${event.totalArchives} arquivos (${event.failedArchives} com falha).`,
       );
-      console.log(formatKeyValue("Output path", event.outputPath));
+      console.log(formatKeyValue("Caminho de saída", event.outputPath));
       console.log(
         formatKeyValue(
-          "Archive bytes",
+          "Bytes dos arquivos",
           `${formatBytes(event.extractedBytes)} / ${formatBytes(event.totalBytes)}`,
         ),
       );
@@ -191,14 +194,14 @@ export function createImportProgressReporter(): (
       typeof event.loadBatchSize === "number" &&
       typeof event.materializeBatchSize === "number"
     ) {
-      return `Datasets: ${formatCount(event.totalDatasets)} | Files: ${formatCount(event.totalFiles)} | Load batch: ${formatCount(event.loadBatchSize)} | Materialize batch: ${formatCount(event.materializeBatchSize)}`;
+      return `Conjuntos: ${formatCount(event.totalDatasets)} | Arquivos: ${formatCount(event.totalFiles)} | Lote de carga: ${formatCount(event.loadBatchSize)} | Lote de materialização: ${formatCount(event.materializeBatchSize)}`;
     }
 
     if (typeof event.loadBatchSize === "number") {
-      return `Datasets: ${formatCount(event.totalDatasets)} | Files: ${formatCount(event.totalFiles)} | Batch size: ${formatCount(event.loadBatchSize)}`;
+      return `Conjuntos: ${formatCount(event.totalDatasets)} | Arquivos: ${formatCount(event.totalFiles)} | Tamanho do lote: ${formatCount(event.loadBatchSize)}`;
     }
 
-    return `Datasets: ${formatCount(event.totalDatasets)} | Files: ${formatCount(event.totalFiles)} | Batch size: ${formatCount(event.batchSize)}`;
+    return `Conjuntos: ${formatCount(event.totalDatasets)} | Arquivos: ${formatCount(event.totalFiles)} | Tamanho do lote: ${formatCount(event.batchSize)}`;
   };
 
   const renderBlock = (lines: string[]): void => {
@@ -280,13 +283,13 @@ export function createImportProgressReporter(): (
       stopSpinner();
       frameIndex = 0;
       currentLines = [
-        `${theme.infoLabel("PREPARING")} __SPINNER__ import plan`,
-        `Input: ${shortPath(event.validatedPath)}`,
-        `Target: ${event.targetDatabase}`,
+        `${theme.infoLabel("PREPARANDO")} __SPINNER__ plano de importação`,
+        `Entrada: ${shortPath(event.validatedPath)}`,
+        `Destino: ${event.targetDatabase}`,
         formatPlanBatchLine(event),
-        `Scanning: 0/${formatCount(event.totalFiles)} files`,
-        `Rows counted: ${formatCount(0)}`,
-        `Current: waiting...`,
+        `Varrendo: 0/${formatCount(event.totalFiles)} arquivos`,
+        `Linhas contadas: ${formatCount(0)}`,
+        `Atual: aguardando...`,
       ];
       renderBlock([
         currentLines[0]!.replace("__SPINNER__", theme.blue(frames[0]!)),
@@ -298,13 +301,13 @@ export function createImportProgressReporter(): (
 
     if (event.kind === "preparing_progress") {
       currentLines = [
-        `${theme.infoLabel("PREPARING")} __SPINNER__ import plan`,
+        `${theme.infoLabel("PREPARANDO")} __SPINNER__ plano de importação`,
         currentLines[1] ?? "",
         currentLines[2] ?? "",
         currentLines[3] ?? "",
-        `Scanning: ${formatCount(event.scannedFiles)}/${formatCount(event.totalFiles)} files`,
-        `Rows counted: ${formatCount(event.countedRows)}`,
-        `Current: ${shortPath(event.currentFileDisplayPath)}`,
+        `Varrendo: ${formatCount(event.scannedFiles)}/${formatCount(event.totalFiles)} arquivos`,
+        `Linhas contadas: ${formatCount(event.countedRows)}`,
+        `Atual: ${shortPath(event.currentFileDisplayPath)}`,
       ];
       renderBlock([
         currentLines[0]!.replace(
@@ -319,31 +322,34 @@ export function createImportProgressReporter(): (
     if (event.kind === "plan_ready") {
       stopSpinner();
       renderBlock([
-        `${theme.successLabel("PREPARING")} ${event.reused ? "Saved import plan reused." : "Import plan ready."}`,
-        `Target: ${event.targetDatabase}${event.planId === null ? "" : ` | Plan #${formatCount(event.planId)}`}`,
+        `${theme.successLabel("PREPARANDO")} ${event.reused ? "Plano de importação salvo reutilizado." : "Plano de importação pronto."}`,
+        `Destino: ${event.targetDatabase}${event.planId === null ? "" : ` | Plano #${formatCount(event.planId)}`}`,
         formatPlanBatchLine(event),
-        `Rows counted exactly: ${formatCount(event.totalRows)}`,
-        `Batches planned exactly: ${formatCount(event.totalBatches)}`,
-        `Order: ${event.executionOrder.join(" > ")}`,
+        `Linhas contadas exatamente: ${formatCount(event.totalRows)}`,
+        `Lotes planejados exatamente: ${formatCount(event.totalBatches)}`,
+        `Ordem: ${event.executionOrder.join(" > ")}`,
       ]);
       finalizeDynamicOutput();
       return;
     }
 
     if (event.kind === "start") {
-      console.log(theme.infoLabel("IMPORT"), "Starting database import...");
-      console.log(formatKeyValue("Input path", event.inputPath));
-      console.log(formatKeyValue("Validated path", event.validatedPath));
-      console.log(formatKeyValue("Target database", event.targetDatabase));
+      console.log(
+        theme.infoLabel("IMPORT"),
+        "Iniciando a importação para o banco...",
+      );
+      console.log(formatKeyValue("Caminho de entrada", event.inputPath));
+      console.log(formatKeyValue("Caminho validado", event.validatedPath));
+      console.log(formatKeyValue("Banco de destino", event.targetDatabase));
       console.log(
         formatKeyValue(
-          "Rows committed from checkpoints",
+          "Linhas confirmadas dos checkpoints",
           formatCount(event.committedRows),
         ),
       );
       console.log(
         formatKeyValue(
-          "Batches committed from checkpoints",
+          "Lotes confirmados dos checkpoints",
           `${formatCount(event.committedBatches)} / ${formatCount(event.totalBatches)}`,
         ),
       );
@@ -360,15 +366,15 @@ export function createImportProgressReporter(): (
       if (event.verboseProgress) {
         currentLines = [
           `${theme.infoLabel("IMPORT")} __SPINNER__ status`,
-          `Dataset: ${event.dataset} (${formatCount(event.datasetIndex)}/${formatCount(event.totalDatasets)})`,
-          `File: ${formatCount(event.fileIndex)}/${formatCount(event.totalFiles)} | ${shortPath(event.currentFileDisplayPath)}`,
-          `Rows: ${formatCount(event.committedRows)} committed | ${formatCount(event.currentFileRowsCommitted)}/${formatCount(event.currentFileRowsTotal)} in file`,
-          `Batches: ${formatCount(event.committedBatches)}/${formatCount(event.totalBatches)} | size ${formatCount(event.batchSize)}`,
-          `File progress: ${formatBytes(event.checkpointOffset)} / ${formatBytes(event.currentFileSize)} | Checkpoint: saved`,
+          `Conjunto: ${event.dataset} (${formatCount(event.datasetIndex)}/${formatCount(event.totalDatasets)})`,
+          `Arquivo: ${formatCount(event.fileIndex)}/${formatCount(event.totalFiles)} | ${shortPath(event.currentFileDisplayPath)}`,
+          `Linhas: ${formatCount(event.committedRows)} confirmadas | ${formatCount(event.currentFileRowsCommitted)}/${formatCount(event.currentFileRowsTotal)} no arquivo`,
+          `Lotes: ${formatCount(event.committedBatches)}/${formatCount(event.totalBatches)} | tamanho ${formatCount(event.batchSize)}`,
+          `Progresso do arquivo: ${formatBytes(event.checkpointOffset)} / ${formatBytes(event.currentFileSize)} | Checkpoint: salvo`,
         ];
       } else {
         currentLines = [
-          `${theme.infoLabel("IMPORT")} __SPINNER__ ${event.dataset} | dataset ${formatCount(event.datasetIndex)}/${formatCount(event.totalDatasets)} | file ${formatCount(event.fileIndex)}/${formatCount(event.totalFiles)} | rows ${formatCount(event.committedRows)} | batches ${formatCount(event.committedBatches)}/${formatCount(event.totalBatches)} | current ${shortPath(event.currentFileDisplayPath, 44)}`,
+          `${theme.infoLabel("IMPORT")} __SPINNER__ ${event.dataset} | conjunto ${formatCount(event.datasetIndex)}/${formatCount(event.totalDatasets)} | arquivo ${formatCount(event.fileIndex)}/${formatCount(event.totalFiles)} | linhas ${formatCount(event.committedRows)} | lotes ${formatCount(event.committedBatches)}/${formatCount(event.totalBatches)} | atual ${shortPath(event.currentFileDisplayPath, 44)}`,
         ];
       }
 
@@ -382,11 +388,11 @@ export function createImportProgressReporter(): (
 
     if (event.kind === "materialization_start") {
       currentLines = [
-        `${theme.infoLabel("MATERIALIZING")} __SPINNER__ staging -> final`,
-        `Datasets: ${event.datasets.join(" > ")}`,
-        `Files imported: ${formatCount(event.completedFiles)}/${formatCount(event.totalFiles)} | Rows: ${formatCount(event.processedRows)}/${formatCount(event.totalRows)}`,
-        `Batches committed: ${formatCount(event.committedBatches)}/${formatCount(event.totalBatches)}`,
-        `Current: waiting for final materialization...`,
+        `${theme.infoLabel("MATERIALIZANDO")} __SPINNER__ staging -> final`,
+        `Conjuntos: ${event.datasets.join(" > ")}`,
+        `Arquivos importados: ${formatCount(event.completedFiles)}/${formatCount(event.totalFiles)} | Linhas: ${formatCount(event.processedRows)}/${formatCount(event.totalRows)}`,
+        `Lotes confirmados: ${formatCount(event.committedBatches)}/${formatCount(event.totalBatches)}`,
+        `Atual: aguardando a materialização final...`,
       ];
       renderBlock([
         currentLines[0]!.replace(
@@ -402,26 +408,26 @@ export function createImportProgressReporter(): (
     if (event.kind === "materialization_progress") {
       const rowsLine =
         typeof event.rowsMaterialized === "number"
-          ? `Rows materialized: ${formatCount(event.rowsMaterialized)}${typeof event.datasetRowCount === "number" ? ` / ${formatCount(event.datasetRowCount)}` : ""}`
-          : `Rows materialized: waiting...`;
+          ? `Linhas materializadas: ${formatCount(event.rowsMaterialized)}${typeof event.datasetRowCount === "number" ? ` / ${formatCount(event.datasetRowCount)}` : ""}`
+          : `Linhas materializadas: aguardando...`;
       const chunksLine =
         typeof event.chunksCompleted === "number"
-          ? `Chunks: ${formatCount(event.chunksCompleted)}${typeof event.estimatedChunks === "number" ? ` / ${formatCount(event.estimatedChunks)}` : ""}${typeof event.chunkSize === "number" ? ` | size ${formatCount(event.chunkSize)}` : ""}`
-          : `Chunks: waiting...${typeof event.chunkSize === "number" ? ` | size ${formatCount(event.chunkSize)}` : ""}`;
+          ? `Blocos: ${formatCount(event.chunksCompleted)}${typeof event.estimatedChunks === "number" ? ` / ${formatCount(event.estimatedChunks)}` : ""}${typeof event.chunkSize === "number" ? ` | tamanho ${formatCount(event.chunkSize)}` : ""}`
+          : `Blocos: aguardando...${typeof event.chunkSize === "number" ? ` | tamanho ${formatCount(event.chunkSize)}` : ""}`;
       const cursorLine =
         typeof event.lastStagingId === "number"
-          ? `Last staging id: ${formatCount(event.lastStagingId)}`
-          : `Last staging id: waiting...`;
+          ? `Último staging id: ${formatCount(event.lastStagingId)}`
+          : `Último staging id: aguardando...`;
 
       currentLines = [
-        `${theme.infoLabel("MATERIALIZING")} __SPINNER__ status`,
-        `Dataset: ${event.dataset} (${formatCount(event.datasetIndex)}/${formatCount(event.totalDatasets)}) | completed ${formatCount(event.completedDatasets)}/${formatCount(event.totalDatasets)}`,
-        `Target table: ${event.targetTable}`,
+        `${theme.infoLabel("MATERIALIZANDO")} __SPINNER__ status`,
+        `Conjunto: ${event.dataset} (${formatCount(event.datasetIndex)}/${formatCount(event.totalDatasets)}) | concluídos ${formatCount(event.completedDatasets)}/${formatCount(event.totalDatasets)}`,
+        `Tabela de destino: ${event.targetTable}`,
         rowsLine,
         chunksLine,
         cursorLine,
-        `Step: ${event.stepLabel}${event.elapsedMs === undefined ? "" : ` | elapsed ${formatDuration(event.elapsedMs)}`}`,
-        `Reason: ${event.reason ?? "Running the next materialization step for this dataset."}`,
+        `Etapa: ${event.stepLabel}${event.elapsedMs === undefined ? "" : ` | decorrido ${formatDuration(event.elapsedMs)}`}`,
+        `Motivo: ${event.reason ?? "Executando a próxima etapa de materialização deste conjunto."}`,
       ];
       renderBlock([
         currentLines[0]!.replace(
@@ -437,8 +443,8 @@ export function createImportProgressReporter(): (
     if (event.kind === "materialization_finish") {
       finalizeDynamicOutput();
       console.log(
-        theme.successLabel("MATERIALIZING"),
-        `Completed ${formatCount(event.completedDatasets)}/${formatCount(event.totalDatasets)} staged dataset(s).`,
+        theme.successLabel("MATERIALIZANDO"),
+        `Concluídos ${formatCount(event.completedDatasets)}/${formatCount(event.totalDatasets)} conjunto(s) de staging.`,
       );
       return;
     }
@@ -446,16 +452,19 @@ export function createImportProgressReporter(): (
     finalizeDynamicOutput();
     console.log(
       theme.successLabel("IMPORT"),
-      `Processed ${formatCount(event.completedFiles)}/${formatCount(event.totalFiles)} files and ${formatCount(event.processedRows)} row(s).`,
+      `Processados ${formatCount(event.completedFiles)}/${formatCount(event.totalFiles)} arquivos e ${formatCount(event.processedRows)} linha(s).`,
     );
     console.log(
       formatKeyValue(
-        "Batches committed",
+        "Lotes confirmados",
         `${formatCount(event.committedBatches)} / ${formatCount(event.totalBatches)}`,
       ),
     );
     console.log(
-      formatKeyValue("Quarantined rows", formatCount(event.quarantinedRows)),
+      formatKeyValue(
+        "Linhas em quarentena",
+        formatCount(event.quarantinedRows),
+      ),
     );
   };
 }
@@ -542,14 +551,14 @@ export function createSanitizeProgressReporter(): (
     if (event.kind === "start") {
       frameIndex = 0;
       currentLines = [
-        `${theme.infoLabel("SANITIZE")} __SPINNER__ preparing sanitized dataset`,
-        `Validated: ${shortPath(event.validatedPath)}`,
-        `Output: ${shortPath(event.outputPath)}`,
-        `Datasets: ${event.datasets.join(" > ")}`,
-        `Source encoding: ${event.sourceEncoding} > UTF8`,
-        `Files: 0/${formatCount(event.totalFiles)} | Bytes: ${formatBytes(0)} / ${formatBytes(event.totalBytes)}`,
-        `Rows: ${formatCount(0)} | NUL: ${formatCount(0)} | Invalid bytes: ${formatCount(0)} | Controls: ${formatCount(0)} | Replacement chars: ${formatCount(0)}`,
-        `Current: waiting...`,
+        `${theme.infoLabel("SANITIZE")} __SPINNER__ preparando dataset sanitizado`,
+        `Validado: ${shortPath(event.validatedPath)}`,
+        `Saída: ${shortPath(event.outputPath)}`,
+        `Conjuntos: ${event.datasets.join(" > ")}`,
+        `Encoding de origem: ${event.sourceEncoding} > UTF8`,
+        `Arquivos: 0/${formatCount(event.totalFiles)} | Bytes: ${formatBytes(0)} / ${formatBytes(event.totalBytes)}`,
+        `Linhas: ${formatCount(0)} | NUL: ${formatCount(0)} | Bytes inválidos: ${formatCount(0)} | Controles: ${formatCount(0)} | Caracteres de substituição: ${formatCount(0)}`,
+        `Atual: aguardando...`,
       ];
       renderBlock([
         currentLines[0]!.replace("__SPINNER__", theme.blue(frames[0]!)),
@@ -566,9 +575,9 @@ export function createSanitizeProgressReporter(): (
         currentLines[2] ?? "",
         currentLines[3] ?? "",
         currentLines[4] ?? "",
-        `Files: ${formatCount(event.fileIndex)}/${formatCount(event.totalFiles)} | Bytes: ${formatBytes(event.bytesProcessed)} / ${formatBytes(event.totalBytes)}`,
-        `Rows: ${formatCount(event.processedRows)} | NUL: ${formatCount(event.nulBytesRemoved)} | Invalid bytes: ${formatCount(event.invalidBytesRemoved)} | Controls: ${formatCount(event.controlCharsRemoved)} | Replacement chars: ${formatCount(event.replacementCharactersFound)} | Changed: ${formatCount(event.changedFiles)}`,
-        `Current: ${shortPath(event.currentFileDisplayPath)}`,
+        `Arquivos: ${formatCount(event.fileIndex)}/${formatCount(event.totalFiles)} | Bytes: ${formatBytes(event.bytesProcessed)} / ${formatBytes(event.totalBytes)}`,
+        `Linhas: ${formatCount(event.processedRows)} | NUL: ${formatCount(event.nulBytesRemoved)} | Bytes inválidos: ${formatCount(event.invalidBytesRemoved)} | Controles: ${formatCount(event.controlCharsRemoved)} | Caracteres de substituição: ${formatCount(event.replacementCharactersFound)} | Alterados: ${formatCount(event.changedFiles)}`,
+        `Atual: ${shortPath(event.currentFileDisplayPath)}`,
       ];
       renderBlock([
         currentLines[0]!.replace(
@@ -583,40 +592,40 @@ export function createSanitizeProgressReporter(): (
     finalizeDynamicOutput();
     console.log(
       theme.successLabel("SANITIZE"),
-      `Prepared ${formatCount(event.totalFiles)} file(s) and counted ${formatCount(event.processedRows)} row(s).`,
+      `Preparados ${formatCount(event.totalFiles)} arquivo(s) e contadas ${formatCount(event.processedRows)} linha(s).`,
     );
     console.log(
-      formatKeyValue("Removed NUL bytes", formatCount(event.nulBytesRemoved)),
+      formatKeyValue("Bytes NUL removidos", formatCount(event.nulBytesRemoved)),
     );
     console.log(
       formatKeyValue(
-        "Removed invalid bytes",
+        "Bytes inválidos removidos",
         formatCount(event.invalidBytesRemoved),
       ),
     );
     console.log(
       formatKeyValue(
-        "Removed control chars",
+        "Caracteres de controle removidos",
         formatCount(event.controlCharsRemoved),
       ),
     );
     console.log(
       formatKeyValue(
-        "Replacement chars found",
+        "Caracteres de substituição encontrados",
         formatCount(event.replacementCharactersFound),
       ),
     );
     console.log(
       formatKeyValue(
-        "Replacement chars remaining",
+        "Caracteres de substituição restantes",
         formatCount(event.replacementCharactersRemaining),
       ),
     );
     console.log(
-      formatKeyValue("Changed files", formatCount(event.changedFiles)),
+      formatKeyValue("Arquivos alterados", formatCount(event.changedFiles)),
     );
     console.log(
-      formatKeyValue("Processed bytes", formatBytes(event.totalBytes)),
+      formatKeyValue("Bytes processados", formatBytes(event.totalBytes)),
     );
   };
 }
@@ -703,11 +712,11 @@ export function createFederalRevenueDownloadProgressReporter(): (
     if (event.kind === "start") {
       frameIndex = 0;
       currentLines = [
-        `${theme.infoLabel("FEDERAL REVENUE")} __SPINNER__ downloading ${event.reference}`,
-        `Output: ${shortPath(event.outputPath)}`,
-        `Files: 0/${formatCount(event.totalFiles)}`,
+        `${theme.infoLabel("RECEITA FEDERAL")} __SPINNER__ baixando ${event.reference}`,
+        `Saída: ${shortPath(event.outputPath)}`,
+        `Arquivos: 0/${formatCount(event.totalFiles)}`,
         `Bytes: ${formatBytes(0)} / ${formatBytes(event.totalBytes)}`,
-        `Current: waiting...`,
+        `Atual: aguardando...`,
       ];
       renderBlock([
         currentLines[0]!.replace("__SPINNER__", theme.blue(frames[0]!)),
@@ -719,11 +728,11 @@ export function createFederalRevenueDownloadProgressReporter(): (
 
     if (event.kind === "file-start") {
       currentLines = [
-        `${theme.infoLabel("FEDERAL REVENUE")} __SPINNER__ downloading ${event.reference}`,
+        `${theme.infoLabel("RECEITA FEDERAL")} __SPINNER__ baixando ${event.reference}`,
         currentLines[1] ?? "",
-        `Files: ${formatCount(event.completedFiles)}/${formatCount(event.totalFiles)}`,
+        `Arquivos: ${formatCount(event.completedFiles)}/${formatCount(event.totalFiles)}`,
         `Bytes: ${formatBytes(event.downloadedBytes)} / ${formatBytes(event.totalBytes)}`,
-        `Current: ${shortPath(event.fileName)}`,
+        `Atual: ${shortPath(event.fileName)}`,
       ];
       renderBlock([
         currentLines[0]!.replace(
@@ -739,18 +748,18 @@ export function createFederalRevenueDownloadProgressReporter(): (
     if (event.kind === "file-failed") {
       finalizeDynamicOutput();
       console.log(
-        `${theme.warningLabel("WARNING")} Failed to download ${event.fileName}: ${event.errorMessage}`,
+        `${theme.warningLabel("AVISO")} Falha ao baixar ${event.fileName}: ${event.errorMessage}`,
       );
       return;
     }
 
     if (event.kind === "file-complete" || event.kind === "file-skipped") {
       currentLines = [
-        `${theme.infoLabel("FEDERAL REVENUE")} __SPINNER__ downloading ${event.reference}`,
+        `${theme.infoLabel("RECEITA FEDERAL")} __SPINNER__ baixando ${event.reference}`,
         currentLines[1] ?? "",
-        `Files: ${formatCount(event.completedFiles)}/${formatCount(event.totalFiles)}`,
+        `Arquivos: ${formatCount(event.completedFiles)}/${formatCount(event.totalFiles)}`,
         `Bytes: ${formatBytes(event.downloadedBytes)} / ${formatBytes(event.totalBytes)}`,
-        `Current: ${event.kind === "file-skipped" ? "skipped" : "downloaded"} ${shortPath(event.fileName)}`,
+        `Atual: ${event.kind === "file-skipped" ? "ignorado" : "baixado"} ${shortPath(event.fileName)}`,
       ];
       renderBlock([
         currentLines[0]!.replace(
@@ -764,15 +773,15 @@ export function createFederalRevenueDownloadProgressReporter(): (
 
     finalizeDynamicOutput();
     console.log(
-      theme.successLabel("FEDERAL REVENUE"),
-      `Processed ${formatCount(event.totalFiles)} file(s) for ${event.reference}.`,
+      theme.successLabel("RECEITA FEDERAL"),
+      `Processados ${formatCount(event.totalFiles)} arquivo(s) para ${event.reference}.`,
     );
-    console.log(formatKeyValue("Downloaded files", event.downloadedFiles));
-    console.log(formatKeyValue("Skipped files", event.skippedFiles));
-    console.log(formatKeyValue("Failed files", event.failedFiles));
+    console.log(formatKeyValue("Arquivos baixados", event.downloadedFiles));
+    console.log(formatKeyValue("Arquivos ignorados", event.skippedFiles));
+    console.log(formatKeyValue("Arquivos falhos", event.failedFiles));
     console.log(
       formatKeyValue(
-        "Processed bytes",
+        "Bytes processados",
         `${formatBytes(event.downloadedBytes)} / ${formatBytes(event.totalBytes)}`,
       ),
     );
@@ -791,18 +800,18 @@ export function createPostgresCsvExportProgressReporter(): (
     if (event.kind === "start") {
       console.log(
         theme.infoLabel("POSTGRES"),
-        "Starting PostgreSQL-ready CSV export...",
+        "Iniciando a exportação de CSV pronto para o PostgreSQL...",
       );
-      console.log(formatKeyValue("Input path", event.inputPath));
-      console.log(formatKeyValue("Validated path", event.validatedPath));
-      console.log(formatKeyValue("Output path", event.outputPath));
-      console.log(formatKeyValue("Files queued", event.totalFiles));
+      console.log(formatKeyValue("Caminho de entrada", event.inputPath));
+      console.log(formatKeyValue("Caminho validado", event.validatedPath));
+      console.log(formatKeyValue("Caminho de saída", event.outputPath));
+      console.log(formatKeyValue("Arquivos na fila", event.totalFiles));
       return;
     }
 
     if (event.kind === "file_finish") {
       console.log(
-        `${theme.infoLabel("POSTGRES")} ${event.fileIndex}/${event.totalFiles} ${event.dataset} exported with ${formatCount(event.rows)} row(s).`,
+        `${theme.infoLabel("POSTGRES")} ${event.fileIndex}/${event.totalFiles} ${event.dataset} exportado com ${formatCount(event.rows)} linha(s).`,
       );
       return;
     }
@@ -810,10 +819,10 @@ export function createPostgresCsvExportProgressReporter(): (
     if (event.kind === "finish") {
       console.log(
         theme.successLabel("POSTGRES"),
-        `Exported ${event.totalFiles} file(s) with ${formatCount(event.totalRows)} row(s).`,
+        `Exportados ${event.totalFiles} arquivo(s) com ${formatCount(event.totalRows)} linha(s).`,
       );
-      console.log(formatKeyValue("Output path", event.outputPath));
-      console.log(formatKeyValue("Script path", event.scriptPath));
+      console.log(formatKeyValue("Caminho de saída", event.outputPath));
+      console.log(formatKeyValue("Caminho do script", event.scriptPath));
     }
   };
 }
@@ -825,27 +834,27 @@ export function createPostgresDirectScriptProgressReporter(): (
     if (event.kind === "start") {
       console.log(
         theme.infoLabel("POSTGRES"),
-        "Starting direct PostgreSQL script generation...",
+        "Iniciando a geração do script direto do PostgreSQL...",
       );
-      console.log(formatKeyValue("Input path", event.inputPath));
-      console.log(formatKeyValue("Validated path", event.validatedPath));
-      console.log(formatKeyValue("Output path", event.outputPath));
-      console.log(formatKeyValue("Source encoding", event.sourceEncoding));
-      console.log(formatKeyValue("Transaction mode", event.transactionMode));
-      console.log(formatKeyValue("Included steps", event.include.join(", ")));
+      console.log(formatKeyValue("Caminho de entrada", event.inputPath));
+      console.log(formatKeyValue("Caminho validado", event.validatedPath));
+      console.log(formatKeyValue("Caminho de saída", event.outputPath));
+      console.log(formatKeyValue("Encoding de origem", event.sourceEncoding));
+      console.log(formatKeyValue("Modo de transação", event.transactionMode));
+      console.log(formatKeyValue("Etapas incluídas", event.include.join(", ")));
       console.log(
-        formatKeyValue("Skip indexes", event.skipIndexes ? "yes" : "no"),
+        formatKeyValue("Pular índices", event.skipIndexes ? "sim" : "não"),
       );
       console.log(
-        formatKeyValue("Skip analyze", event.skipAnalyze ? "yes" : "no"),
+        formatKeyValue("Pular analyze", event.skipAnalyze ? "sim" : "não"),
       );
-      console.log(formatKeyValue("Files queued", event.totalFiles));
+      console.log(formatKeyValue("Arquivos na fila", event.totalFiles));
       return;
     }
 
     if (event.kind === "file_registered") {
       console.log(
-        `${theme.infoLabel("POSTGRES")} ${event.fileIndex}/${event.totalFiles} ${event.dataset} registered (${formatBytes(event.fileSize)}).`,
+        `${theme.infoLabel("POSTGRES")} ${event.fileIndex}/${event.totalFiles} ${event.dataset} registrado (${formatBytes(event.fileSize)}).`,
       );
       return;
     }
@@ -853,10 +862,10 @@ export function createPostgresDirectScriptProgressReporter(): (
     if (event.kind === "finish") {
       console.log(
         theme.successLabel("POSTGRES"),
-        `Generated direct import script for ${event.totalFiles} file(s) (${formatBytes(event.totalBytes)}).`,
+        `Script de importação direta gerado para ${event.totalFiles} arquivo(s) (${formatBytes(event.totalBytes)}).`,
       );
-      console.log(formatKeyValue("Output path", event.outputPath));
-      console.log(formatKeyValue("Script path", event.scriptPath));
+      console.log(formatKeyValue("Caminho de saída", event.outputPath));
+      console.log(formatKeyValue("Caminho do script", event.scriptPath));
     }
   };
 }

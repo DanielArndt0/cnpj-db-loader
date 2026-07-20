@@ -121,7 +121,7 @@ async function downloadSingleFile(
 
       if (!response.ok) {
         throw new ValidationError(
-          `Federal Revenue download failed for ${file.name}: HTTP ${response.status} ${response.statusText}.`,
+          `O download da Receita Federal falhou para ${file.name}: HTTP ${response.status} ${response.statusText}.`,
           {
             fileName: file.name,
             status: response.status,
@@ -133,7 +133,7 @@ async function downloadSingleFile(
 
       if (!response.body) {
         throw new ValidationError(
-          `Federal Revenue download failed for ${file.name}: response body is empty.`,
+          `O download da Receita Federal falhou para ${file.name}: o corpo da resposta está vazio.`,
           {
             fileName: file.name,
             attempt,
@@ -152,7 +152,7 @@ async function downloadSingleFile(
         downloadedFile.size !== file.sizeInBytes
       ) {
         throw new ValidationError(
-          `Federal Revenue download failed for ${file.name}: local size does not match the remote size.`,
+          `O download da Receita Federal falhou para ${file.name}: o tamanho local não corresponde ao tamanho remoto.`,
           {
             fileName: file.name,
             expectedSize: file.sizeInBytes,
@@ -342,7 +342,7 @@ export async function downloadFederalRevenueDataset(
       completedFiles: entries.length,
       downloadedBytes,
       totalBytes: check.totalBytes,
-      errorMessage: entry.errorMessage ?? "Unknown download error",
+      errorMessage: entry.errorMessage ?? "Erro de download desconhecido",
       fileSizeInBytes: file.sizeInBytes,
     });
   }
@@ -378,12 +378,14 @@ export async function downloadFederalRevenueDataset(
   const warnings: string[] = [];
 
   if (options.incompleteOnly && filesToProcess.length === 0) {
-    warnings.push("No incomplete Federal Revenue files were found for retry.");
+    warnings.push(
+      "Nenhum arquivo incompleto da Receita Federal foi encontrado para repetição.",
+    );
   }
 
   if (failedFiles > 0) {
     warnings.push(
-      "Some Federal Revenue files could not be downloaded. Check the log file and use retry after fixing the cause.",
+      "Alguns arquivos da Receita Federal não puderam ser baixados. Verifique o arquivo de log e use retry após corrigir a causa.",
     );
   }
 

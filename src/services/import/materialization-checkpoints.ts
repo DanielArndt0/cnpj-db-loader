@@ -1,5 +1,6 @@
 import type { Client } from "pg";
 
+import { TABELA_CHECKPOINTS_MATERIALIZACAO } from "../schema/table-names.js";
 import { ensureTableShape } from "./schema-validation.js";
 import type { ImportPhaseStatus } from "./types.js";
 
@@ -28,27 +29,27 @@ export type MaterializationCheckpointRecord = {
 };
 
 type MaterializationCheckpointRow = {
-  plan_id: string;
-  dataset: string;
-  target_table: string;
+  plano_id: string;
+  conjunto: string;
+  tabela_destino: string;
   status: ImportPhaseStatus;
-  rows_materialized: string;
-  last_staging_id: string;
-  chunks_completed: string;
-  last_error: string | null;
-  started_at: Date | null;
-  completed_at: Date | null;
-  updated_at: Date;
-  staging_row_count_verified: string | null;
-  staging_max_staging_id_verified: string | null;
-  staging_validated_at: Date | null;
-  lookup_reconciliation_status: ImportPhaseStatus | null;
-  lookup_reconciliation_row_count_verified: string | null;
-  lookup_reconciliation_max_staging_id_verified: string | null;
-  lookup_reconciliation_completed_at: Date | null;
-  last_chunk_first_staging_id: string | null;
-  last_chunk_last_staging_id: string | null;
-  last_chunk_rows: string | null;
+  linhas_materializadas: string;
+  ultimo_staging_id: string;
+  blocos_concluidos: string;
+  ultimo_erro: string | null;
+  iniciado_em: Date | null;
+  concluido_em: Date | null;
+  atualizado_em: Date;
+  staging_linhas_verificado: string | null;
+  staging_max_staging_id_verificado: string | null;
+  staging_validado_em: Date | null;
+  status_reconciliacao_dominio: ImportPhaseStatus | null;
+  reconciliacao_dominio_linhas_verificado: string | null;
+  reconciliacao_dominio_max_staging_id_verificado: string | null;
+  reconciliacao_dominio_concluida_em: Date | null;
+  ultimo_bloco_primeiro_staging_id: string | null;
+  ultimo_bloco_ultimo_staging_id: string | null;
+  ultimo_bloco_linhas: string | null;
 };
 
 function parseNullableInt(value: string | null): number | null {
@@ -59,43 +60,43 @@ function mapCheckpointRow(
   row: MaterializationCheckpointRow,
 ): MaterializationCheckpointRecord {
   return {
-    planId: Number.parseInt(row.plan_id, 10),
-    dataset: row.dataset,
-    targetTable: row.target_table,
+    planId: Number.parseInt(row.plano_id, 10),
+    dataset: row.conjunto,
+    targetTable: row.tabela_destino,
     status: row.status,
-    rowsMaterialized: Number.parseInt(row.rows_materialized, 10),
-    lastStagingId: Number.parseInt(row.last_staging_id, 10),
-    chunksCompleted: Number.parseInt(row.chunks_completed, 10),
-    lastError: row.last_error,
-    startedAt: row.started_at ? new Date(row.started_at) : null,
-    completedAt: row.completed_at ? new Date(row.completed_at) : null,
-    updatedAt: new Date(row.updated_at),
-    stagingRowCountVerified: parseNullableInt(row.staging_row_count_verified),
+    rowsMaterialized: Number.parseInt(row.linhas_materializadas, 10),
+    lastStagingId: Number.parseInt(row.ultimo_staging_id, 10),
+    chunksCompleted: Number.parseInt(row.blocos_concluidos, 10),
+    lastError: row.ultimo_erro,
+    startedAt: row.iniciado_em ? new Date(row.iniciado_em) : null,
+    completedAt: row.concluido_em ? new Date(row.concluido_em) : null,
+    updatedAt: new Date(row.atualizado_em),
+    stagingRowCountVerified: parseNullableInt(row.staging_linhas_verificado),
     stagingMaxStagingIdVerified: parseNullableInt(
-      row.staging_max_staging_id_verified,
+      row.staging_max_staging_id_verificado,
     ),
-    stagingValidatedAt: row.staging_validated_at
-      ? new Date(row.staging_validated_at)
+    stagingValidatedAt: row.staging_validado_em
+      ? new Date(row.staging_validado_em)
       : null,
-    lookupReconciliationStatus: row.lookup_reconciliation_status ?? "pending",
+    lookupReconciliationStatus: row.status_reconciliacao_dominio ?? "pending",
     lookupReconciliationRowCountVerified: parseNullableInt(
-      row.lookup_reconciliation_row_count_verified,
+      row.reconciliacao_dominio_linhas_verificado,
     ),
     lookupReconciliationMaxStagingIdVerified: parseNullableInt(
-      row.lookup_reconciliation_max_staging_id_verified,
+      row.reconciliacao_dominio_max_staging_id_verificado,
     ),
-    lookupReconciliationCompletedAt: row.lookup_reconciliation_completed_at
-      ? new Date(row.lookup_reconciliation_completed_at)
+    lookupReconciliationCompletedAt: row.reconciliacao_dominio_concluida_em
+      ? new Date(row.reconciliacao_dominio_concluida_em)
       : null,
     lastChunkFirstStagingId: Number.parseInt(
-      row.last_chunk_first_staging_id ?? "0",
+      row.ultimo_bloco_primeiro_staging_id ?? "0",
       10,
     ),
     lastChunkLastStagingId: Number.parseInt(
-      row.last_chunk_last_staging_id ?? "0",
+      row.ultimo_bloco_ultimo_staging_id ?? "0",
       10,
     ),
-    lastChunkRows: Number.parseInt(row.last_chunk_rows ?? "0", 10),
+    lastChunkRows: Number.parseInt(row.ultimo_bloco_linhas ?? "0", 10),
   };
 }
 
@@ -103,32 +104,32 @@ export async function ensureMaterializationCheckpointTable(
   client: Client,
 ): Promise<void> {
   await ensureTableShape(client, {
-    tableName: "import_materialization_checkpoints",
+    tableName: TABELA_CHECKPOINTS_MATERIALIZACAO,
     requiredColumns: [
-      "plan_id",
-      "dataset",
-      "target_table",
+      "plano_id",
+      "conjunto",
+      "tabela_destino",
       "status",
-      "rows_materialized",
-      "last_staging_id",
-      "chunks_completed",
-      "last_error",
-      "started_at",
-      "completed_at",
-      "updated_at",
-      "staging_row_count_verified",
-      "staging_max_staging_id_verified",
-      "staging_validated_at",
-      "lookup_reconciliation_status",
-      "lookup_reconciliation_row_count_verified",
-      "lookup_reconciliation_max_staging_id_verified",
-      "lookup_reconciliation_completed_at",
-      "last_chunk_first_staging_id",
-      "last_chunk_last_staging_id",
-      "last_chunk_rows",
+      "linhas_materializadas",
+      "ultimo_staging_id",
+      "blocos_concluidos",
+      "ultimo_erro",
+      "iniciado_em",
+      "concluido_em",
+      "atualizado_em",
+      "staging_linhas_verificado",
+      "staging_max_staging_id_verificado",
+      "staging_validado_em",
+      "status_reconciliacao_dominio",
+      "reconciliacao_dominio_linhas_verificado",
+      "reconciliacao_dominio_max_staging_id_verificado",
+      "reconciliacao_dominio_concluida_em",
+      "ultimo_bloco_primeiro_staging_id",
+      "ultimo_bloco_ultimo_staging_id",
+      "ultimo_bloco_linhas",
     ],
     helpMessage:
-      'The materialization checkpoint schema is required. Run "cnpj-db-loader schema generate --profile full" and apply the SQL before importing.',
+      'O schema de checkpoint de materialização é obrigatório. Rode "cnpj-db-loader schema generate --profile full" e aplique o SQL antes de importar.',
   });
 }
 
@@ -140,29 +141,29 @@ export async function readMaterializationCheckpoint(
 ): Promise<MaterializationCheckpointRecord> {
   const result = await client.query<MaterializationCheckpointRow>(
     `select
-        plan_id,
-        dataset,
-        target_table,
+        plano_id,
+        conjunto,
+        tabela_destino,
         status,
-        rows_materialized,
-        last_staging_id,
-        chunks_completed,
-        last_error,
-        started_at,
-        completed_at,
-        updated_at,
-        staging_row_count_verified,
-        staging_max_staging_id_verified,
-        staging_validated_at,
-        lookup_reconciliation_status,
-        lookup_reconciliation_row_count_verified,
-        lookup_reconciliation_max_staging_id_verified,
-        lookup_reconciliation_completed_at,
-        last_chunk_first_staging_id,
-        last_chunk_last_staging_id,
-        last_chunk_rows
-      from import_materialization_checkpoints
-      where plan_id = $1 and dataset = $2`,
+        linhas_materializadas,
+        ultimo_staging_id,
+        blocos_concluidos,
+        ultimo_erro,
+        iniciado_em,
+        concluido_em,
+        atualizado_em,
+        staging_linhas_verificado,
+        staging_max_staging_id_verificado,
+        staging_validado_em,
+        status_reconciliacao_dominio,
+        reconciliacao_dominio_linhas_verificado,
+        reconciliacao_dominio_max_staging_id_verificado,
+        reconciliacao_dominio_concluida_em,
+        ultimo_bloco_primeiro_staging_id,
+        ultimo_bloco_ultimo_staging_id,
+        ultimo_bloco_linhas
+      from ${TABELA_CHECKPOINTS_MATERIALIZACAO}
+      where plano_id = $1 and conjunto = $2`,
     [planId, dataset],
   );
 
@@ -200,50 +201,50 @@ export async function writeMaterializationCheckpoint(
   checkpoint: MaterializationCheckpointRecord,
 ): Promise<void> {
   await client.query(
-    `insert into import_materialization_checkpoints (
-        plan_id,
-        dataset,
-        target_table,
+    `insert into ${TABELA_CHECKPOINTS_MATERIALIZACAO} (
+        plano_id,
+        conjunto,
+        tabela_destino,
         status,
-        rows_materialized,
-        last_staging_id,
-        chunks_completed,
-        last_error,
-        started_at,
-        completed_at,
-        updated_at,
-        staging_row_count_verified,
-        staging_max_staging_id_verified,
-        staging_validated_at,
-        lookup_reconciliation_status,
-        lookup_reconciliation_row_count_verified,
-        lookup_reconciliation_max_staging_id_verified,
-        lookup_reconciliation_completed_at,
-        last_chunk_first_staging_id,
-        last_chunk_last_staging_id,
-        last_chunk_rows
+        linhas_materializadas,
+        ultimo_staging_id,
+        blocos_concluidos,
+        ultimo_erro,
+        iniciado_em,
+        concluido_em,
+        atualizado_em,
+        staging_linhas_verificado,
+        staging_max_staging_id_verificado,
+        staging_validado_em,
+        status_reconciliacao_dominio,
+        reconciliacao_dominio_linhas_verificado,
+        reconciliacao_dominio_max_staging_id_verificado,
+        reconciliacao_dominio_concluida_em,
+        ultimo_bloco_primeiro_staging_id,
+        ultimo_bloco_ultimo_staging_id,
+        ultimo_bloco_linhas
       ) values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, now(), $11, $12, $13, $14, $15, $16, $17, $18, $19, $20)
-      on conflict (plan_id, dataset)
+      on conflict (plano_id, conjunto)
       do update set
-        target_table = excluded.target_table,
+        tabela_destino = excluded.tabela_destino,
         status = excluded.status,
-        rows_materialized = excluded.rows_materialized,
-        last_staging_id = excluded.last_staging_id,
-        chunks_completed = excluded.chunks_completed,
-        last_error = excluded.last_error,
-        started_at = excluded.started_at,
-        completed_at = excluded.completed_at,
-        updated_at = now(),
-        staging_row_count_verified = excluded.staging_row_count_verified,
-        staging_max_staging_id_verified = excluded.staging_max_staging_id_verified,
-        staging_validated_at = excluded.staging_validated_at,
-        lookup_reconciliation_status = excluded.lookup_reconciliation_status,
-        lookup_reconciliation_row_count_verified = excluded.lookup_reconciliation_row_count_verified,
-        lookup_reconciliation_max_staging_id_verified = excluded.lookup_reconciliation_max_staging_id_verified,
-        lookup_reconciliation_completed_at = excluded.lookup_reconciliation_completed_at,
-        last_chunk_first_staging_id = excluded.last_chunk_first_staging_id,
-        last_chunk_last_staging_id = excluded.last_chunk_last_staging_id,
-        last_chunk_rows = excluded.last_chunk_rows`,
+        linhas_materializadas = excluded.linhas_materializadas,
+        ultimo_staging_id = excluded.ultimo_staging_id,
+        blocos_concluidos = excluded.blocos_concluidos,
+        ultimo_erro = excluded.ultimo_erro,
+        iniciado_em = excluded.iniciado_em,
+        concluido_em = excluded.concluido_em,
+        atualizado_em = now(),
+        staging_linhas_verificado = excluded.staging_linhas_verificado,
+        staging_max_staging_id_verificado = excluded.staging_max_staging_id_verificado,
+        staging_validado_em = excluded.staging_validado_em,
+        status_reconciliacao_dominio = excluded.status_reconciliacao_dominio,
+        reconciliacao_dominio_linhas_verificado = excluded.reconciliacao_dominio_linhas_verificado,
+        reconciliacao_dominio_max_staging_id_verificado = excluded.reconciliacao_dominio_max_staging_id_verificado,
+        reconciliacao_dominio_concluida_em = excluded.reconciliacao_dominio_concluida_em,
+        ultimo_bloco_primeiro_staging_id = excluded.ultimo_bloco_primeiro_staging_id,
+        ultimo_bloco_ultimo_staging_id = excluded.ultimo_bloco_ultimo_staging_id,
+        ultimo_bloco_linhas = excluded.ultimo_bloco_linhas`,
     [
       checkpoint.planId,
       checkpoint.dataset,
@@ -274,19 +275,19 @@ export async function writeMaterializationCheckpointProgress(
   checkpoint: MaterializationCheckpointRecord,
 ): Promise<void> {
   await client.query(
-    `update import_materialization_checkpoints
+    `update ${TABELA_CHECKPOINTS_MATERIALIZACAO}
         set status = $3,
-            rows_materialized = $4,
-            last_staging_id = $5,
-            chunks_completed = $6,
-            last_error = $7,
-            started_at = $8,
-            completed_at = $9,
-            updated_at = now(),
-            last_chunk_first_staging_id = $10,
-            last_chunk_last_staging_id = $11,
-            last_chunk_rows = $12
-      where plan_id = $1 and dataset = $2`,
+            linhas_materializadas = $4,
+            ultimo_staging_id = $5,
+            blocos_concluidos = $6,
+            ultimo_erro = $7,
+            iniciado_em = $8,
+            concluido_em = $9,
+            atualizado_em = now(),
+            ultimo_bloco_primeiro_staging_id = $10,
+            ultimo_bloco_ultimo_staging_id = $11,
+            ultimo_bloco_linhas = $12
+      where plano_id = $1 and conjunto = $2`,
     [
       checkpoint.planId,
       checkpoint.dataset,
@@ -309,7 +310,7 @@ export async function resetMaterializationCheckpoints(
   planId: number,
 ): Promise<void> {
   await client.query(
-    `delete from import_materialization_checkpoints where plan_id = $1`,
+    `delete from ${TABELA_CHECKPOINTS_MATERIALIZACAO} where plano_id = $1`,
     [planId],
   );
 }

@@ -95,7 +95,7 @@ describe("sanitizeDatasetFile", () => {
         undefined,
         { sourceEncoding: "UTF8" },
       ),
-    ).rejects.toThrow("Unicode replacement character");
+    ).rejects.toThrow(/substituição Unicode/);
 
     expect(await readFile(outputPath, "utf8")).toBe("previous valid output\n");
     expect(
@@ -125,7 +125,7 @@ describe("sanitizeDatasetFile", () => {
       sanitizeDatasetFile(
         createPlan(inputPath, outputPath, (await readFile(inputPath)).length),
       ),
-    ).rejects.toThrow("replacement marker");
+    ).rejects.toThrow(/marcador\(es\) de substituição/);
 
     expect(await readFile(outputPath, "utf8")).toBe("previous valid output\n");
   });

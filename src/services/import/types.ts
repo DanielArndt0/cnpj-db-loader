@@ -361,17 +361,17 @@ export const LOOKUP_TABLES: LookupTableName[] = [
 ];
 
 export const LOOKUP_PLACEHOLDER_LABEL: Record<LookupTableName, string> = {
-  partner_qualifications: "Imported placeholder qualification",
-  legal_natures: "Imported placeholder legal nature",
-  company_sizes: "Imported placeholder company size",
-  branch_types: "Imported placeholder branch type",
-  registration_statuses: "Imported placeholder registration status",
-  reasons: "Imported placeholder registration reason",
-  countries: "Imported placeholder country",
-  cnaes: "Imported placeholder CNAE",
-  cities: "Imported placeholder city",
-  partner_types: "Imported placeholder partner type",
-  age_groups: "Imported placeholder age group",
+  partner_qualifications: "Qualificacao de socio importada (placeholder)",
+  legal_natures: "Natureza juridica importada (placeholder)",
+  company_sizes: "Porte de empresa importado (placeholder)",
+  branch_types: "Identificador matriz/filial importado (placeholder)",
+  registration_statuses: "Situacao cadastral importada (placeholder)",
+  reasons: "Motivo de situacao cadastral importado (placeholder)",
+  countries: "Pais importado (placeholder)",
+  cnaes: "CNAE importado (placeholder)",
+  cities: "Municipio importado (placeholder)",
+  partner_types: "Identificador de socio importado (placeholder)",
+  age_groups: "Faixa etaria importada (placeholder)",
 };
 
 export function isImportDatasetType(value: string): value is ImportDatasetType {

@@ -87,7 +87,7 @@ function mergeSharedOptions(
     referenceArgument !== options.reference
   ) {
     throw new ValidationError(
-      `Federal Revenue reference conflict: received ${referenceArgument} and ${options.reference}. Use only one reference value.`,
+      `Conflito de referência da Receita Federal: recebido ${referenceArgument} e ${options.reference}. Use apenas um valor de referência.`,
     );
   }
 
@@ -95,7 +95,7 @@ function mergeSharedOptions(
 
   if (reference && options.current) {
     throw new ValidationError(
-      "Federal Revenue reference conflict: use either a reference or --current, not both.",
+      "Conflito de referência da Receita Federal: use uma referência ou --current, não ambos.",
     );
   }
 
@@ -264,23 +264,23 @@ function registerSharedOptions(command: Command): Command {
   return command
     .option(
       "--reference <yyyy-mm>",
-      "Use an explicit monthly Federal Revenue reference, for example 2026-05.",
+      "Usa uma referência mensal explícita da Receita Federal, por exemplo 2026-05.",
     )
     .option(
       "--current",
-      "Use the current calendar month instead of the latest published reference.",
+      "Usa o mês calendário atual em vez da última referência publicada.",
     )
     .option(
       "--base-url <url>",
-      "Override the public Federal Revenue WebDAV base URL.",
+      "Sobrescreve a URL base do WebDAV público da Receita Federal.",
     )
     .option(
       "--share-token <token>",
-      "Override the public Federal Revenue share token.",
+      "Sobrescreve o token do compartilhamento público da Receita Federal.",
     )
     .option(
       "--user-agent <value>",
-      "Override the Federal Revenue HTTP user agent.",
+      "Sobrescreve o user agent HTTP usado com a Receita Federal.",
     );
 }
 
@@ -288,64 +288,75 @@ function registerDownloadOptions(command: Command): Command {
   return registerSharedOptions(command)
     .option(
       "--output <path>",
-      "Download root directory. A child folder named with the selected reference is created inside it.",
+      "Diretório raiz de download. Uma subpasta com o nome da referência selecionada é criada dentro dele.",
     )
     .option(
       "--retries <number>",
-      "Retry attempts per file before marking it as failed. Defaults to 3.",
+      "Tentativas de repetição por arquivo antes de marcá-lo como falho. Padrão: 3.",
       (value) => Number.parseInt(value, 10),
     )
     .option(
       "--overwrite",
-      "Download files again even when a completed local copy exists.",
+      "Baixa os arquivos novamente mesmo quando já existe uma cópia local completa.",
     )
-    .option("-f, --force", "Skip the confirmation prompt.");
+    .option("-f, --force", "Pula a confirmação interativa.");
 }
 
 function registerStatusOptions(command: Command): Command {
   return registerSharedOptions(command).option(
     "--output <path>",
-    "Download root directory where the selected reference folder is stored.",
+    "Diretório raiz de download onde a pasta da referência selecionada está armazenada.",
   );
 }
 
 function registerCleanOptions(command: Command): Command {
   return registerStatusOptions(command)
-    .option("--partials", "Remove only .part files for the selected reference.")
+    .option(
+      "--partials",
+      "Remove apenas os arquivos .part da referência selecionada.",
+    )
     .option(
       "--failed",
-      "Remove failed and partial files tracked by the local manifest.",
+      "Remove os arquivos falhos e parciais registrados no manifesto local.",
     )
     .option(
       "--all",
-      "Remove the entire local reference folder, including ZIP files and manifest state.",
+      "Remove toda a pasta local da referência, incluindo arquivos ZIP e o estado do manifesto.",
     )
-    .option("-f, --force", "Skip the confirmation prompt.");
+    .option("-f, --force", "Pula a confirmação interativa.");
 }
 
 export function registerFederalRevenueCommands(program: Command): void {
   const federalRevenue = program
-    .command("federal-revenue")
-    .alias("revenue")
+    .command("rfb")
+    .aliases(["federal-revenue", "revenue"])
     .description(
-      "Check, download, sync, and maintain CNPJ monthly files from the Federal Revenue public share.",
+      "Verifica, baixa, sincroniza e mantém os arquivos mensais de CNPJ do compartilhamento público da Receita Federal.",
     );
+
+  federalRevenue.hook("preAction", () => {
+    if (process.argv[2] === "federal-revenue") {
+      process.stderr.write(
+        'O comando "federal-revenue" foi renomeado para "rfb". Use "cnpj-db-loader rfb ..." nas próximas versões.\n',
+      );
+    }
+  });
 
   const config = federalRevenue
     .command("config")
     .description(
-      "Read, persist, test, or reset Federal Revenue public share settings.",
+      "Lê, persiste, testa ou redefine as configurações do compartilhamento público da Receita Federal.",
     );
 
   config
     .command("set")
     .argument(
       "<key>",
-      "Configuration key: share-token, webdav-url, or user-agent.",
+      "Chave de configuração: share-token, webdav-url ou user-agent.",
     )
-    .argument("<value>", "Configuration value to persist.")
+    .argument("<value>", "Valor de configuração a persistir.")
     .description(
-      "Persist a Federal Revenue setting in the local CNPJ DB Loader config file.",
+      "Persiste uma configuração da Receita Federal no arquivo de config local do CNPJ DB Loader.",
     )
     .action(async (key: string, value: string) => {
       const effectiveConfig = await setFederalRevenueConfigValue(key, value);
@@ -358,7 +369,9 @@ export function registerFederalRevenueCommands(program: Command): void {
 
   config
     .command("show")
-    .description("Show the currently persisted Federal Revenue configuration.")
+    .description(
+      "Mostra a configuração da Receita Federal atualmente persistida.",
+    )
     .action(async () => {
       const effectiveConfig = await readFederalRevenueEffectiveConfig();
       const logFilePath = await writeCommandLog(
@@ -370,12 +383,12 @@ export function registerFederalRevenueCommands(program: Command): void {
 
   config
     .command("test")
-    .description("Test the configured Federal Revenue WebDAV connection.")
+    .description("Testa a conexão WebDAV configurada da Receita Federal.")
     .action(async () => {
       const clientOptions = await resolveFederalRevenueClientOptions();
       const result = await listFederalRevenueReferences(clientOptions);
       const references = result.references.map((item) => item.reference);
-      const latestReference = references.at(-1) ?? "not found";
+      const latestReference = references.at(-1) ?? "não encontrada";
       const logFilePath = await writeCommandLog("federal-revenue-config-test", {
         remoteBaseUrl: result.remoteBaseUrl,
         referencesFound: references.length,
@@ -386,7 +399,7 @@ export function registerFederalRevenueCommands(program: Command): void {
         logFilePath,
       );
       console.log(
-        `Federal Revenue WebDAV connection succeeded. References found: ${references.length}. Latest reference: ${latestReference}.`,
+        `Conexão WebDAV da Receita Federal bem-sucedida. Referências encontradas: ${references.length}. Última referência: ${latestReference}.`,
       );
     });
 
@@ -394,20 +407,24 @@ export function registerFederalRevenueCommands(program: Command): void {
     .command("reset")
     .argument(
       "[key]",
-      "Optional key to reset: share-token, webdav-url, or user-agent. When omitted, all Federal Revenue settings are reset.",
+      "Chave opcional a redefinir: share-token, webdav-url ou user-agent. Quando omitida, todas as configurações da Receita Federal são redefinidas.",
     )
-    .option("-f, --force", "Skip the confirmation prompt.")
+    .option("-f, --force", "Pula a confirmação interativa.")
     .description(
-      "Reset one Federal Revenue setting or all persisted Federal Revenue settings.",
+      "Redefine uma configuração da Receita Federal ou todas as configurações persistidas.",
     )
     .action(async (key: string | undefined, options: { force?: boolean }) => {
-      const target = key ? `Federal Revenue ${key}` : "all Federal Revenue";
+      const target = key
+        ? `a configuração ${key} da Receita Federal`
+        : "todas as configurações da Receita Federal";
       const confirmed = await confirmFederalRevenueAction(
-        `Reset ${target} configuration?`,
+        `Redefinir ${target}?`,
         options.force,
       );
       if (!confirmed) {
-        console.log("Federal Revenue config reset cancelled.");
+        console.log(
+          "Redefinição da configuração da Receita Federal cancelada.",
+        );
         return;
       }
 
@@ -424,10 +441,10 @@ export function registerFederalRevenueCommands(program: Command): void {
       .command("check")
       .argument(
         "[reference]",
-        "Optional monthly reference in YYYY-MM format. Same as --reference.",
+        "Referência mensal opcional no formato YYYY-MM. Igual a --reference.",
       )
       .description(
-        "Check the latest available Federal Revenue monthly CNPJ reference and list its ZIP files.",
+        "Verifica a última referência mensal de CNPJ disponível na Receita Federal e lista os arquivos ZIP.",
       ),
   ).action(
     async (
@@ -454,10 +471,10 @@ export function registerFederalRevenueCommands(program: Command): void {
       .command("download")
       .argument(
         "[reference]",
-        "Optional monthly reference in YYYY-MM format. Same as --reference.",
+        "Referência mensal opcional no formato YYYY-MM. Igual a --reference.",
       )
       .description(
-        "Download the selected Federal Revenue monthly CNPJ ZIP files with safe .part files, manifest state, and retries.",
+        "Baixa os arquivos ZIP mensais de CNPJ da referência selecionada com arquivos .part seguros, estado de manifesto e repetições.",
       ),
   ).action(
     async (
@@ -469,11 +486,11 @@ export function registerFederalRevenueCommands(program: Command): void {
         options,
       );
       const confirmed = await confirmFederalRevenueAction(
-        "Download Federal Revenue CNPJ ZIP files now? Existing completed files are skipped unless --overwrite is used.",
+        "Baixar agora os arquivos ZIP de CNPJ da Receita Federal? Arquivos já completos são ignorados, a menos que --overwrite seja usado.",
         options.force,
       );
       if (!confirmed) {
-        console.log("Federal Revenue download cancelled.");
+        console.log("Download da Receita Federal cancelado.");
         return;
       }
 
@@ -499,10 +516,10 @@ export function registerFederalRevenueCommands(program: Command): void {
       .command("status")
       .argument(
         "[reference]",
-        "Optional monthly reference in YYYY-MM format. Same as --reference.",
+        "Referência mensal opcional no formato YYYY-MM. Igual a --reference.",
       )
       .description(
-        "Read the local Federal Revenue manifest and report downloaded, failed, partial, and missing files.",
+        "Lê o manifesto local da Receita Federal e informa arquivos baixados, falhos, parciais e ausentes.",
       ),
   ).action(
     async (
@@ -533,10 +550,10 @@ export function registerFederalRevenueCommands(program: Command): void {
       .command("retry")
       .argument(
         "[reference]",
-        "Optional monthly reference in YYYY-MM format. Same as --reference.",
+        "Referência mensal opcional no formato YYYY-MM. Igual a --reference.",
       )
       .description(
-        "Retry only incomplete Federal Revenue files tracked by the local manifest.",
+        "Repete apenas os arquivos incompletos da Receita Federal registrados no manifesto local.",
       ),
   ).action(
     async (
@@ -548,11 +565,11 @@ export function registerFederalRevenueCommands(program: Command): void {
         options,
       );
       const confirmed = await confirmFederalRevenueAction(
-        "Retry incomplete Federal Revenue files now? Completed files are kept.",
+        "Repetir agora os arquivos incompletos da Receita Federal? Arquivos completos são mantidos.",
         options.force,
       );
       if (!confirmed) {
-        console.log("Federal Revenue retry cancelled.");
+        console.log("Repetição da Receita Federal cancelada.");
         return;
       }
 
@@ -582,10 +599,10 @@ export function registerFederalRevenueCommands(program: Command): void {
       .command("clean")
       .argument(
         "[reference]",
-        "Optional monthly reference in YYYY-MM format. Same as --reference.",
+        "Referência mensal opcional no formato YYYY-MM. Igual a --reference.",
       )
       .description(
-        "Clean local Federal Revenue partial files, failed files, or an entire reference folder.",
+        "Limpa arquivos parciais, arquivos falhos ou toda a pasta de uma referência local da Receita Federal.",
       ),
   ).action(
     async (
@@ -597,16 +614,16 @@ export function registerFederalRevenueCommands(program: Command): void {
         options,
       );
       const actionLabel = options.all
-        ? "remove the entire selected Federal Revenue reference folder"
+        ? "remover toda a pasta da referência selecionada da Receita Federal"
         : options.failed
-          ? "remove failed and partial Federal Revenue files"
-          : "remove Federal Revenue .part files";
+          ? "remover arquivos falhos e parciais da Receita Federal"
+          : "remover arquivos .part da Receita Federal";
       const confirmed = await confirmFederalRevenueAction(
-        `This will ${actionLabel}. Continue?`,
+        `Isto irá ${actionLabel}. Continuar?`,
         options.force,
       );
       if (!confirmed) {
-        console.log("Federal Revenue cleanup cancelled.");
+        console.log("Limpeza da Receita Federal cancelada.");
         return;
       }
 
@@ -626,44 +643,44 @@ export function registerFederalRevenueCommands(program: Command): void {
       .command("sync")
       .argument(
         "[reference]",
-        "Optional monthly reference in YYYY-MM format. Same as --reference.",
+        "Referência mensal opcional no formato YYYY-MM. Igual a --reference.",
       )
       .option(
         "--extract-output <path>",
-        "Custom extraction output directory. Defaults to <download-reference>/extracted.",
+        "Diretório de saída da extração. Padrão: <download-referencia>/extracted.",
       )
       .option(
         "--sanitize-output <path>",
-        "Custom sanitized output directory. Defaults to <download-reference>/sanitized.",
+        "Diretório de saída da sanitização. Padrão: <download-referencia>/sanitized.",
       )
       .option(
         "--db-url <url>",
-        "Override the default PostgreSQL connection URL.",
+        "Sobrescreve a URL de conexão PostgreSQL padrão.",
       )
       .option(
         "--dataset <dataset>",
-        "Process only one validated dataset block during import.",
+        "Processa apenas um bloco de dataset validado durante a importação.",
       )
       .option(
         "--load-batch-size <size>",
-        "Maximum number of source rows per staging load unit. Defaults to 500.",
+        "Número máximo de linhas de origem por unidade de carga de staging. Padrão: 500.",
         (value) => Number.parseInt(value, 10),
       )
       .option(
         "--materialize-batch-size <size>",
-        "Maximum number of staged rows per materialization chunk. Defaults to 50000.",
+        "Número máximo de linhas de staging por bloco de materialização. Padrão: 50000.",
         (value) => Number.parseInt(value, 10),
       )
       .option(
         "--verbose-progress",
-        "Show checkpoint offset and batch details in the live import progress output.",
+        "Mostra o deslocamento de checkpoint e detalhes de lote no progresso ao vivo da importação.",
       )
       .option(
         "--force-lock",
-        "Remove an existing local sync lock before starting. Use only after confirming the previous process stopped.",
+        "Remove um lock de sync local existente antes de iniciar. Use apenas após confirmar que o processo anterior parou.",
       )
       .description(
-        "Download, extract, validate, sanitize, and import the selected Federal Revenue monthly CNPJ dataset.",
+        "Baixa, extrai, valida, sanitiza e importa o dataset mensal de CNPJ da referência selecionada da Receita Federal.",
       ),
   ).action(
     async (
@@ -675,11 +692,11 @@ export function registerFederalRevenueCommands(program: Command): void {
         options,
       );
       const confirmed = await confirmFederalRevenueAction(
-        "Run the full Federal Revenue sync now? This downloads files, extracts archives, sanitizes the dataset, and imports it into PostgreSQL.",
+        "Executar agora o sync completo da Receita Federal? Isto baixa arquivos, extrai os pacotes, sanitiza o dataset e o importa para o PostgreSQL.",
         options.force,
       );
       if (!confirmed) {
-        console.log("Federal Revenue sync cancelled.");
+        console.log("Sync da Receita Federal cancelado.");
         return;
       }
 

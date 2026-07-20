@@ -5,9 +5,11 @@ import { runDoctor } from "../../services/index.js";
 export function registerDoctorCommands(program: Command): void {
   program
     .command("doctor")
-    .option("--input <path>", "Input directory to check.")
-    .option("--db-url <url>", "Override the default PostgreSQL connection URL.")
-    .description("Run a basic environment doctor for the current setup.")
+    .option("--input <path>", "Diretório de entrada a verificar.")
+    .option("--db-url <url>", "Sobrescreve a URL de conexão PostgreSQL padrão.")
+    .description(
+      "Executa um diagnóstico básico do ambiente para a configuração atual.",
+    )
     .action(async (options: { input?: string; dbUrl?: string }) => {
       const report = await runDoctor(options.input, options.dbUrl);
       console.log(report.join("\n"));

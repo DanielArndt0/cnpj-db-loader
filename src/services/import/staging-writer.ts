@@ -1,5 +1,9 @@
 import type { Client } from "pg";
 
+import {
+  COLUNA_CNPJ_COMPLETO,
+  COLUNA_CODIGO_CNAE,
+} from "../schema/table-names.js";
 import { copyRowsToTable } from "./copy-from.js";
 import {
   buildInsertQuery,
@@ -63,7 +67,7 @@ async function writeBatchToFinalTarget(
       buildSecondaryInsertQuery(
         secondaryTargetTable,
         secondaryRows,
-        "on conflict (establishment_cnpj_full, cnae_code) do update set source_order = excluded.source_order",
+        `on conflict (${COLUNA_CNPJ_COMPLETO}, ${COLUNA_CODIGO_CNAE}) do nothing`,
       ),
     );
   }
@@ -95,8 +99,8 @@ async function writeBatchToStagingTarget(
     await copyRowsToTable(
       client,
       secondaryTargetTable,
-      ["establishment_cnpj_full", "cnae_code", "source_order"],
-      secondaryRows,
+      [COLUNA_CNPJ_COMPLETO, COLUNA_CODIGO_CNAE],
+      secondaryRows.map((row) => [row[0], row[1]]),
     );
   }
 
@@ -134,7 +138,7 @@ async function writeRowInsertFallback(
         secondaryTargetTable,
         row.secondaryRows,
         writeTarget === "final"
-          ? "on conflict (establishment_cnpj_full, cnae_code) do update set source_order = excluded.source_order"
+          ? `on conflict (${COLUNA_CNPJ_COMPLETO}, ${COLUNA_CODIGO_CNAE}) do nothing`
           : "",
       ),
     );

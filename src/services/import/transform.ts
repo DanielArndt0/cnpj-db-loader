@@ -214,17 +214,17 @@ function buildPartnerDedupeKey(
   recordByColumn: Record<string, unknown>,
 ): string {
   return [
-    recordByColumn.cnpj_root,
-    recordByColumn.partner_type_code,
-    recordByColumn.partner_name,
-    recordByColumn.partner_document,
-    recordByColumn.partner_qualification_code,
-    recordByColumn.entry_date,
-    recordByColumn.country_code,
-    recordByColumn.legal_representative_document,
-    recordByColumn.legal_representative_name,
-    recordByColumn.legal_representative_qualification_code,
-    recordByColumn.age_group_code,
+    recordByColumn.cnpj_basico,
+    recordByColumn.identificador_socio,
+    recordByColumn.nome_socio_razao_social,
+    recordByColumn.cnpj_cpf_socio,
+    recordByColumn.codigo_qualificacao_socio,
+    recordByColumn.data_entrada_sociedade,
+    recordByColumn.codigo_pais,
+    recordByColumn.cpf_representante_legal,
+    recordByColumn.nome_representante_legal,
+    recordByColumn.codigo_qualificacao_representante_legal,
+    recordByColumn.codigo_faixa_etaria,
   ]
     .map((value) => (value == null ? "" : String(value).trim()))
     .join("|");
@@ -246,19 +246,19 @@ export function transformRecord(
   ) as Record<string, unknown>;
 
   if (dataset === "companies") {
-    recordByColumn.company_size_code = normalizeCode(
-      recordByColumn.company_size_code,
+    recordByColumn.codigo_porte_empresa = normalizeCode(
+      recordByColumn.codigo_porte_empresa,
       "00",
     );
   }
 
   if (dataset === "establishments") {
-    recordByColumn.branch_type_code = normalizeCode(
-      recordByColumn.branch_type_code,
+    recordByColumn.identificador_matriz_filial = normalizeCode(
+      recordByColumn.identificador_matriz_filial,
       "1",
     );
-    recordByColumn.registration_status_code = normalizeCode(
-      recordByColumn.registration_status_code,
+    recordByColumn.situacao_cadastral = normalizeCode(
+      recordByColumn.situacao_cadastral,
       "01",
     );
   }
@@ -274,7 +274,7 @@ export function transformRecord(
     ) {
       return [
         ...normalizedValues,
-        `${recordByColumn.cnpj_root ?? ""}${recordByColumn.cnpj_order ?? ""}${recordByColumn.cnpj_check_digits ?? ""}`,
+        `${recordByColumn.cnpj_basico ?? ""}${recordByColumn.cnpj_ordem ?? ""}${recordByColumn.cnpj_dv ?? ""}`,
       ];
     }
 

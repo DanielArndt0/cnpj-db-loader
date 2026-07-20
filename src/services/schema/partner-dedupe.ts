@@ -1,17 +1,17 @@
 export function createPartnerDedupeGeneratedExpression(): string {
   return [
     "md5(",
-    "    coalesce(cnpj_root, '') || '|' ||",
-    "    coalesce(partner_type_code, '') || '|' ||",
-    "    coalesce(partner_name, '') || '|' ||",
-    "    coalesce(partner_document, '') || '|' ||",
-    "    coalesce(partner_qualification_code, '') || '|' ||",
-    "    coalesce((entry_date - date '2000-01-01')::text, '') || '|' ||",
-    "    coalesce(country_code, '') || '|' ||",
-    "    coalesce(legal_representative_document, '') || '|' ||",
-    "    coalesce(legal_representative_name, '') || '|' ||",
-    "    coalesce(legal_representative_qualification_code, '') || '|' ||",
-    "    coalesce(age_group_code, '')",
+    "    coalesce(cnpj_basico, '') || '|' ||",
+    "    coalesce(identificador_socio, '') || '|' ||",
+    "    coalesce(nome_socio_razao_social, '') || '|' ||",
+    "    coalesce(cnpj_cpf_socio, '') || '|' ||",
+    "    coalesce(codigo_qualificacao_socio, '') || '|' ||",
+    "    coalesce((data_entrada_sociedade - date '2000-01-01')::text, '') || '|' ||",
+    "    coalesce(codigo_pais, '') || '|' ||",
+    "    coalesce(cpf_representante_legal, '') || '|' ||",
+    "    coalesce(nome_representante_legal, '') || '|' ||",
+    "    coalesce(codigo_qualificacao_representante_legal, '') || '|' ||",
+    "    coalesce(codigo_faixa_etaria, '')",
     "  )",
   ].join("\n");
 }
