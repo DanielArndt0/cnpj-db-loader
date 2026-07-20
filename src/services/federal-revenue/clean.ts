@@ -119,7 +119,7 @@ function resolveCleanMode(
 
   if (modes.length !== 1) {
     throw new ValidationError(
-      "Federal Revenue cleanup requires exactly one cleanup mode: --partials, --failed, or --all.",
+      "A limpeza da Receita Federal exige exatamente um modo: --partials, --failed ou --all.",
     );
   }
 
@@ -153,7 +153,7 @@ export async function cleanFederalRevenueDataset(
       removedBytes += outputStat.size;
     } else {
       warnings.push(
-        "The selected Federal Revenue reference folder does not exist locally.",
+        "A pasta da referência selecionada da Receita Federal não existe localmente.",
       );
     }
 
@@ -184,7 +184,9 @@ export async function cleanFederalRevenueDataset(
     }
 
     if (partialFiles.length === 0) {
-      warnings.push("No partial Federal Revenue download files were found.");
+      warnings.push(
+        "Nenhum arquivo de download parcial da Receita Federal foi encontrado.",
+      );
     }
   }
 
@@ -193,7 +195,7 @@ export async function cleanFederalRevenueDataset(
 
     if (!manifest) {
       warnings.push(
-        "No local Federal Revenue manifest was found for this reference.",
+        "Nenhum manifesto local da Receita Federal foi encontrado para esta referência.",
       );
     } else {
       for (const file of manifest.files.filter(shouldCleanFailedEntry)) {
@@ -226,7 +228,9 @@ export async function cleanFederalRevenueDataset(
     }
 
     if (removedPaths.length === 0 && warnings.length === 0) {
-      warnings.push("No failed or partial Federal Revenue files were found.");
+      warnings.push(
+        "Nenhum arquivo falho ou parcial da Receita Federal foi encontrado.",
+      );
     }
   }
 

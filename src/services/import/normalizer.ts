@@ -43,7 +43,7 @@ function validateRequiredColumns(
     }
 
     throw new ValidationError(
-      `Missing required value for ${layout.fields[index]?.columnName ?? "unknown column"}.`,
+      `Valor obrigatório ausente para ${layout.fields[index]?.columnName ?? "coluna desconhecida"}.`,
     );
   }
 }
@@ -76,15 +76,15 @@ export function createImportRowNormalizer(input: {
   );
   const companySizeIndex =
     input.dataset === "companies"
-      ? resolveLayoutColumnIndex(input.layout, "company_size_code")
+      ? resolveLayoutColumnIndex(input.layout, "codigo_porte_empresa")
       : -1;
   const branchTypeIndex =
     input.dataset === "establishments"
-      ? resolveLayoutColumnIndex(input.layout, "branch_type_code")
+      ? resolveLayoutColumnIndex(input.layout, "identificador_matriz_filial")
       : -1;
   const registrationStatusIndex =
     input.dataset === "establishments"
-      ? resolveLayoutColumnIndex(input.layout, "registration_status_code")
+      ? resolveLayoutColumnIndex(input.layout, "situacao_cadastral")
       : -1;
   const appendEstablishmentCnpjFull =
     input.dataset === "establishments" &&
@@ -96,45 +96,51 @@ export function createImportRowNormalizer(input: {
     input.schemaCapabilities.includePartnerDedupeKeyInInsert;
   const buildEstablishmentCnpjFull = appendEstablishmentCnpjFull
     ? createEstablishmentCnpjFullBuilder({
-        cnpjRoot: resolveLayoutColumnIndex(input.layout, "cnpj_root"),
-        cnpjOrder: resolveLayoutColumnIndex(input.layout, "cnpj_order"),
-        cnpjCheckDigits: resolveLayoutColumnIndex(
-          input.layout,
-          "cnpj_check_digits",
-        ),
+        cnpjRoot: resolveLayoutColumnIndex(input.layout, "cnpj_basico"),
+        cnpjOrder: resolveLayoutColumnIndex(input.layout, "cnpj_ordem"),
+        cnpjCheckDigits: resolveLayoutColumnIndex(input.layout, "cnpj_dv"),
       })
     : null;
   const buildPartnerDedupeKey = appendPartnerDedupeKey
     ? createPartnerDedupeKeyBuilder({
-        cnpjRoot: resolveLayoutColumnIndex(input.layout, "cnpj_root"),
+        cnpjRoot: resolveLayoutColumnIndex(input.layout, "cnpj_basico"),
         partnerTypeCode: resolveLayoutColumnIndex(
           input.layout,
-          "partner_type_code",
+          "identificador_socio",
         ),
-        partnerName: resolveLayoutColumnIndex(input.layout, "partner_name"),
+        partnerName: resolveLayoutColumnIndex(
+          input.layout,
+          "nome_socio_razao_social",
+        ),
         partnerDocument: resolveLayoutColumnIndex(
           input.layout,
-          "partner_document",
+          "cnpj_cpf_socio",
         ),
         partnerQualificationCode: resolveLayoutColumnIndex(
           input.layout,
-          "partner_qualification_code",
+          "codigo_qualificacao_socio",
         ),
-        entryDate: resolveLayoutColumnIndex(input.layout, "entry_date"),
-        countryCode: resolveLayoutColumnIndex(input.layout, "country_code"),
+        entryDate: resolveLayoutColumnIndex(
+          input.layout,
+          "data_entrada_sociedade",
+        ),
+        countryCode: resolveLayoutColumnIndex(input.layout, "codigo_pais"),
         legalRepresentativeDocument: resolveLayoutColumnIndex(
           input.layout,
-          "legal_representative_document",
+          "cpf_representante_legal",
         ),
         legalRepresentativeName: resolveLayoutColumnIndex(
           input.layout,
-          "legal_representative_name",
+          "nome_representante_legal",
         ),
         legalRepresentativeQualificationCode: resolveLayoutColumnIndex(
           input.layout,
-          "legal_representative_qualification_code",
+          "codigo_qualificacao_representante_legal",
         ),
-        ageGroupCode: resolveLayoutColumnIndex(input.layout, "age_group_code"),
+        ageGroupCode: resolveLayoutColumnIndex(
+          input.layout,
+          "codigo_faixa_etaria",
+        ),
       })
     : null;
 

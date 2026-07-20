@@ -2,39 +2,39 @@ import type { TableLayout } from "./types.js";
 
 export const companiesLayout: TableLayout = {
   key: "companies",
-  tableName: "companies",
+  tableName: "empresas",
   sourceName: "EMPRESAS",
   description: "Main company registration block.",
   fields: [
-    { sourceLabel: "CNPJ BÁSICO", columnName: "cnpj_root", dataType: "text" },
+    { sourceLabel: "CNPJ BÁSICO", columnName: "cnpj_basico", dataType: "text" },
     {
       sourceLabel: "RAZÃO SOCIAL / NOME EMPRESARIAL",
-      columnName: "company_name",
+      columnName: "razao_social_nome_empresarial",
       dataType: "text",
     },
     {
       sourceLabel: "NATUREZA JURÍDICA",
-      columnName: "legal_nature_code",
+      columnName: "codigo_natureza_juridica",
       dataType: "text",
     },
     {
       sourceLabel: "QUALIFICAÇÃO DO RESPONSÁVEL",
-      columnName: "responsible_qualification_code",
+      columnName: "codigo_qualificacao_responsavel",
       dataType: "text",
     },
     {
       sourceLabel: "CAPITAL SOCIAL DA EMPRESA",
-      columnName: "share_capital",
+      columnName: "capital_social",
       dataType: "numeric",
     },
     {
       sourceLabel: "PORTE DA EMPRESA",
-      columnName: "company_size_code",
+      columnName: "codigo_porte_empresa",
       dataType: "text",
     },
     {
       sourceLabel: "ENTE FEDERATIVO RESPONSÁVEL",
-      columnName: "responsible_federative_entity",
+      columnName: "ente_federativo_responsavel",
       dataType: "text",
       nullable: true,
     },

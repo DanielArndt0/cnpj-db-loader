@@ -207,7 +207,7 @@ export async function sanitizeDatasetFile(
       (replacementCharactersFound > 0 || replacementCharactersRemaining > 0)
     ) {
       throw new ValidationError(
-        `Sanitized output validation failed for ${plan.displayPath}. Found ${replacementCharactersFound} replacement marker(s) in source decoding and ${replacementCharactersRemaining} Unicode replacement character(s) in normalized output. Verify the source encoding or source file before importing this dataset.`,
+        `A validação da saída sanitizada falhou para ${plan.displayPath}. Encontrado(s) ${replacementCharactersFound} marcador(es) de substituição na decodificação da origem e ${replacementCharactersRemaining} caractere(s) de substituição Unicode na saída normalizada. Verifique o encoding de origem ou o arquivo de origem antes de importar este dataset.`,
       );
     }
 

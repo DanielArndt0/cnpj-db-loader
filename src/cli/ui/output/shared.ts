@@ -15,7 +15,7 @@ export function printNotes(notes: string[]): void {
     return;
   }
 
-  console.log(theme.infoLabel("NOTES"));
+  console.log(theme.infoLabel("NOTAS"));
   for (const note of notes) {
     console.log(`  ${theme.blue("•")} ${note}`);
   }
@@ -26,7 +26,7 @@ export function printWarnings(warnings: string[]): void {
     return;
   }
 
-  console.log(theme.warningLabel("WARNINGS"));
+  console.log(theme.warningLabel("AVISOS"));
   for (const warning of warnings) {
     console.log(`  ${theme.yellow("•")} ${warning}`);
   }
@@ -37,7 +37,7 @@ export function printErrors(errors: string[]): void {
     return;
   }
 
-  console.log(theme.errorLabel("ERRORS"));
+  console.log(theme.errorLabel("ERROS"));
   for (const error of errors) {
     console.log(`  ${theme.red("•")} ${error}`);
   }

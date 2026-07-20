@@ -21,7 +21,7 @@ function printAppliedFilters(summaryFilters: Record<string, unknown>): void {
     return;
   }
 
-  console.log(theme.infoLabel("FILTERS"));
+  console.log(theme.infoLabel("FILTROS"));
   for (const [key, value] of activeFilters) {
     console.log(`  ${theme.blue("•")} ${key}: ${String(value)}`);
   }
@@ -33,20 +33,22 @@ export function printQuarantineStatsSummary(
 ): void {
   console.log(
     theme.successLabel("QUARANTINE"),
-    "Quarantine statistics loaded.",
-  );
-  console.log(formatKeyValue("Total rows", formatCount(summary.totalRows)));
-  console.log(
-    formatKeyValue("Retryable rows", formatCount(summary.retryableRows)),
+    "Estatísticas de quarentena carregadas.",
   );
   console.log(
-    formatKeyValue("Terminal rows", formatCount(summary.terminalRows)),
+    formatKeyValue("Total de linhas", formatCount(summary.totalRows)),
+  );
+  console.log(
+    formatKeyValue("Linhas reprocessáveis", formatCount(summary.retryableRows)),
+  );
+  console.log(
+    formatKeyValue("Linhas terminais", formatCount(summary.terminalRows)),
   );
 
   printAppliedFilters(summary.appliedFilters);
 
   if (summary.rowsByDataset.length > 0) {
-    console.log(theme.infoLabel("BY DATASET"));
+    console.log(theme.infoLabel("POR CONJUNTO"));
     for (const item of summary.rowsByDataset) {
       console.log(
         `  ${theme.blue("•")} ${item.key}: ${formatCount(item.count)}`,
@@ -55,7 +57,7 @@ export function printQuarantineStatsSummary(
   }
 
   if (summary.rowsByCategory.length > 0) {
-    console.log(theme.infoLabel("BY CATEGORY"));
+    console.log(theme.infoLabel("POR CATEGORIA"));
     for (const item of summary.rowsByCategory) {
       console.log(
         `  ${theme.blue("•")} ${item.key}: ${formatCount(item.count)}`,
@@ -64,7 +66,7 @@ export function printQuarantineStatsSummary(
   }
 
   if (summary.rowsByStage.length > 0) {
-    console.log(theme.infoLabel("BY STAGE"));
+    console.log(theme.infoLabel("POR ETAPA"));
     for (const item of summary.rowsByStage) {
       console.log(
         `  ${theme.blue("•")} ${item.key}: ${formatCount(item.count)}`,
@@ -72,30 +74,35 @@ export function printQuarantineStatsSummary(
     }
   }
 
-  console.log(`${theme.muted("Log file:")} ${resolveLogFilePath(logFilePath)}`);
+  console.log(
+    `${theme.muted("Arquivo de log:")} ${resolveLogFilePath(logFilePath)}`,
+  );
 }
 
 export function printQuarantineListSummary(
   summary: QuarantineListSummary,
   logFilePath: string,
 ): void {
-  console.log(theme.successLabel("QUARANTINE"), "Quarantine rows loaded.");
   console.log(
-    formatKeyValue("Returned rows", formatCount(summary.rows.length)),
+    theme.successLabel("QUARANTINE"),
+    "Linhas de quarentena carregadas.",
   );
-  console.log(formatKeyValue("Limit", summary.appliedFilters.limit));
+  console.log(
+    formatKeyValue("Linhas retornadas", formatCount(summary.rows.length)),
+  );
+  console.log(formatKeyValue("Limite", summary.appliedFilters.limit));
 
   printAppliedFilters(summary.appliedFilters);
 
   if (summary.rows.length > 0) {
-    console.log(theme.infoLabel("ROWS"));
+    console.log(theme.infoLabel("LINHAS"));
     for (const row of summary.rows) {
-      const retryLabel = row.canRetryLater ? "retryable" : "terminal";
+      const retryLabel = row.canRetryLater ? "reprocessável" : "terminal";
       console.log(
-        `  ${theme.blue("•")} #${row.id} | ${row.dataset} | ${row.errorCategory ?? "unknown"} | ${retryLabel}`,
+        `  ${theme.blue("•")} #${row.id} | ${row.dataset} | ${row.errorCategory ?? "desconhecida"} | ${retryLabel}`,
       );
       console.log(
-        `    ${truncateMiddle(row.filePath, 88)} | row ${row.rowNumber ?? "?"} | offset ${
+        `    ${truncateMiddle(row.filePath, 88)} | linha ${row.rowNumber ?? "?"} | offset ${
           row.checkpointOffset === null
             ? "?"
             : formatBytes(row.checkpointOffset)
@@ -105,7 +112,9 @@ export function printQuarantineListSummary(
     }
   }
 
-  console.log(`${theme.muted("Log file:")} ${resolveLogFilePath(logFilePath)}`);
+  console.log(
+    `${theme.muted("Arquivo de log:")} ${resolveLogFilePath(logFilePath)}`,
+  );
 }
 
 export function printQuarantineRecord(
@@ -114,47 +123,55 @@ export function printQuarantineRecord(
 ): void {
   console.log(
     theme.successLabel("QUARANTINE"),
-    `Quarantine row #${record.id} loaded.`,
+    `Linha de quarentena #${record.id} carregada.`,
   );
-  console.log(formatKeyValue("Dataset", record.dataset));
-  console.log(formatKeyValue("File path", record.filePath));
+  console.log(formatKeyValue("Conjunto", record.dataset));
+  console.log(formatKeyValue("Caminho do arquivo", record.filePath));
   console.log(
-    formatKeyValue("Row number", record.rowNumber ?? "not available"),
+    formatKeyValue("Número da linha", record.rowNumber ?? "não disponível"),
   );
   console.log(
     formatKeyValue(
-      "Checkpoint offset",
+      "Deslocamento do checkpoint",
       record.checkpointOffset === null
-        ? "not available"
+        ? "não disponível"
         : formatBytes(record.checkpointOffset),
     ),
   );
-  console.log(formatKeyValue("Error code", record.errorCode ?? "unknown"));
   console.log(
-    formatKeyValue("Error category", record.errorCategory ?? "unknown"),
+    formatKeyValue("Código do erro", record.errorCode ?? "desconhecido"),
   );
-  console.log(formatKeyValue("Error stage", record.errorStage ?? "unknown"));
-  console.log(formatKeyValue("Retry count", record.retryCount));
-  console.log(formatKeyValue("Retryable", record.canRetryLater ? "yes" : "no"));
-  console.log(formatKeyValue("Created at", record.createdAt));
+  console.log(
+    formatKeyValue("Categoria do erro", record.errorCategory ?? "desconhecida"),
+  );
+  console.log(
+    formatKeyValue("Etapa do erro", record.errorStage ?? "desconhecida"),
+  );
+  console.log(formatKeyValue("Total de tentativas", record.retryCount));
+  console.log(
+    formatKeyValue("Reprocessável", record.canRetryLater ? "sim" : "não"),
+  );
+  console.log(formatKeyValue("Criado em", record.createdAt));
 
-  console.log(theme.infoLabel("ERROR"));
+  console.log(theme.infoLabel("ERRO"));
   console.log(`  ${record.errorMessage}`);
 
-  console.log(theme.infoLabel("RAW LINE"));
+  console.log(theme.infoLabel("LINHA BRUTA"));
   console.log(`  ${record.rawLine}`);
 
   if (record.sanitizationsApplied.length > 0) {
-    console.log(theme.infoLabel("SANITIZATIONS"));
+    console.log(theme.infoLabel("SANITIZAÇÕES"));
     for (const item of record.sanitizationsApplied) {
       console.log(`  ${theme.blue("•")} ${String(item)}`);
     }
   }
 
   if (record.parsedPayload) {
-    console.log(theme.infoLabel("PARSED PAYLOAD"));
+    console.log(theme.infoLabel("PAYLOAD PARSEADO"));
     console.log(JSON.stringify(record.parsedPayload, null, 2));
   }
 
-  console.log(`${theme.muted("Log file:")} ${resolveLogFilePath(logFilePath)}`);
+  console.log(
+    `${theme.muted("Arquivo de log:")} ${resolveLogFilePath(logFilePath)}`,
+  );
 }

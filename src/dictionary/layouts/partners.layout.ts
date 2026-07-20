@@ -2,66 +2,66 @@ import type { TableLayout } from "./types.js";
 
 export const partnersLayout: TableLayout = {
   key: "partners",
-  tableName: "partners",
+  tableName: "socios",
   sourceName: "SÓCIOS",
   description:
     "Partners block, including masked CPF/CNPJ fields according to the official layout.",
   fields: [
-    { sourceLabel: "CNPJ BÁSICO", columnName: "cnpj_root", dataType: "text" },
+    { sourceLabel: "CNPJ BÁSICO", columnName: "cnpj_basico", dataType: "text" },
     {
       sourceLabel: "IDENTIFICADOR DE SÓCIO",
-      columnName: "partner_type_code",
+      columnName: "identificador_socio",
       dataType: "text",
     },
     {
       sourceLabel: "NOME DO SÓCIO / RAZÃO SOCIAL",
-      columnName: "partner_name",
+      columnName: "nome_socio_razao_social",
       dataType: "text",
     },
     {
       sourceLabel: "CNPJ/CPF DO SÓCIO",
-      columnName: "partner_document",
+      columnName: "cnpj_cpf_socio",
       dataType: "text",
       nullable: true,
     },
     {
       sourceLabel: "QUALIFICAÇÃO DO SÓCIO",
-      columnName: "partner_qualification_code",
+      columnName: "codigo_qualificacao_socio",
       dataType: "text",
     },
     {
       sourceLabel: "DATA DE ENTRADA SOCIEDADE",
-      columnName: "entry_date",
+      columnName: "data_entrada_sociedade",
       dataType: "date",
       nullable: true,
     },
     {
       sourceLabel: "PAIS",
-      columnName: "country_code",
+      columnName: "codigo_pais",
       dataType: "text",
       nullable: true,
     },
     {
       sourceLabel: "REPRESENTANTE LEGAL",
-      columnName: "legal_representative_document",
+      columnName: "cpf_representante_legal",
       dataType: "text",
       nullable: true,
     },
     {
       sourceLabel: "NOME DO REPRESENTANTE",
-      columnName: "legal_representative_name",
+      columnName: "nome_representante_legal",
       dataType: "text",
       nullable: true,
     },
     {
       sourceLabel: "QUALIFICAÇÃO DO REPRESENTANTE LEGAL",
-      columnName: "legal_representative_qualification_code",
+      columnName: "codigo_qualificacao_representante_legal",
       dataType: "text",
       nullable: true,
     },
     {
       sourceLabel: "FAIXA ETÁRIA",
-      columnName: "age_group_code",
+      columnName: "codigo_faixa_etaria",
       dataType: "text",
       nullable: true,
     },

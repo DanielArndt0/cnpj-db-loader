@@ -4,6 +4,20 @@ import {
   partnersLayout,
   simplesLayout,
 } from "../../dictionary/layouts/index.js";
+import {
+  COLUNA_CHAVE_DEDUPLICACAO_SOCIO,
+  COLUNA_CNPJ_COMPLETO,
+  COLUNA_CODIGO_CNAE,
+  TABELA_EMPRESAS,
+  TABELA_ESTABELECIMENTO_CNAES_SECUNDARIOS,
+  TABELA_ESTABELECIMENTOS,
+  TABELA_SIMPLES,
+  TABELA_SOCIOS,
+  TABELA_STAGING_EMPRESAS,
+  TABELA_STAGING_ESTABELECIMENTOS,
+  TABELA_STAGING_SIMPLES,
+  TABELA_STAGING_SOCIOS,
+} from "../schema/table-names.js";
 import { getConflictClause } from "./sql.js";
 import type { ImportDatasetType, ImportSchemaCapabilities } from "./types.js";
 
@@ -31,23 +45,23 @@ const MATERIALIZATION_COLUMNS: Record<
 function buildPartnerDedupeExpression(alias: string): string {
   return [
     `md5(`,
-    `      coalesce(${alias}.cnpj_root, '') || '|' ||`,
-    `      coalesce(${alias}.partner_type_code, '') || '|' ||`,
-    `      coalesce(${alias}.partner_name, '') || '|' ||`,
-    `      coalesce(${alias}.partner_document, '') || '|' ||`,
-    `      coalesce(${alias}.partner_qualification_code, '') || '|' ||`,
-    `      coalesce((${alias}.entry_date - date '2000-01-01')::text, '') || '|' ||`,
-    `      coalesce(${alias}.country_code, '') || '|' ||`,
-    `      coalesce(${alias}.legal_representative_document, '') || '|' ||`,
-    `      coalesce(${alias}.legal_representative_name, '') || '|' ||`,
-    `      coalesce(${alias}.legal_representative_qualification_code, '') || '|' ||`,
-    `      coalesce(${alias}.age_group_code, '')`,
+    `      coalesce(${alias}.cnpj_basico, '') || '|' ||`,
+    `      coalesce(${alias}.identificador_socio, '') || '|' ||`,
+    `      coalesce(${alias}.nome_socio_razao_social, '') || '|' ||`,
+    `      coalesce(${alias}.cnpj_cpf_socio, '') || '|' ||`,
+    `      coalesce(${alias}.codigo_qualificacao_socio, '') || '|' ||`,
+    `      coalesce((${alias}.data_entrada_sociedade - date '2000-01-01')::text, '') || '|' ||`,
+    `      coalesce(${alias}.codigo_pais, '') || '|' ||`,
+    `      coalesce(${alias}.cpf_representante_legal, '') || '|' ||`,
+    `      coalesce(${alias}.nome_representante_legal, '') || '|' ||`,
+    `      coalesce(${alias}.codigo_qualificacao_representante_legal, '') || '|' ||`,
+    `      coalesce(${alias}.codigo_faixa_etaria, '')`,
     `    )`,
   ].join("\n");
 }
 
 function buildEstablishmentCnpjFullExpression(alias: string): string {
-  return `${alias}.cnpj_root || ${alias}.cnpj_order || ${alias}.cnpj_check_digits`;
+  return `${alias}.cnpj_basico || ${alias}.cnpj_ordem || ${alias}.cnpj_dv`;
 }
 
 function buildChunkInsertSql(input: {
@@ -104,35 +118,35 @@ function buildEstablishmentsChunkInsertSql(input: {
   const chunkSelectList = [
     "source.staging_id",
     ...input.selectColumns.map((column) => `source.${column}`),
-    `${buildEstablishmentCnpjFullExpression("source")} as cnpj_full`,
+    `${buildEstablishmentCnpjFullExpression("source")} as ${COLUNA_CNPJ_COMPLETO}`,
   ].join(",\n    ");
   const insertSelectList = input.insertColumns.join(", ");
   const secondaryCnaesCtes = input.includeSecondaryCnaesTable
     ? [
         ",",
         "deleted_secondary_cnaes as (",
-        "  delete from establishment_secondary_cnaes target",
-        "  using (select distinct cnpj_full from inserted_establishments) source_keys",
-        "  where target.cnpj_full = source_keys.cnpj_full",
+        `  delete from ${TABELA_ESTABELECIMENTO_CNAES_SECUNDARIOS} target`,
+        `  using (select distinct ${COLUNA_CNPJ_COMPLETO} from inserted_establishments) source_keys`,
+        `  where target.${COLUNA_CNPJ_COMPLETO} = source_keys.${COLUNA_CNPJ_COMPLETO}`,
         "  returning 1",
         "),",
         "secondary_cnaes_source as (",
         "  select distinct",
-        "    chunked.cnpj_full,",
-        "    btrim(cnae_code) as cnae_code",
+        `    chunked.${COLUNA_CNPJ_COMPLETO},`,
+        `    btrim(codigo_cnae) as ${COLUNA_CODIGO_CNAE}`,
         "  from chunked",
         "  inner join inserted_establishments inserted",
-        "    on inserted.cnpj_full = chunked.cnpj_full",
-        "  cross join lateral unnest(string_to_array(chunked.secondary_cnaes_raw, ',')) as cnae_code",
-        "  where chunked.secondary_cnaes_raw is not null",
-        "    and chunked.secondary_cnaes_raw <> ''",
-        "    and btrim(cnae_code) <> ''",
+        `    on inserted.${COLUNA_CNPJ_COMPLETO} = chunked.${COLUNA_CNPJ_COMPLETO}`,
+        "  cross join lateral unnest(string_to_array(chunked.cnae_fiscal_secundaria_raw, ',')) as codigo_cnae",
+        "  where chunked.cnae_fiscal_secundaria_raw is not null",
+        "    and chunked.cnae_fiscal_secundaria_raw <> ''",
+        "    and btrim(codigo_cnae) <> ''",
         "),",
         "inserted_secondary_cnaes as (",
-        "  insert into establishment_secondary_cnaes (cnpj_full, cnae_code)",
-        "  select cnpj_full, cnae_code",
+        `  insert into ${TABELA_ESTABELECIMENTO_CNAES_SECUNDARIOS} (${COLUNA_CNPJ_COMPLETO}, ${COLUNA_CODIGO_CNAE})`,
+        `  select ${COLUNA_CNPJ_COMPLETO}, ${COLUNA_CODIGO_CNAE}`,
         "  from secondary_cnaes_source",
-        "  on conflict (cnpj_full, cnae_code) do nothing",
+        `  on conflict (${COLUNA_CNPJ_COMPLETO}, ${COLUNA_CODIGO_CNAE}) do nothing`,
         "  returning 1",
         ")",
       ]
@@ -142,17 +156,17 @@ function buildEstablishmentsChunkInsertSql(input: {
     text: [
       "with chunked as (",
       `  select\n    ${chunkSelectList}`,
-      "  from staging_establishments source",
+      `  from ${TABELA_STAGING_ESTABELECIMENTOS} source`,
       "  where source.staging_id > $1",
       "  order by source.staging_id asc",
       "  limit $2",
       "),",
       "inserted_establishments as (",
-      `  insert into establishments (${input.insertColumns.join(", ")})`,
+      `  insert into ${TABELA_ESTABELECIMENTOS} (${input.insertColumns.join(", ")})`,
       `  select ${insertSelectList}`,
       "  from chunked",
       ...(input.conflictClause ? [input.conflictClause] : []),
-      "  returning cnpj_full",
+      `  returning ${COLUNA_CNPJ_COMPLETO}`,
       ")",
       ...secondaryCnaesCtes,
       "select",
@@ -177,7 +191,9 @@ function buildPartnersChunkInsertSql(input: {
     "source.staging_id",
     ...baseColumns.map((column) => `source.${column}`),
     ...(input.includePartnerDedupeKeyInInsert
-      ? [`${buildPartnerDedupeExpression("source")} as partner_dedupe_key`]
+      ? [
+          `${buildPartnerDedupeExpression("source")} as ${COLUNA_CHAVE_DEDUPLICACAO_SOCIO}`,
+        ]
       : []),
   ].join(",\n    ");
   const insertSelectList = input.insertColumns.join(", ");
@@ -191,7 +207,7 @@ function buildPartnersChunkInsertSql(input: {
     text: [
       "with chunked as (",
       `  select\n    ${chunkSelectList}`,
-      "  from staging_partners source",
+      `  from ${TABELA_STAGING_SOCIOS} source`,
       "  where source.staging_id > $1",
       "  order by source.staging_id asc",
       "  limit $2",
@@ -201,13 +217,13 @@ function buildPartnersChunkInsertSql(input: {
       "  from (",
       "    select",
       "      chunked.*,",
-      "      row_number() over (partition by partner_dedupe_key order by staging_id asc) as dedupe_rank",
+      `      row_number() over (partition by ${COLUNA_CHAVE_DEDUPLICACAO_SOCIO} order by staging_id asc) as dedupe_rank`,
       "    from chunked",
       "  ) ranked",
       "  where dedupe_rank = 1",
       "),",
       "inserted as (",
-      `  insert into partners (${input.insertColumns.join(", ")})`,
+      `  insert into ${TABELA_SOCIOS} (${input.insertColumns.join(", ")})`,
       `  select ${insertSelectList}`,
       "  from deduped",
       conflictClause,
@@ -235,7 +251,7 @@ export function buildMaterializationChunkQuery(input: {
     case "partners": {
       const insertColumns = input.schemaCapabilities
         .includePartnerDedupeKeyInInsert
-        ? [...baseColumns, "partner_dedupe_key"]
+        ? [...baseColumns, COLUNA_CHAVE_DEDUPLICACAO_SOCIO]
         : [...baseColumns];
       return buildPartnersChunkInsertSql({
         insertColumns,
@@ -248,8 +264,8 @@ export function buildMaterializationChunkQuery(input: {
     }
     case "companies":
       return buildChunkInsertSql({
-        stagingTable: "staging_companies",
-        targetTable: "companies",
+        stagingTable: TABELA_STAGING_EMPRESAS,
+        targetTable: TABELA_EMPRESAS,
         insertColumns: baseColumns,
         selectColumns: baseColumns,
         conflictClause: useConflictClause
@@ -265,7 +281,7 @@ export function buildMaterializationChunkQuery(input: {
     case "establishments": {
       const insertColumns = input.schemaCapabilities
         .includeEstablishmentCnpjFullInInsert
-        ? [...baseColumns, "cnpj_full"]
+        ? [...baseColumns, COLUNA_CNPJ_COMPLETO]
         : [...baseColumns];
       return buildEstablishmentsChunkInsertSql({
         insertColumns,
@@ -285,8 +301,8 @@ export function buildMaterializationChunkQuery(input: {
     }
     case "simples_options":
       return buildChunkInsertSql({
-        stagingTable: "staging_simples_options",
-        targetTable: "simples_options",
+        stagingTable: TABELA_STAGING_SIMPLES,
+        targetTable: TABELA_SIMPLES,
         insertColumns: baseColumns,
         selectColumns: baseColumns,
         conflictClause: useConflictClause

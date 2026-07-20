@@ -11,14 +11,14 @@ export function registerExtractCommands(program: Command): void {
     .command("extract")
     .argument(
       "<input>",
-      "Path to the root directory that contains the Receita Federal ZIP archives.",
+      "Caminho do diretório raiz que contém os arquivos ZIP da Receita Federal.",
     )
     .option(
       "--output <path>",
-      'Optional extracted output directory. Defaults to "<input>/extracted".',
+      'Diretório de saída da extração (opcional). Padrão: "<input>/extracted".',
     )
     .description(
-      "Extract every ZIP archive found inside the provided input directory.",
+      "Extrai todos os arquivos ZIP encontrados dentro do diretório de entrada informado.",
     )
     .action(async (input: string, options: { output?: string }) => {
       const progress = createExtractionProgressReporter();

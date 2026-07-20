@@ -1,14 +1,14 @@
 # CLI
 
-## Public command surface
+## Superfície pública de comandos
 
 ```bash
-cnpj-db-loader federal-revenue check [reference] [--reference <yyyy-mm>] [--current]
-cnpj-db-loader federal-revenue download [reference] [--reference <yyyy-mm>] [--current] [--output <path>] [--retries <number>] [--overwrite] [-f]
-cnpj-db-loader federal-revenue status [reference] [--reference <yyyy-mm>] [--current] [--output <path>]
-cnpj-db-loader federal-revenue retry [reference] [--reference <yyyy-mm>] [--current] [--output <path>] [--retries <number>] [--overwrite] [-f]
-cnpj-db-loader federal-revenue clean [reference] [--reference <yyyy-mm>] [--current] [--output <path>] [--partials | --failed | --all] [-f]
-cnpj-db-loader federal-revenue sync [reference] [--reference <yyyy-mm>] [--current] [--output <path>] [--extract-output <path>] [--sanitize-output <path>] [--db-url <url>] [--dataset <name>] [--load-batch-size <size>] [--materialize-batch-size <size>] [--verbose-progress] [--force-lock] [-f]
+cnpj-db-loader rfb check [reference] [--reference <yyyy-mm>] [--current]
+cnpj-db-loader rfb download [reference] [--reference <yyyy-mm>] [--current] [--output <path>] [--retries <number>] [--overwrite] [-f]
+cnpj-db-loader rfb status [reference] [--reference <yyyy-mm>] [--current] [--output <path>]
+cnpj-db-loader rfb retry [reference] [--reference <yyyy-mm>] [--current] [--output <path>] [--retries <number>] [--overwrite] [-f]
+cnpj-db-loader rfb clean [reference] [--reference <yyyy-mm>] [--current] [--output <path>] [--partials | --failed | --all] [-f]
+cnpj-db-loader rfb sync [reference] [--reference <yyyy-mm>] [--current] [--output <path>] [--extract-output <path>] [--sanitize-output <path>] [--db-url <url>] [--dataset <name>] [--load-batch-size <size>] [--materialize-batch-size <size>] [--verbose-progress] [--force-lock] [-f]
 cnpj-db-loader inspect <input>
 cnpj-db-loader extract <input> [--output <path>]
 cnpj-db-loader validate <input>
@@ -32,15 +32,15 @@ cnpj-db-loader quarantine list [--dataset <name>] [--category <name>] [--stage <
 cnpj-db-loader quarantine show <id> [--db-url <url>]
 ```
 
-## Design notes
+## Notas de design
 
-- The public CLI stays intentionally small, but the import workflow now exposes split phases for automation.
-- `import` runs the whole pipeline, while `import load` and `import materialize` keep staging and final consolidation independently runnable.
-- Placeholder commands are not exposed.
-- Positional arguments are preferred when they make commands easier to type.
-- Destructive database maintenance actions ask for confirmation unless `--force` is provided.
+- A CLI pública é mantida intencionalmente pequena, mas o fluxo de importação agora expõe fases divididas para automação.
+- `import` executa o pipeline inteiro, enquanto `import load` e `import materialize` mantêm o staging e a consolidação final executáveis de forma independente.
+- Comandos de placeholder não são expostos.
+- Argumentos posicionais são preferidos quando tornam os comandos mais fáceis de digitar.
+- As ações destrutivas de manutenção do banco pedem confirmação, a menos que `--force` seja informado.
 
-- `federal-revenue` (alias `revenue`) is additive: it only automates the remote monthly CNPJ download phase and then reuses the existing extract, validate, sanitize, and import services.
-- Federal Revenue downloads keep completed files by default and write incomplete transfers as `.part` files until the file is fully validated.
-- `status`, `retry`, and `clean` use the local reference manifest so a future external runner can inspect and resume the workflow without duplicating loader rules.
-- `sync` creates a local lock file to prevent two full sync operations from using the same reference folder at the same time.
+- `rfb` (alias `revenue`; o antigo `federal-revenue` continua como alias depreciado) é aditivo: automatiza apenas a fase de download mensal remoto de CNPJ e depois reutiliza os serviços existentes de extract, validate, sanitize e import.
+- Os downloads da Receita Federal mantêm os arquivos completos por padrão e gravam as transferências incompletas como arquivos `.part` até o arquivo ser totalmente validado.
+- `status`, `retry` e `clean` usam o manifesto local de referência para que um futuro runner externo possa inspecionar e retomar o fluxo sem duplicar as regras do loader.
+- `sync` cria um arquivo de lock local para impedir que duas operações de sync completo usem a mesma pasta de referência ao mesmo tempo.

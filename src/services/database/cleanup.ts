@@ -7,6 +7,13 @@ import { ensureMaterializationCheckpointTable } from "../import/materialization-
 import { ensureImportPlanTables } from "../import/plan-store.js";
 import { resetStagingTablesForFreshPlan } from "../import/staging-schema.js";
 import { isImportDatasetType, maskDatabaseLabel } from "../import/types.js";
+import {
+  TABELA_EMPRESAS,
+  TABELA_ESTABELECIMENTO_CNAES_SECUNDARIOS,
+  TABELA_ESTABELECIMENTOS,
+  TABELA_SIMPLES,
+  TABELA_SOCIOS,
+} from "../schema/table-names.js";
 
 export type DatabaseCleanupScope =
   | "staging"
@@ -34,16 +41,19 @@ const MATERIALIZED_DATASET_TABLES: Readonly<
   Partial<Record<ImportDatasetType, readonly string[]>>
 > = {
   companies: [
-    "simples_options",
-    "partners",
-    "establishment_secondary_cnaes",
-    "establishments",
-    "companies",
+    TABELA_SIMPLES,
+    TABELA_SOCIOS,
+    TABELA_ESTABELECIMENTO_CNAES_SECUNDARIOS,
+    TABELA_ESTABELECIMENTOS,
+    TABELA_EMPRESAS,
   ],
-  establishments: ["establishment_secondary_cnaes", "establishments"],
-  partners: ["partners"],
-  simples_options: ["simples_options"],
-} as const;
+  establishments: [
+    TABELA_ESTABELECIMENTO_CNAES_SECUNDARIOS,
+    TABELA_ESTABELECIMENTOS,
+  ],
+  partners: [TABELA_SOCIOS],
+  simples_options: [TABELA_SIMPLES],
+};
 
 function assertSupportedCleanupDataset(
   dataset: string | undefined,
@@ -54,7 +64,7 @@ function assertSupportedCleanupDataset(
   }
 
   if (!isImportDatasetType(dataset)) {
-    throw new ValidationError(`Unsupported dataset type: ${dataset}.`);
+    throw new ValidationError(`Tipo de dataset não suportado: ${dataset}.`);
   }
 
   if (scopes.includes("staging") || scopes.includes("materialized")) {
@@ -63,7 +73,7 @@ function assertSupportedCleanupDataset(
     ) as ImportDatasetType[];
     if (!supported.includes(dataset)) {
       throw new ValidationError(
-        `Dataset ${dataset} is not supported for this cleanup scope. Supported datasets: ${supported.join(", ")}.`,
+        `O dataset ${dataset} não é suportado para este escopo de limpeza. Datasets suportados: ${supported.join(", ")}.`,
       );
     }
   }
@@ -139,10 +149,11 @@ async function deleteLoadCheckpoints(
   await ensureCheckpointTable(client);
 
   const result = dataset
-    ? await client.query(`delete from import_checkpoints where dataset = $1`, [
-        dataset,
-      ])
-    : await client.query(`delete from import_checkpoints`);
+    ? await client.query(
+        `delete from checkpoints_importacao where conjunto = $1`,
+        [dataset],
+      )
+    : await client.query(`delete from checkpoints_importacao`);
 
   return result.rowCount ?? 0;
 }
@@ -163,16 +174,16 @@ async function resolvePlanIdsForCleanup(
 
   if (!input.validatedPath) {
     const result = await client.query<{ id: string }>(
-      `select id from import_plans order by id asc`,
+      `select id from planos_importacao order by id asc`,
     );
     return result.rows.map((row) => Number.parseInt(row.id, 10));
   }
 
   const result = await client.query<{ id: string }>(
     `select id
-       from import_plans
-      where validated_path = $1
-        and target_database = $2
+       from planos_importacao
+      where caminho_validado = $1
+        and banco_destino = $2
       order by id asc`,
     [input.validatedPath, input.targetDatabase],
   );
@@ -198,17 +209,17 @@ async function deleteMaterializationCheckpoints(
 
   if (input.dataset) {
     const result = await client.query(
-      `delete from import_materialization_checkpoints
-        where plan_id = any($1::bigint[])
-          and dataset = $2`,
+      `delete from checkpoints_materializacao
+        where plano_id = any($1::bigint[])
+          and conjunto = $2`,
       [planIds, input.dataset],
     );
     return result.rowCount ?? 0;
   }
 
   const result = await client.query(
-    `delete from import_materialization_checkpoints
-      where plan_id = any($1::bigint[])`,
+    `delete from checkpoints_materializacao
+      where plano_id = any($1::bigint[])`,
     [planIds],
   );
   return result.rowCount ?? 0;
@@ -226,7 +237,7 @@ async function deleteImportPlans(
 
   if (input.planId !== undefined) {
     const result = await client.query(
-      `delete from import_plans where id = $1`,
+      `delete from planos_importacao where id = $1`,
       [input.planId],
     );
     return result.rowCount ?? 0;
@@ -234,15 +245,15 @@ async function deleteImportPlans(
 
   if (input.validatedPath) {
     const result = await client.query(
-      `delete from import_plans
-        where validated_path = $1
-          and target_database = $2`,
+      `delete from planos_importacao
+        where caminho_validado = $1
+          and banco_destino = $2`,
       [input.validatedPath, input.targetDatabase],
     );
     return result.rowCount ?? 0;
   }
 
-  const result = await client.query(`delete from import_plans`);
+  const result = await client.query(`delete from planos_importacao`);
   return result.rowCount ?? 0;
 }
 
@@ -332,7 +343,7 @@ export async function cleanupDatabaseCheckpoints(
   assertSupportedCleanupDataset(input.dataset, []);
 
   if (input.planId !== undefined && input.planId <= 0) {
-    throw new ValidationError("The plan id must be a positive integer.");
+    throw new ValidationError("O id do plano deve ser um inteiro positivo.");
   }
 
   const targetDatabase = maskDatabaseLabel(input.dbUrl);
@@ -384,7 +395,7 @@ export async function cleanupDatabasePlans(
   },
 ): Promise<DatabaseCleanupSummary> {
   if (input.planId !== undefined && input.planId <= 0) {
-    throw new ValidationError("The plan id must be a positive integer.");
+    throw new ValidationError("O id do plano deve ser um inteiro positivo.");
   }
 
   const targetDatabase = maskDatabaseLabel(input.dbUrl);

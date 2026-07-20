@@ -1,5 +1,6 @@
 import { Client } from "pg";
 
+import { NOMES_TABELAS_LOOKUP } from "../schema/table-names.js";
 import type {
   ImportDatasetType,
   LookupCacheMap,
@@ -12,15 +13,15 @@ export async function loadLookupCaches(
 ): Promise<LookupCacheMap> {
   const cache: LookupCacheMap = new Map();
 
-  for (const tableName of LOOKUP_TABLES) {
-    const result = await client.query<{ code: string | null }>(
-      `select code from ${tableName}`,
+  for (const lookupKey of LOOKUP_TABLES) {
+    const result = await client.query<{ codigo: string | null }>(
+      `select codigo from ${NOMES_TABELAS_LOOKUP[lookupKey]}`,
     );
     cache.set(
-      tableName,
+      lookupKey,
       new Set(
         result.rows
-          .map((row) => row.code?.trim())
+          .map((row) => row.codigo?.trim())
           .filter((value): value is string => Boolean(value)),
       ),
     );
@@ -32,11 +33,11 @@ export async function loadLookupCaches(
 async function ensureLookupCodes(
   client: Client,
   cache: LookupCacheMap,
-  tableName: LookupTableName,
+  lookupKey: LookupTableName,
   rawCodes: Array<unknown>,
 ): Promise<void> {
-  const knownCodes = cache.get(tableName) ?? new Set<string>();
-  cache.set(tableName, knownCodes);
+  const knownCodes = cache.get(lookupKey) ?? new Set<string>();
+  cache.set(lookupKey, knownCodes);
 
   const missingCodes = [
     ...new Set(
@@ -56,13 +57,13 @@ async function ensureLookupCodes(
   const placeholders: string[] = [];
 
   for (const [index, code] of missingCodes.entries()) {
-    values.push(code, `${LOOKUP_PLACEHOLDER_LABEL[tableName]} (${code})`);
+    values.push(code, `${LOOKUP_PLACEHOLDER_LABEL[lookupKey]} (${code})`);
     const baseIndex = index * 2;
     placeholders.push(`($${baseIndex + 1}, $${baseIndex + 2})`);
   }
 
   await client.query(
-    `insert into ${tableName} (code, description) values ${placeholders.join(", ")} on conflict (code) do nothing`,
+    `insert into ${NOMES_TABELAS_LOOKUP[lookupKey]} (codigo, descricao) values ${placeholders.join(", ")} on conflict (codigo) do nothing`,
     values,
   );
 
@@ -93,19 +94,19 @@ export async function ensureBatchForeignKeys(
         client,
         cache,
         "legal_natures",
-        columnValues("legal_nature_code"),
+        columnValues("codigo_natureza_juridica"),
       );
       await ensureLookupCodes(
         client,
         cache,
         "partner_qualifications",
-        columnValues("responsible_qualification_code"),
+        columnValues("codigo_qualificacao_responsavel"),
       );
       await ensureLookupCodes(
         client,
         cache,
         "company_sizes",
-        columnValues("company_size_code"),
+        columnValues("codigo_porte_empresa"),
       );
       break;
     case "establishments":
@@ -113,37 +114,37 @@ export async function ensureBatchForeignKeys(
         client,
         cache,
         "branch_types",
-        columnValues("branch_type_code"),
+        columnValues("identificador_matriz_filial"),
       );
       await ensureLookupCodes(
         client,
         cache,
         "registration_statuses",
-        columnValues("registration_status_code"),
+        columnValues("situacao_cadastral"),
       );
       await ensureLookupCodes(
         client,
         cache,
         "reasons",
-        columnValues("registration_status_reason_code"),
+        columnValues("motivo_situacao_cadastral"),
       );
       await ensureLookupCodes(
         client,
         cache,
         "countries",
-        columnValues("country_code"),
+        columnValues("codigo_pais"),
       );
       await ensureLookupCodes(
         client,
         cache,
         "cnaes",
-        columnValues("main_cnae_code"),
+        columnValues("cnae_fiscal_principal"),
       );
       await ensureLookupCodes(
         client,
         cache,
         "cities",
-        columnValues("city_code"),
+        columnValues("codigo_municipio"),
       );
       break;
     case "partners":
@@ -151,31 +152,31 @@ export async function ensureBatchForeignKeys(
         client,
         cache,
         "partner_types",
-        columnValues("partner_type_code"),
+        columnValues("identificador_socio"),
       );
       await ensureLookupCodes(
         client,
         cache,
         "partner_qualifications",
-        columnValues("partner_qualification_code"),
+        columnValues("codigo_qualificacao_socio"),
       );
       await ensureLookupCodes(
         client,
         cache,
         "countries",
-        columnValues("country_code"),
+        columnValues("codigo_pais"),
       );
       await ensureLookupCodes(
         client,
         cache,
         "partner_qualifications",
-        columnValues("legal_representative_qualification_code"),
+        columnValues("codigo_qualificacao_representante_legal"),
       );
       await ensureLookupCodes(
         client,
         cache,
         "age_groups",
-        columnValues("age_group_code"),
+        columnValues("codigo_faixa_etaria"),
       );
       break;
     default:

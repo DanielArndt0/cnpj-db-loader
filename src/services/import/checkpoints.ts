@@ -1,5 +1,6 @@
 import { Client } from "pg";
 
+import { TABELA_CHECKPOINTS_IMPORTACAO } from "../schema/table-names.js";
 import { ensureTableShape } from "./schema-validation.js";
 import type {
   ImportCheckpointRecord,
@@ -9,20 +10,20 @@ import type {
 
 export async function ensureCheckpointTable(client: Client): Promise<void> {
   await ensureTableShape(client, {
-    tableName: "import_checkpoints",
+    tableName: TABELA_CHECKPOINTS_IMPORTACAO,
     requiredColumns: [
-      "dataset",
-      "file_path",
-      "file_size",
-      "file_mtime",
-      "byte_offset",
-      "rows_committed",
+      "conjunto",
+      "caminho_arquivo",
+      "tamanho_arquivo",
+      "modificado_em",
+      "deslocamento_bytes",
+      "linhas_confirmadas",
       "status",
-      "last_error",
-      "updated_at",
+      "ultimo_erro",
+      "atualizado_em",
     ],
     helpMessage:
-      'The import checkpoint schema is required. Run "cnpj-db-loader schema generate --profile full" and apply the SQL before importing.',
+      'O schema de checkpoint de importação é obrigatório. Rode "cnpj-db-loader schema generate --profile full" e aplique o SQL antes de importar.',
   });
 }
 
@@ -34,16 +35,16 @@ export async function readCheckpoint(
   fileMtime: Date,
 ): Promise<ImportCheckpointRecord> {
   const existing = await client.query<{
-    file_size: string;
-    file_mtime: Date;
-    byte_offset: string;
-    rows_committed: string;
+    tamanho_arquivo: string;
+    modificado_em: Date;
+    deslocamento_bytes: string;
+    linhas_confirmadas: string;
     status: ImportCheckpointStatus;
-    last_error: string | null;
+    ultimo_erro: string | null;
   }>(
-    `select file_size, file_mtime, byte_offset, rows_committed, status, last_error
-       from import_checkpoints
-      where dataset = $1 and file_path = $2`,
+    `select tamanho_arquivo, modificado_em, deslocamento_bytes, linhas_confirmadas, status, ultimo_erro
+       from ${TABELA_CHECKPOINTS_IMPORTACAO}
+      where conjunto = $1 and caminho_arquivo = $2`,
     [dataset, filePath],
   );
 
@@ -66,12 +67,12 @@ export async function readCheckpoint(
   const checkpoint: ImportCheckpointRecord = {
     dataset,
     filePath,
-    fileSize: Number.parseInt(row.file_size, 10),
-    fileMtime: new Date(row.file_mtime),
-    byteOffset: Number.parseInt(row.byte_offset, 10),
-    rowsCommitted: Number.parseInt(row.rows_committed, 10),
+    fileSize: Number.parseInt(row.tamanho_arquivo, 10),
+    fileMtime: new Date(row.modificado_em),
+    byteOffset: Number.parseInt(row.deslocamento_bytes, 10),
+    rowsCommitted: Number.parseInt(row.linhas_confirmadas, 10),
     status: row.status,
-    lastError: row.last_error,
+    lastError: row.ultimo_erro,
   };
 
   const sameMetadata =
@@ -90,26 +91,26 @@ export async function writeCheckpoint(
   checkpoint: ImportCheckpointRecord,
 ): Promise<void> {
   await client.query(
-    `insert into import_checkpoints (
-        dataset,
-        file_path,
-        file_size,
-        file_mtime,
-        byte_offset,
-        rows_committed,
+    `insert into ${TABELA_CHECKPOINTS_IMPORTACAO} (
+        conjunto,
+        caminho_arquivo,
+        tamanho_arquivo,
+        modificado_em,
+        deslocamento_bytes,
+        linhas_confirmadas,
         status,
-        last_error,
-        updated_at
+        ultimo_erro,
+        atualizado_em
       ) values ($1, $2, $3, $4, $5, $6, $7, $8, now())
-      on conflict (dataset, file_path)
+      on conflict (conjunto, caminho_arquivo)
       do update set
-        file_size = excluded.file_size,
-        file_mtime = excluded.file_mtime,
-        byte_offset = excluded.byte_offset,
-        rows_committed = excluded.rows_committed,
+        tamanho_arquivo = excluded.tamanho_arquivo,
+        modificado_em = excluded.modificado_em,
+        deslocamento_bytes = excluded.deslocamento_bytes,
+        linhas_confirmadas = excluded.linhas_confirmadas,
         status = excluded.status,
-        last_error = excluded.last_error,
-        updated_at = now()`,
+        ultimo_erro = excluded.ultimo_erro,
+        atualizado_em = now()`,
     [
       checkpoint.dataset,
       checkpoint.filePath,

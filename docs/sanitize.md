@@ -1,46 +1,46 @@
-# Sanitize
+# Sanitização
 
-## Purpose
+## Objetivo
 
-`sanitize` prepares a normalized dataset tree before PostgreSQL import.
+`sanitize` prepara uma árvore de dataset normalizada antes da importação no PostgreSQL.
 
-Receita Federal source files can use the legacy `ISO-8859-1` encoding. The command now normalizes source bytes before any downstream text parsing:
+Os arquivos de origem da Receita Federal podem usar o encoding legado `ISO-8859-1`. O comando normaliza os bytes de origem antes de qualquer parsing de texto posterior:
 
 ```txt
-raw extracted file
-  -> byte stream
-  -> remove NUL bytes (0x00)
-  -> decode source encoding
-  -> encode as UTF-8
-  -> write temporary UTF-8 file
-  -> validate normalized output
-  -> replace destination file only after validation succeeds
+arquivo extraído bruto
+  -> stream de bytes
+  -> remove bytes NUL (0x00)
+  -> decodifica o encoding de origem
+  -> codifica como UTF-8
+  -> grava arquivo UTF-8 temporário
+  -> valida a saída normalizada
+  -> substitui o arquivo de destino apenas após a validação ser bem-sucedida
 ```
 
-This prevents accented Portuguese characters from being persisted incorrectly before import.
+Isso evita que caracteres acentuados do português sejam persistidos incorretamente antes da importação.
 
-## Command
+## Comando
 
 ```bash
 cnpj-db-loader sanitize <input>
 ```
 
-## Options
+## Opções
 
-| Option                         | Description                                                                                                                         |
-| ------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------- |
-| `--output <path>`              | Custom output directory for the sanitized dataset tree.                                                                             |
-| `--dataset <name>`             | Sanitize only one dataset block, such as `establishments` or `companies`.                                                           |
-| `--source-encoding <encoding>` | Source file encoding used while reading Receita files. Defaults to `LATIN1` (`ISO-8859-1`). Supported: `LATIN1`, `WIN1252`, `UTF8`. |
-| `--allow-replacement-chars`    | Allow Unicode replacement characters (`�`) in output instead of failing validation. Use only for manual inspection.                 |
-| `-f, --force`                  | Skip the confirmation prompt.                                                                                                       |
+| Opção                          | Descrição                                                                                                                                      |
+| ------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------- |
+| `--output <path>`              | Diretório de saída personalizado para a árvore de dataset sanitizado.                                                                          |
+| `--dataset <name>`             | Sanitiza apenas um bloco de dataset, como `establishments` ou `companies`.                                                                     |
+| `--source-encoding <encoding>` | Encoding dos arquivos de origem usado ao ler os arquivos da Receita. Padrão: `LATIN1` (`ISO-8859-1`). Suportados: `LATIN1`, `WIN1252`, `UTF8`. |
+| `--allow-replacement-chars`    | Permite caracteres de substituição Unicode (`�`) na saída em vez de falhar a validação. Use apenas para inspeção manual.                       |
+| `-f, --force`                  | Pula a confirmação interativa.                                                                                                                 |
 
-## Default output behavior
+## Comportamento padrão de saída
 
-- when the validated path is `.../extracted`, the default sanitized output is `.../sanitized`;
-- otherwise the default output is `<validated-path>-sanitized`.
+- quando o caminho validado é `.../extracted`, a saída sanitizada padrão é `.../sanitized`;
+- caso contrário, a saída padrão é `<caminho-validado>-sanitized`.
 
-## Recommended standard flow
+## Fluxo padrão recomendado
 
 ```bash
 cnpj-db-loader inspect ./downloads
@@ -50,9 +50,9 @@ cnpj-db-loader sanitize ./downloads/extracted
 cnpj-db-loader import ./downloads/sanitized --load-batch-size 500 --materialize-batch-size 50000 --verbose-progress
 ```
 
-## Recommended hybrid PostgreSQL flow
+## Fluxo híbrido PostgreSQL recomendado
 
-Sanitized files are validated UTF-8 output, so the direct PostgreSQL script should use `UTF8` as the source encoding.
+Os arquivos sanitizados são saída UTF-8 validada, então o script direto do PostgreSQL deve usar `UTF8` como encoding de origem.
 
 ```bash
 cnpj-db-loader sanitize ./downloads/extracted --output ./downloads/sanitized --force
@@ -60,50 +60,50 @@ cnpj-db-loader postgres generate-script ./downloads/sanitized --output ./downloa
 psql -d "postgres://postgres:postgres@localhost:5432/cnpj" -f ./downloads/postgres-direct/import-postgres-direct.sql
 ```
 
-## Safe normalization behavior
+## Comportamento de normalização segura
 
-The sanitization pipeline:
+O pipeline de sanitização:
 
-- processes large files as streams instead of loading them fully into memory;
-- removes NUL bytes at byte level before decoding;
-- defaults to decoding Receita source files as `ISO-8859-1`;
-- writes UTF-8 output to a temporary file;
-- validates the temporary output before replacing the destination file;
-- preserves a previously valid destination file when normalization or validation fails;
-- rejects Unicode replacement characters (`�`) by default instead of silently removing them;
-- reports source encoding, removed NUL bytes, removed control characters and replacement-character metrics.
+- processa arquivos grandes como streams, em vez de carregá-los inteiramente na memória;
+- remove bytes NUL em nível de byte antes de decodificar;
+- usa `ISO-8859-1` como padrão para decodificar os arquivos de origem da Receita;
+- grava a saída UTF-8 em um arquivo temporário;
+- valida a saída temporária antes de substituir o arquivo de destino;
+- preserva um arquivo de destino previamente válido quando a normalização ou a validação falha;
+- rejeita caracteres de substituição Unicode (`�`) por padrão, em vez de removê-los silenciosamente;
+- informa o encoding de origem, os bytes NUL removidos, os caracteres de controle removidos e as métricas de caracteres de substituição.
 
-## Encoding notes
+## Notas sobre encoding
 
-The default source encoding is `LATIN1`, which maps to `ISO-8859-1` and matches the Receita files validated during development.
+O encoding de origem padrão é `LATIN1`, que corresponde a `ISO-8859-1` e aos arquivos da Receita validados durante o desenvolvimento.
 
-Use `WIN1252` only when processing a source tree that is known to use Windows-1252:
+Use `WIN1252` apenas ao processar uma árvore de origem que comprovadamente usa Windows-1252:
 
 ```bash
 cnpj-db-loader sanitize ./downloads/extracted --source-encoding WIN1252 --output ./downloads/sanitized --force
 ```
 
-Use `UTF8` only when the input tree is already valid UTF-8:
+Use `UTF8` apenas quando a árvore de entrada já for UTF-8 válido:
 
 ```bash
 cnpj-db-loader sanitize ./downloads/extracted --source-encoding UTF8 --output ./downloads/sanitized --force
 ```
 
-## Replacement-character validation
+## Validação de caracteres de substituição
 
-The visible character:
+O caractere visível:
 
 ```txt
 �
 ```
 
-is the Unicode replacement character. Once it has replaced an original accented character and the corrupted content has been persisted, the original value cannot be reliably recovered from that file alone.
+é o caractere de substituição Unicode. Uma vez que ele tenha substituído um caractere acentuado original e o conteúdo corrompido tenha sido persistido, o valor original não pode ser recuperado de forma confiável apenas a partir daquele arquivo.
 
-For this reason, sanitization fails by default if replacement characters remain in normalized output. The optional `--allow-replacement-chars` flag exists only for controlled manual inspection and should not be used in normal import flows.
+Por esse motivo, a sanitização falha por padrão se restarem caracteres de substituição na saída normalizada. A flag opcional `--allow-replacement-chars` existe apenas para inspeção manual controlada e não deve ser usada em fluxos normais de importação.
 
-## Notes
+## Notas
 
-- `sanitize` does not replace dataset-tree validation;
-- `sanitize` preserves file names and relative paths so existing import logic can keep detecting datasets by name;
-- row-level business inconsistencies that survive normalization remain handled by the existing import quarantine flow;
-- no database schema changes are required to use `sanitize`.
+- `sanitize` não substitui a validação da árvore de dataset;
+- `sanitize` preserva os nomes de arquivo e os caminhos relativos para que a lógica de importação existente continue detectando os datasets pelo nome;
+- inconsistências de negócio em nível de linha que sobrevivem à normalização continuam tratadas pelo fluxo de quarentena de importação existente;
+- nenhuma alteração de schema de banco é necessária para usar `sanitize`.

@@ -26,29 +26,29 @@ function buildWhereClause(filters: QuarantineStatsFilters): WhereClause {
   };
 
   if (filters.dataset) {
-    pushCondition("dataset = $VALUE$", filters.dataset);
+    pushCondition("conjunto = $VALUE$", filters.dataset);
   }
 
   if (filters.category) {
-    pushCondition("coalesce(error_category, '') = $VALUE$", filters.category);
+    pushCondition("coalesce(categoria_erro, '') = $VALUE$", filters.category);
   }
 
   if (filters.stage) {
-    pushCondition("coalesce(error_stage, '') = $VALUE$", filters.stage);
+    pushCondition("coalesce(etapa_erro, '') = $VALUE$", filters.stage);
   }
 
   if (filters.retryable && filters.terminal) {
     throw new ValidationError(
-      'Use either "--retryable" or "--terminal", but not both together.',
+      'Use "--retryable" ou "--terminal", mas não os dois juntos.',
     );
   }
 
   if (filters.retryable) {
-    conditions.push("can_retry_later = true");
+    conditions.push("pode_tentar_novamente = true");
   }
 
   if (filters.terminal) {
-    conditions.push("can_retry_later = false");
+    conditions.push("pode_tentar_novamente = false");
   }
 
   return {
@@ -76,36 +76,36 @@ export async function readQuarantineStats(
   const totalRowsResult = await client.query(
     `select
        count(*)::bigint as total_rows,
-       count(*) filter (where can_retry_later = true)::bigint as retryable_rows,
-       count(*) filter (where can_retry_later = false)::bigint as terminal_rows
-     from import_quarantine
+       count(*) filter (where pode_tentar_novamente = true)::bigint as retryable_rows,
+       count(*) filter (where pode_tentar_novamente = false)::bigint as terminal_rows
+     from quarentena_importacao
      ${where.sql}`,
     where.values,
   );
 
   const rowsByDatasetResult = await client.query(
-    `select dataset, count(*)::bigint as count
-     from import_quarantine
+    `select conjunto as dataset, count(*)::bigint as count
+     from quarentena_importacao
      ${where.sql}
-     group by dataset
-     order by count desc, dataset asc`,
+     group by conjunto
+     order by count desc, conjunto asc`,
     where.values,
   );
 
   const rowsByCategoryResult = await client.query(
-    `select coalesce(error_category, 'unknown') as error_category, count(*)::bigint as count
-     from import_quarantine
+    `select coalesce(categoria_erro, 'unknown') as error_category, count(*)::bigint as count
+     from quarentena_importacao
      ${where.sql}
-     group by coalesce(error_category, 'unknown')
+     group by coalesce(categoria_erro, 'unknown')
      order by count desc, error_category asc`,
     where.values,
   );
 
   const rowsByStageResult = await client.query(
-    `select coalesce(error_stage, 'unknown') as error_stage, count(*)::bigint as count
-     from import_quarantine
+    `select coalesce(etapa_erro, 'unknown') as error_stage, count(*)::bigint as count
+     from quarentena_importacao
      ${where.sql}
-     group by coalesce(error_stage, 'unknown')
+     group by coalesce(etapa_erro, 'unknown')
      order by count desc, error_stage asc`,
     where.values,
   );
@@ -140,18 +140,18 @@ export async function readQuarantineList(
 
   const query = `select
       id,
-      dataset,
-      file_path,
-      row_number,
-      checkpoint_offset,
-      error_code,
-      error_category,
-      error_stage,
-      error_message,
-      retry_count,
-      can_retry_later,
-      created_at
-    from import_quarantine
+      conjunto as dataset,
+      caminho_arquivo as file_path,
+      numero_linha as row_number,
+      deslocamento_checkpoint as checkpoint_offset,
+      codigo_erro as error_code,
+      categoria_erro as error_category,
+      etapa_erro as error_stage,
+      mensagem_erro as error_message,
+      total_tentativas as retry_count,
+      pode_tentar_novamente as can_retry_later,
+      criado_em as created_at
+    from quarentena_importacao
     ${conditions.length > 0 ? `where ${conditions.join(" and ")}` : ""}
     order by id asc
     limit $${values.length}`;
@@ -191,21 +191,21 @@ export async function readQuarantineRecordById(
   const result = await client.query(
     `select
        id,
-       dataset,
-       file_path,
-       row_number,
-       checkpoint_offset,
-       error_code,
-       error_category,
-       error_stage,
-       error_message,
-       raw_line,
-       parsed_payload,
-       sanitizations_applied,
-       retry_count,
-       can_retry_later,
-       created_at
-     from import_quarantine
+       conjunto as dataset,
+       caminho_arquivo as file_path,
+       numero_linha as row_number,
+       deslocamento_checkpoint as checkpoint_offset,
+       codigo_erro as error_code,
+       categoria_erro as error_category,
+       etapa_erro as error_stage,
+       mensagem_erro as error_message,
+       linha_bruta as raw_line,
+       payload_parseado as parsed_payload,
+       sanitizacoes_aplicadas as sanitizations_applied,
+       total_tentativas as retry_count,
+       pode_tentar_novamente as can_retry_later,
+       criado_em as created_at
+     from quarentena_importacao
      where id = $1`,
     [id],
   );

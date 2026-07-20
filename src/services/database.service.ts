@@ -23,7 +23,7 @@ export async function resolveDatabaseUrl(override?: string): Promise<string> {
 
   if (!config.defaultDbUrl) {
     throw new ValidationError(
-      'No database connection is configured. Use "cnpj-db-loader database config set <postgres-url>" or pass "--db-url".',
+      'Nenhuma conexão de banco está configurada. Use "cnpj-db-loader database config set <postgres-url>" ou passe "--db-url".',
     );
   }
 
@@ -37,7 +37,7 @@ export async function testDatabaseConnection(url: string): Promise<void> {
     await client.connect();
     await client.query("select 1");
   } catch (error) {
-    throw new ServiceError("The PostgreSQL connection test failed.", error);
+    throw new ServiceError("O teste de conexão PostgreSQL falhou.", error);
   } finally {
     await client.end().catch(() => undefined);
   }
@@ -53,7 +53,7 @@ async function withDatabaseClient<T>(
   try {
     return await operation(client);
   } catch (error) {
-    throw new ServiceError("The database maintenance operation failed.", error);
+    throw new ServiceError("A operação de manutenção do banco falhou.", error);
   } finally {
     await client.end().catch(() => undefined);
   }
@@ -103,7 +103,7 @@ export async function cleanupDatabaseCheckpointsData(
   const phase = options.phase ?? "all";
   if (!["load", "materialization", "all"].includes(phase)) {
     throw new ValidationError(
-      `Unsupported checkpoint cleanup phase: ${phase}. Use load, materialization, or all.`,
+      `Fase de limpeza de checkpoint não suportada: ${phase}. Use load, materialization ou all.`,
     );
   }
 

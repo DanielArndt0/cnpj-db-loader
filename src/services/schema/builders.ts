@@ -32,9 +32,9 @@ function createSchemaBody(profile: SchemaProfile): string[] {
 
 function createSchemaHeader(profile: SchemaProfile): string[] {
   return [
-    "-- CNPJ DB Loader PostgreSQL schema",
-    `-- Profile: ${profile}`,
-    "-- Generated from the internal Receita Federal model.",
+    "-- Esquema PostgreSQL do CNPJ DB Loader",
+    `-- Perfil: ${profile}`,
+    "-- Gerado a partir do modelo interno da Receita Federal.",
     "begin;",
   ];
 }

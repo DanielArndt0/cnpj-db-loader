@@ -35,7 +35,7 @@ export function normalizeSanitizeSourceEncoding(
       return "UTF8";
     default:
       throw new ValidationError(
-        `Unsupported sanitize source encoding: ${value}. Supported values: WIN1252, LATIN1, UTF8.`,
+        `Encoding de origem de sanitização não suportado: ${value}. Valores suportados: WIN1252, LATIN1, UTF8.`,
       );
   }
 }

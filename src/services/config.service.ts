@@ -48,14 +48,17 @@ export function assertPostgresUrl(url: string): void {
   try {
     parsed = new URL(url);
   } catch {
-    throw new ValidationError("The provided database URL is not a valid URL.", {
-      url,
-    });
+    throw new ValidationError(
+      "A URL de banco informada não é uma URL válida.",
+      {
+        url,
+      },
+    );
   }
 
   if (!["postgres:", "postgresql:"].includes(parsed.protocol)) {
     throw new ValidationError(
-      "The database URL must use the postgres or postgresql protocol.",
+      "A URL de banco deve usar o protocolo postgres ou postgresql.",
       { url },
     );
   }
@@ -67,11 +70,11 @@ function assertHttpUrl(url: string, label: string): void {
   try {
     parsed = new URL(url);
   } catch {
-    throw new ValidationError(`${label} is not a valid URL.`, { url });
+    throw new ValidationError(`${label} não é uma URL válida.`, { url });
   }
 
   if (!["http:", "https:"].includes(parsed.protocol)) {
-    throw new ValidationError(`${label} must use the http or https protocol.`, {
+    throw new ValidationError(`${label} deve usar o protocolo http ou https.`, {
       url,
     });
   }
@@ -80,7 +83,7 @@ function assertHttpUrl(url: string, label: string): void {
 function assertNonEmpty(value: string, label: string): string {
   const trimmed = value.trim();
   if (!trimmed) {
-    throw new ValidationError(`${label} cannot be empty.`);
+    throw new ValidationError(`${label} não pode ser vazio.`);
   }
 
   return trimmed;
@@ -108,7 +111,7 @@ function normalizeFederalRevenueConfigKey(
   }
 
   throw new ValidationError(
-    `Unknown Federal Revenue config key: ${key}. Expected share-token, webdav-url, or user-agent.`,
+    `Chave de configuração da Receita Federal desconhecida: ${key}. Esperado share-token, webdav-url ou user-agent.`,
   );
 }
 

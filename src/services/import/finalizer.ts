@@ -121,13 +121,13 @@ export function buildImportPerformanceSummary(input: {
 
 export function buildImportWarnings(): string[] {
   return [
-    "The importer uses exact file planning, checkpointed batch commits, and byte-offset resume. If a load unit fails, rerunning the same command resumes from the last committed checkpoint instead of restarting the full load.",
-    "Import plans are persisted in the database and reused for the same validated input, source files, and load batch size so resumed imports do not recount rows unnecessarily.",
-    "Large datasets now land in lightweight staging tables through PostgreSQL COPY with only light normalization on the write hot path. Materialization into the simplified final schema keeps the first load focused on fast persistence instead of eager relational enrichment.",
-    "When a new import plan starts, the selected staging tables are truncated before loading so staged bulk loads stay clean and predictable. Resumed plans keep the staged rows that already match the saved checkpoints.",
-    "Rows that fail parsing, normalization, COPY fallback, or row-level inserts are moved to import_quarantine and the import continues from the next row.",
-    "The import summary includes baseline timing and throughput metrics for scan, execution, staging writes, materialization, retry, and quarantine paths so future performance changes can be measured against a stable reference.",
-    "The load batch size defines the staging load unit size, while the materialization batch size defines how many staged rows each consolidation chunk processes before saving a materialization checkpoint.",
+    "O importador usa planejamento exato de arquivos, commits de lote com checkpoint e retomada por deslocamento de bytes. Se uma unidade de carga falha, reexecutar o mesmo comando retoma a partir do último checkpoint confirmado, em vez de reiniciar a carga completa.",
+    "Os planos de importação são persistidos no banco e reutilizados para a mesma entrada validada, os mesmos arquivos de origem e o mesmo tamanho de lote de carga, de modo que importações retomadas não recontam linhas desnecessariamente.",
+    "Grandes datasets agora chegam a tabelas de staging leves via COPY do PostgreSQL, com apenas normalização leve no hot path de escrita. A materialização no schema final simplificado mantém a primeira carga focada em persistência rápida, em vez de enriquecimento relacional antecipado.",
+    "Quando um novo plano de importação começa, as tabelas de staging selecionadas são truncadas antes da carga, para que as cargas em massa de staging fiquem limpas e previsíveis. Planos retomados mantêm as linhas de staging que já correspondem aos checkpoints salvos.",
+    "Linhas que falham no parsing, na normalização, no fallback de COPY ou nos inserts linha a linha são movidas para quarentena_importacao e a importação continua a partir da linha seguinte.",
+    "O resumo da importação inclui métricas de tempo e vazão de referência para os caminhos de varredura, execução, escrita de staging, materialização, retry e quarentena, para que mudanças futuras de desempenho possam ser medidas contra uma referência estável.",
+    "O tamanho do lote de carga define o tamanho da unidade de carga de staging, enquanto o tamanho do lote de materialização define quantas linhas de staging cada bloco de consolidação processa antes de salvar um checkpoint de materialização.",
   ];
 }
 

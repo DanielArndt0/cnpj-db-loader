@@ -59,12 +59,12 @@ function summarizeUnknownEntries(unknownEntries: FileInspection[]): string[] {
   ];
 
   for (const item of preview) {
-    warnings.push(`Unrecognized file: ${item}`);
+    warnings.push(`Arquivo não reconhecido: ${item}`);
   }
 
   if (unknownEntries.length > preview.length) {
     warnings.push(
-      `Additional unrecognized files were omitted from the terminal output. Check the log file for the complete list.`,
+      `Arquivos não reconhecidos adicionais foram omitidos da saída do terminal. Verifique o arquivo de log para a lista completa.`,
     );
   }
 
@@ -134,7 +134,7 @@ function inferNextStep(summary: {
   }
 
   if (!summary.ok && summary.missingDatasets.length > 0) {
-    return `Review the extracted files and ensure all expected dataset blocks are present.`;
+    return `Revise os arquivos extraídos e garanta que todos os blocos de dataset esperados estejam presentes.`;
   }
 
   if (summary.ok) {
@@ -181,7 +181,7 @@ export async function validateInputDirectory(
 
   if (inspected.detectedInputMode === "zip-archives-only") {
     warnings.push(
-      `No extracted dataset tree was found in ${inspected.inputPath}. Extraction is required before validation can check dataset completeness.`,
+      `Nenhuma árvore de dataset extraído foi encontrada em ${inspected.inputPath}. A extração é necessária antes que a validação possa checar a completude do dataset.`,
     );
   } else {
     if (presentDatasets.length === 0) {
@@ -202,7 +202,7 @@ export async function validateInputDirectory(
       missingDatasets.length === 0
     ) {
       warnings.push(
-        `A valid extracted dataset tree was found at ${selected.validatedPath}. ZIP archives are also present in the parent directory, but extraction does not need to be run again.`,
+        `Uma árvore de dataset extraído válida foi encontrada em ${selected.validatedPath}. Também há arquivos ZIP no diretório pai, mas não é necessário rodar a extração novamente.`,
       );
     }
   }

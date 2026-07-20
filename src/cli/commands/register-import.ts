@@ -79,45 +79,45 @@ async function confirmImportAction(
 
 function registerSharedOptions(command: Command): Command {
   return command
-    .option("--db-url <url>", "Override the default PostgreSQL connection URL.")
+    .option("--db-url <url>", "Sobrescreve a URL de conexão PostgreSQL padrão.")
     .option(
       "--dataset <dataset>",
-      "Process only one validated dataset block (for example: companies or cnaes).",
+      "Processa apenas um bloco de dataset validado (por exemplo: companies ou cnaes).",
     )
     .option(
       "--load-batch-size <size>",
-      "Maximum number of source rows per staging load unit. Defaults to 500.",
+      "Número máximo de linhas de origem por unidade de carga de staging. Padrão: 500.",
       (value) => Number.parseInt(value, 10),
     )
     .option(
       "--materialize-batch-size <size>",
-      "Maximum number of staged rows per materialization chunk. Defaults to 50000.",
+      "Número máximo de linhas de staging por bloco de materialização. Padrão: 50000.",
       (value) => Number.parseInt(value, 10),
     )
     .option(
       "--verbose-progress",
-      "Show checkpoint offset and batch details in the live progress output.",
+      "Mostra o deslocamento de checkpoint e detalhes de lote no progresso ao vivo.",
     )
-    .option("-f, --force", "Skip the confirmation prompt.");
+    .option("-f, --force", "Pula a confirmação interativa.");
 }
 
 export function registerImportCommands(program: Command): void {
   const importCommand = registerSharedOptions(
     program
       .command("import")
-      .argument("<input>", "Path to the extracted or mixed input directory.")
+      .argument("<input>", "Caminho do diretório de entrada extraído ou misto.")
       .description(
-        "Run the full import pipeline: prepare, load into staging/final targets, materialize staged datasets, and finalize the import plan.",
+        "Executa o pipeline completo de importação: prepara, carrega nos alvos de staging/final, materializa os datasets de staging e finaliza o plano de importação.",
       ),
   );
 
   importCommand.action(async (input: string, options: SharedOptions) => {
     const confirmed = await confirmImportAction(
-      `Run the full import pipeline for ${input}? This command loads staging tables and materializes the final relational tables.`,
+      `Executar o pipeline completo de importação para ${input}? Este comando carrega as tabelas de staging e materializa as tabelas relacionais finais.`,
       options.force,
     );
     if (!confirmed) {
-      console.log("Import cancelled.");
+      console.log("Importação cancelada.");
       return;
     }
 
@@ -133,17 +133,17 @@ export function registerImportCommands(program: Command): void {
   registerSharedOptions(
     importCommand
       .command("load")
-      .argument("<input>", "Path to the extracted or mixed input directory.")
+      .argument("<input>", "Caminho do diretório de entrada extraído ou misto.")
       .description(
-        "Prepare the import plan and load validated files into staging or direct final targets without running final materialization.",
+        "Prepara o plano de importação e carrega os arquivos validados nos alvos de staging ou finais diretos, sem executar a materialização final.",
       ),
   ).action(async (input: string, options: SharedOptions) => {
     const confirmed = await confirmImportAction(
-      `Load sanitized datasets from ${input} into staging/final targets now? This does not run final materialization.`,
+      `Carregar agora os datasets sanitizados de ${input} nos alvos de staging/final? Isto não executa a materialização final.`,
       options.force,
     );
     if (!confirmed) {
-      console.log("Load cancelled.");
+      console.log("Carga cancelada.");
       return;
     }
 
@@ -159,17 +159,17 @@ export function registerImportCommands(program: Command): void {
   registerSharedOptions(
     importCommand
       .command("materialize")
-      .argument("<input>", "Path to the extracted or mixed input directory.")
+      .argument("<input>", "Caminho do diretório de entrada extraído ou misto.")
       .description(
-        "Resume from the saved import plan and materialize staged datasets into the final relational tables.",
+        "Retoma o plano de importação salvo e materializa os datasets de staging nas tabelas relacionais finais.",
       ),
   ).action(async (input: string, options: SharedOptions) => {
     const confirmed = await confirmImportAction(
-      `Materialize staged datasets for ${input} into the final relational tables now?`,
+      `Materializar agora os datasets de staging de ${input} nas tabelas relacionais finais?`,
       options.force,
     );
     if (!confirmed) {
-      console.log("Materialization cancelled.");
+      console.log("Materialização cancelada.");
       return;
     }
 

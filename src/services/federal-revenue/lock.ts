@@ -66,7 +66,7 @@ export async function withFederalRevenueSyncLock<T>(
   } catch {
     const existingLock = await readLock(lockPath);
     throw new ValidationError(
-      `Federal Revenue sync is already running for ${existingLock?.reference ?? input.reference}. Use --force-lock only if the previous process is no longer active.`,
+      `O sync da Receita Federal já está em execução para ${existingLock?.reference ?? input.reference}. Use --force-lock apenas se o processo anterior não estiver mais ativo.`,
       {
         lockPath,
         pid: existingLock?.pid,

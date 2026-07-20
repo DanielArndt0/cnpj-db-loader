@@ -258,27 +258,29 @@ export async function inspectFiles(inputPath: string): Promise<InspectSummary> {
       );
 
       if (!expectedPrefixFound) {
-        warnings.push(`Expected ZIP dataset block not found: ${expectedType}.`);
+        warnings.push(
+          `Bloco de dataset ZIP esperado não encontrado: ${expectedType}.`,
+        );
       }
     }
 
     if (zipArchivesFound > 0) {
       warnings.push(
-        `Input contains ${zipArchivesFound} ZIP archive(s). Extract them before running validation on the dataset contents.`,
+        `A entrada contém ${zipArchivesFound} arquivo(s) ZIP. Extraia-os antes de rodar a validação sobre o conteúdo do dataset.`,
       );
     }
   } else {
     for (const expectedType of DATASET_TYPES) {
       if (!entries.some((entry) => entry.inferredType === expectedType)) {
         warnings.push(
-          `Expected extracted dataset block not found: ${expectedType}.`,
+          `Bloco de dataset extraído esperado não encontrado: ${expectedType}.`,
         );
       }
     }
 
     if (detectedInputMode === "mixed") {
       warnings.push(
-        "Input contains both ZIP archives and extracted content. Consider using a clean extracted directory.",
+        "A entrada contém tanto arquivos ZIP quanto conteúdo extraído. Considere usar um diretório extraído limpo.",
       );
     }
   }

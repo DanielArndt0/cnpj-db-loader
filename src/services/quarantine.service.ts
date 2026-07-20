@@ -33,7 +33,7 @@ async function withQuarantineClient<T>(
     }
 
     throw new ServiceError(
-      "The quarantine command failed while querying PostgreSQL.",
+      "O comando de quarentena falhou ao consultar o PostgreSQL.",
       error,
     );
   } finally {
@@ -54,7 +54,7 @@ export async function listQuarantineRows(
 ): Promise<QuarantineListSummary> {
   if (!Number.isInteger(filters.limit) || filters.limit <= 0) {
     throw new ValidationError(
-      'The "--limit" option must be a positive integer.',
+      'A opção "--limit" deve ser um inteiro positivo.',
     );
   }
 
@@ -63,7 +63,7 @@ export async function listQuarantineRows(
     (!Number.isInteger(filters.afterId) || filters.afterId < 0)
   ) {
     throw new ValidationError(
-      'The "--after-id" option must be a non-negative integer.',
+      'A opção "--after-id" deve ser um inteiro não negativo.',
     );
   }
 
@@ -78,7 +78,7 @@ export async function showQuarantineRow(
 ): Promise<QuarantineRecord> {
   if (!Number.isInteger(id) || id <= 0) {
     throw new ValidationError(
-      "The quarantine row id must be a positive integer.",
+      "O id da linha de quarentena deve ser um inteiro positivo.",
     );
   }
 
@@ -87,7 +87,9 @@ export async function showQuarantineRow(
   );
 
   if (!record) {
-    throw new ValidationError(`No quarantine row was found with id ${id}.`);
+    throw new ValidationError(
+      `Nenhuma linha de quarentena foi encontrada com o id ${id}.`,
+    );
   }
 
   return record;

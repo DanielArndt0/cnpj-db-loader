@@ -45,16 +45,16 @@ export function registerSchemaCommands(program: Command): void {
   const schema = program
     .command("schema")
     .description(
-      "Print or generate PostgreSQL schemas for simplified final-load, staging, or combined profiles.",
+      "Imprime ou gera schemas PostgreSQL para os perfis de carga final simplificada, staging ou combinado.",
     );
 
   schema
     .command("print")
     .option(
       "--profile <profile>",
-      "Schema profile to print: full, final, or staging. The final profile is simplified for fast materialization. Defaults to full.",
+      "Perfil de schema a imprimir: full, final ou staging. O perfil final é simplificado para materialização rápida. Padrão: full.",
     )
-    .description("Print the generated SQL schema to stdout.")
+    .description("Imprime o schema SQL gerado no stdout.")
     .action((options: SchemaCommandOptions) => {
       const profile = resolveSchemaProfile(options.profile);
       console.log(generateSchemaSql({ profile }));
@@ -64,17 +64,17 @@ export function registerSchemaCommands(program: Command): void {
     .command("generate")
     .option(
       "--name <name>",
-      "Output file name without needing to type the .sql suffix.",
+      "Nome do arquivo de saída, sem precisar digitar o sufixo .sql.",
     )
     .option(
       "--output <path>",
-      "Output directory. Defaults to the current working directory.",
+      "Diretório de saída. Padrão: o diretório de trabalho atual.",
     )
     .option(
       "--profile <profile>",
-      "Schema profile to generate: full, final, or staging. The final profile is simplified for fast materialization. Defaults to full.",
+      "Perfil de schema a gerar: full, final ou staging. O perfil final é simplificado para materialização rápida. Padrão: full.",
     )
-    .description("Generate the SQL schema file from the internal model.")
+    .description("Gera o arquivo de schema SQL a partir do modelo interno.")
     .action(async (options: SchemaCommandOptions) => {
       const profile = resolveSchemaProfile(options.profile);
       const targetPath = resolveSchemaOutputPath(
@@ -83,6 +83,6 @@ export function registerSchemaCommands(program: Command): void {
         options.output,
       );
       await writeSchemaFile(targetPath, { profile });
-      console.log(`Schema file written to ${targetPath}`);
+      console.log(`Arquivo de schema gravado em ${targetPath}`);
     });
 }

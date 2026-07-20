@@ -25,9 +25,7 @@ function appendProcessOutput(current: string, chunk: Buffer): string {
 
 function describeFailure(stdout: string, stderr: string): string {
   const details = `${stderr}\n${stdout}`.trim();
-  return details.length > 0
-    ? details
-    : "7-Zip extraction failed without output.";
+  return details.length > 0 ? details : "A extração 7-Zip falhou sem saída.";
 }
 
 export async function extractArchiveWithSevenZip(

@@ -15,17 +15,19 @@ import {
 export function registerQuarantineCommands(program: Command): void {
   const quarantine = program
     .command("quarantine")
-    .description("Inspect and analyze rows stored in 'import_quarantine'.");
+    .description(
+      "Inspeciona e analisa as linhas armazenadas em 'quarentena_importacao'.",
+    );
 
   quarantine
     .command("stats")
-    .option("--db-url <url>", "Override the default PostgreSQL connection URL.")
-    .option("--dataset <dataset>", "Filter by dataset name.")
-    .option("--category <category>", "Filter by error category.")
-    .option("--stage <stage>", "Filter by error stage.")
-    .option("--retryable", "Show only retryable quarantine rows.")
-    .option("--terminal", "Show only terminal quarantine rows.")
-    .description("Show aggregate statistics for import_quarantine.")
+    .option("--db-url <url>", "Sobrescreve a URL de conexão PostgreSQL padrão.")
+    .option("--dataset <dataset>", "Filtra pelo nome do dataset.")
+    .option("--category <category>", "Filtra pela categoria de erro.")
+    .option("--stage <stage>", "Filtra pela etapa de erro.")
+    .option("--retryable", "Mostra apenas linhas de quarentena reprocessáveis.")
+    .option("--terminal", "Mostra apenas linhas de quarentena terminais.")
+    .description("Mostra estatísticas agregadas de quarentena_importacao.")
     .action(
       async (options: {
         dbUrl?: string;
@@ -43,24 +45,24 @@ export function registerQuarantineCommands(program: Command): void {
 
   quarantine
     .command("list")
-    .option("--db-url <url>", "Override the default PostgreSQL connection URL.")
-    .option("--dataset <dataset>", "Filter by dataset name.")
-    .option("--category <category>", "Filter by error category.")
-    .option("--stage <stage>", "Filter by error stage.")
-    .option("--retryable", "Show only retryable quarantine rows.")
-    .option("--terminal", "Show only terminal quarantine rows.")
+    .option("--db-url <url>", "Sobrescreve a URL de conexão PostgreSQL padrão.")
+    .option("--dataset <dataset>", "Filtra pelo nome do dataset.")
+    .option("--category <category>", "Filtra pela categoria de erro.")
+    .option("--stage <stage>", "Filtra pela etapa de erro.")
+    .option("--retryable", "Mostra apenas linhas de quarentena reprocessáveis.")
+    .option("--terminal", "Mostra apenas linhas de quarentena terminais.")
     .option(
       "--limit <number>",
-      "Limit the number of returned rows. Defaults to 20.",
+      "Limita o número de linhas retornadas. Padrão: 20.",
       (value) => Number.parseInt(value, 10),
       20,
     )
     .option(
       "--after-id <number>",
-      "Return rows strictly after the provided quarantine id.",
+      "Retorna as linhas estritamente após o id de quarentena informado.",
       (value) => Number.parseInt(value, 10),
     )
-    .description("List rows from import_quarantine with optional filters.")
+    .description("Lista linhas de quarentena_importacao com filtros opcionais.")
     .action(
       async (options: {
         dbUrl?: string;
@@ -80,9 +82,9 @@ export function registerQuarantineCommands(program: Command): void {
 
   quarantine
     .command("show")
-    .argument("<id>", "Quarantine row id to inspect.")
-    .option("--db-url <url>", "Override the default PostgreSQL connection URL.")
-    .description("Show one quarantined row in detail.")
+    .argument("<id>", "Id da linha de quarentena a inspecionar.")
+    .option("--db-url <url>", "Sobrescreve a URL de conexão PostgreSQL padrão.")
+    .description("Mostra em detalhe uma linha em quarentena.")
     .action(async (id: string, options: { dbUrl?: string }) => {
       const record = await showQuarantineRow(Number.parseInt(id, 10), options);
       const logFilePath = await writeCommandLog("quarantine-show", record);

@@ -32,7 +32,7 @@ export type {
 
 function validateRequestedDataset(dataset: string | undefined): void {
   if (dataset && !isImportDatasetType(dataset)) {
-    throw new ValidationError(`Unsupported dataset type: ${dataset}.`);
+    throw new ValidationError(`Tipo de dataset não suportado: ${dataset}.`);
   }
 }
 
@@ -52,7 +52,7 @@ async function prepareImportInput(
   const validation = await validateInputDirectory(inputPath);
   if (!validation.ok) {
     throw new ValidationError(
-      `The input directory is not ready for import. ${validation.errors.join(" ")}`,
+      `O diretório de entrada não está pronto para importação. ${validation.errors.join(" ")}`,
     );
   }
 

@@ -1,18 +1,12 @@
+import {
+  NOMES_TABELAS_DATASET,
+  NOMES_TABELAS_STAGING,
+} from "../schema/table-names.js";
 import type { ImportDatasetType, ImportWriteTarget } from "./types.js";
 
-export const STAGED_IMPORT_DATASETS: ReadonlySet<ImportDatasetType> = new Set([
-  "companies",
-  "establishments",
-  "partners",
-  "simples_options",
-]);
-
-const STAGING_TABLE_BY_DATASET: Partial<Record<ImportDatasetType, string>> = {
-  companies: "staging_companies",
-  establishments: "staging_establishments",
-  partners: "staging_partners",
-  simples_options: "staging_simples_options",
-};
+export const STAGED_IMPORT_DATASETS: ReadonlySet<ImportDatasetType> = new Set(
+  Object.keys(NOMES_TABELAS_STAGING) as ImportDatasetType[],
+);
 
 export function usesStagingWriteTarget(dataset: ImportDatasetType): boolean {
   return STAGED_IMPORT_DATASETS.has(dataset);
@@ -25,7 +19,7 @@ export function resolveImportWriteTarget(
 }
 
 export function getTargetTableName(dataset: ImportDatasetType): string {
-  return STAGING_TABLE_BY_DATASET[dataset] ?? dataset;
+  return NOMES_TABELAS_STAGING[dataset] ?? NOMES_TABELAS_DATASET[dataset];
 }
 
 export function getSecondaryTargetTableName(
@@ -51,13 +45,6 @@ export function collectRequiredStagingTables(
   return [...tableNames];
 }
 
-const FINAL_TABLE_BY_DATASET: Partial<Record<ImportDatasetType, string>> = {
-  companies: "companies",
-  establishments: "establishments",
-  partners: "partners",
-  simples_options: "simples_options",
-};
-
 export function getFinalTargetTableName(dataset: ImportDatasetType): string {
-  return FINAL_TABLE_BY_DATASET[dataset] ?? dataset;
+  return NOMES_TABELAS_DATASET[dataset];
 }

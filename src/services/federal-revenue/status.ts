@@ -106,14 +106,14 @@ export async function getFederalRevenueStatus(
       isComplete: false,
       entries: [],
       warnings: [
-        "No local Federal Revenue manifest was found for this reference. Run download or sync first.",
+        "Nenhum manifesto local da Receita Federal foi encontrado para esta referência. Execute download ou sync primeiro.",
       ],
     };
   }
 
   if (manifest.reference !== selection.reference) {
     throw new ValidationError(
-      `Federal Revenue manifest mismatch: expected ${selection.reference}, found ${manifest.reference}.`,
+      `Divergência no manifesto da Receita Federal: esperado ${selection.reference}, encontrado ${manifest.reference}.`,
       { outputPath, manifestPath },
     );
   }
@@ -146,7 +146,7 @@ export async function getFederalRevenueStatus(
 
   if (failedFiles > 0 || partialFiles > 0 || missingFiles > 0) {
     warnings.push(
-      "The local Federal Revenue reference is not complete. Use retry to resume incomplete or failed files.",
+      "A referência local da Receita Federal não está completa. Use retry para retomar os arquivos incompletos ou falhos.",
     );
   }
 

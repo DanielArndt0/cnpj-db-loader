@@ -38,5 +38,5 @@ export const APP_CONFIG: AppConfig = {
   environment: (process.env.APP_ENV ??
     "development") as AppConfig["environment"],
   description:
-    "CLI for inspecting, extracting, validating, and importing Brazilian Federal Revenue CNPJ datasets.",
+    "CLI para inspecionar, extrair, validar e importar os conjuntos de dados públicos de CNPJ da Receita Federal.",
 };

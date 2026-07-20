@@ -5,6 +5,18 @@ import type { Client } from "pg";
 import { ValidationError } from "../../core/errors/index.js";
 import { appendJsonLinesLog } from "../logging.service.js";
 import {
+  COLUNA_CNPJ_COMPLETO,
+  COLUNA_CODIGO_CNAE,
+  TABELA_ARQUIVOS_PLANO_IMPORTACAO,
+  TABELA_ESTABELECIMENTO_CNAES_SECUNDARIOS,
+  TABELA_ESTABELECIMENTOS,
+  TABELA_QUARENTENA_IMPORTACAO,
+  TABELA_STAGING_EMPRESAS,
+  TABELA_STAGING_ESTABELECIMENTOS,
+  TABELA_STAGING_SIMPLES,
+  TABELA_STAGING_SOCIOS,
+} from "../schema/table-names.js";
+import {
   readMaterializationCheckpoint,
   writeMaterializationCheckpoint,
   writeMaterializationCheckpointProgress,
@@ -42,10 +54,10 @@ const EXACT_TARGET_COUNT_DATASETS: ReadonlySet<MaterializationDataset> =
   new Set(["companies", "establishments", "simples_options"]);
 
 const STAGING_TABLE_BY_DATASET: Record<MaterializationDataset, string> = {
-  companies: "staging_companies",
-  establishments: "staging_establishments",
-  simples_options: "staging_simples_options",
-  partners: "staging_partners",
+  companies: TABELA_STAGING_EMPRESAS,
+  establishments: TABELA_STAGING_ESTABELECIMENTOS,
+  simples_options: TABELA_STAGING_SIMPLES,
+  partners: TABELA_STAGING_SOCIOS,
 };
 
 type ChunkRow = {
@@ -209,14 +221,14 @@ async function readQuarantinedRowCountForPlan(input: {
   const result = await input.client.query<QuarantineCountRow>(
     `select count(*)::bigint as quarantined_rows
        from (
-         select distinct q.file_path, q.row_number
-           from import_quarantine q
-           inner join import_plan_files pf
-             on pf.plan_id = $1
-            and pf.dataset = q.dataset
-            and pf.file_path = q.file_path
-          where q.dataset = $2
-            and q.row_number is not null
+         select distinct q.caminho_arquivo, q.numero_linha
+           from ${TABELA_QUARENTENA_IMPORTACAO} q
+           inner join ${TABELA_ARQUIVOS_PLANO_IMPORTACAO} pf
+             on pf.plano_id = $1
+            and pf.conjunto = q.conjunto
+            and pf.caminho_arquivo = q.caminho_arquivo
+          where q.conjunto = $2
+            and q.numero_linha is not null
        ) quarantined`,
     [input.planId, input.dataset],
   );
@@ -230,10 +242,10 @@ function buildEmptyStagingMessage(
   expectedRows: number | undefined,
 ): string {
   if (typeof expectedRows === "number" && expectedRows > 0) {
-    return `The staging table ${stagingTable} is empty, but ${expectedRows} row(s) are expected for ${dataset} based on the saved load checkpoints. Run "cnpj-db-loader import load" again or clear stale checkpoint data before materializing.`;
+    return `A tabela de staging ${stagingTable} está vazia, mas ${expectedRows} linha(s) são esperadas para ${dataset} com base nos checkpoints de carga salvos. Rode "cnpj-db-loader import load" novamente ou limpe os checkpoints obsoletos antes de materializar.`;
   }
 
-  return `The staging table ${stagingTable} is empty for ${dataset}. Load the dataset into staging before running materialization.`;
+  return `A tabela de staging ${stagingTable} está vazia para ${dataset}. Carregue o conjunto no staging antes de rodar a materialização.`;
 }
 
 function buildStagingMismatchMessage(
@@ -242,7 +254,7 @@ function buildStagingMismatchMessage(
   expectedRows: number,
   actualRows: number,
 ): string {
-  return `The staging table ${stagingTable} currently contains ${actualRows} row(s), but ${expectedRows} row(s) are expected for ${dataset} based on the saved load checkpoints. The saved staging state no longer matches the persisted load progress. Reload staging or clear the stale checkpoint data before retrying materialization.`;
+  return `A tabela de staging ${stagingTable} contém ${actualRows} linha(s), mas ${expectedRows} linha(s) são esperadas para ${dataset} com base nos checkpoints de carga salvos. O estado de staging salvo não corresponde mais ao progresso de carga persistido. Recarregue o staging ou limpe os checkpoints obsoletos antes de repetir a materialização.`;
 }
 
 async function validateStagingDatasetState(input: {
@@ -550,7 +562,7 @@ async function readEstablishmentSecondaryCnaesCount(
   client: Client,
 ): Promise<number> {
   const result = await client.query<EstablishmentSecondaryCnaesCountRow>(
-    `select count(*)::bigint as total_count from establishment_secondary_cnaes`,
+    `select count(*)::bigint as total_count from ${TABELA_ESTABELECIMENTO_CNAES_SECUNDARIOS}`,
   );
 
   return Number.parseInt(result.rows[0]?.total_count ?? "0", 10);
@@ -562,9 +574,9 @@ async function hasEstablishmentsWithSecondaryCnaes(
   const result = await client.query<EstablishmentSecondaryCnaesExistsRow>(
     `select exists (
        select 1
-         from establishments
-        where secondary_cnaes_raw is not null
-          and secondary_cnaes_raw <> ''
+         from ${TABELA_ESTABELECIMENTOS}
+        where cnae_fiscal_secundaria_raw is not null
+          and cnae_fiscal_secundaria_raw <> ''
         limit 1
      ) as exists`,
   );
@@ -588,24 +600,24 @@ async function backfillEstablishmentSecondaryCnaesFromFinal(input: {
 
   const startedAt = performance.now();
   const result = await input.client.query(
-    `insert into establishment_secondary_cnaes (cnpj_full, cnae_code)
+    `insert into ${TABELA_ESTABELECIMENTO_CNAES_SECUNDARIOS} (${COLUNA_CNPJ_COMPLETO}, ${COLUNA_CODIGO_CNAE})
      select distinct
-       e.cnpj_full,
-       btrim(cnae_code) as cnae_code
-     from establishments e
+       e.${COLUNA_CNPJ_COMPLETO},
+       btrim(codigo_cnae) as ${COLUNA_CODIGO_CNAE}
+     from ${TABELA_ESTABELECIMENTOS} e
      cross join lateral unnest(
-       string_to_array(e.secondary_cnaes_raw, ',')
-     ) as cnae_code
-     where e.secondary_cnaes_raw is not null
-       and e.secondary_cnaes_raw <> ''
-       and btrim(cnae_code) <> ''
-     on conflict (cnpj_full, cnae_code) do nothing`,
+       string_to_array(e.cnae_fiscal_secundaria_raw, ',')
+     ) as codigo_cnae
+     where e.cnae_fiscal_secundaria_raw is not null
+       and e.cnae_fiscal_secundaria_raw <> ''
+       and btrim(codigo_cnae) <> ''
+     on conflict (${COLUNA_CNPJ_COMPLETO}, ${COLUNA_CODIGO_CNAE}) do nothing`,
   );
 
   const insertedRows = result.rowCount ?? 0;
   await appendJsonLinesLog(input.progressLogPath, {
     kind: "establishment_secondary_cnaes_backfilled",
-    targetTable: "establishment_secondary_cnaes",
+    targetTable: TABELA_ESTABELECIMENTO_CNAES_SECUNDARIOS,
     insertedRows,
     durationMs: performance.now() - startedAt,
     timestamp: new Date().toISOString(),

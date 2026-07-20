@@ -5,6 +5,12 @@ import {
   simplesLayout,
 } from "../../dictionary/layouts/index.js";
 import { createColumnSql } from "./shared.js";
+import {
+  TABELA_STAGING_EMPRESAS,
+  TABELA_STAGING_ESTABELECIMENTOS,
+  TABELA_STAGING_SIMPLES,
+  TABELA_STAGING_SOCIOS,
+} from "./table-names.js";
 
 function createUnloggedStagingTableSql(
   tableName: string,
@@ -20,35 +26,35 @@ function createUnloggedStagingTableSql(
 
 export function createStagingCompaniesSql(): string {
   return createUnloggedStagingTableSql(
-    "staging_companies",
+    TABELA_STAGING_EMPRESAS,
     companiesLayout.fields.map(createColumnSql).join(",\n"),
   );
 }
 
 export function createStagingEstablishmentsSql(): string {
   return createUnloggedStagingTableSql(
-    "staging_establishments",
+    TABELA_STAGING_ESTABELECIMENTOS,
     establishmentsLayout.fields.map(createColumnSql).join(",\n"),
   );
 }
 
 export function createStagingPartnersSql(): string {
   return createUnloggedStagingTableSql(
-    "staging_partners",
+    TABELA_STAGING_SOCIOS,
     partnersLayout.fields.map(createColumnSql).join(",\n"),
   );
 }
 
 export function createStagingSimplesSql(): string {
   return createUnloggedStagingTableSql(
-    "staging_simples_options",
+    TABELA_STAGING_SIMPLES,
     simplesLayout.fields.map(createColumnSql).join(",\n"),
   );
 }
 
 export function createStagingSchemaParts(): string[] {
   return [
-    "-- Staging tables for bulk-oriented imports",
+    "-- Tabelas de staging para importações em massa",
     createStagingCompaniesSql(),
     createStagingEstablishmentsSql(),
     createStagingPartnersSql(),

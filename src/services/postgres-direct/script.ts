@@ -10,6 +10,7 @@ import {
 import type { FieldDefinition } from "../../dictionary/layouts/index.js";
 import type { ImportDatasetType } from "../import/types.js";
 import { DATASET_LAYOUTS } from "../import/types.js";
+import { NOMES_TABELAS_DATASET } from "../schema/table-names.js";
 import type {
   PostgresCsvFile,
   PostgresDirectIncludeTarget,
@@ -55,10 +56,10 @@ const DOMAIN_DATASETS: readonly ImportDatasetType[] = [
 ];
 
 const STAGING_TABLE_BY_DATASET: Partial<Record<ImportDatasetType, string>> = {
-  companies: "staging_companies",
-  establishments: "staging_establishments",
-  partners: "staging_partners",
-  simples_options: "staging_simples_options",
+  companies: "staging_empresas",
+  establishments: "staging_estabelecimentos",
+  partners: "staging_socios",
+  simples_options: "staging_simples",
 };
 
 const STEP_ORDER = [
@@ -119,24 +120,24 @@ function updateAssignments(
   return columns
     .filter((column) => !excludedColumns.includes(column))
     .map((column) => `${column} = excluded.${column}`)
-    .concat(["updated_at = now()"])
+    .concat(["atualizado_em = now()"])
     .join(",\n  ");
 }
 
 function partnerDedupeExpression(alias: string): string {
   return [
     "md5(",
-    `  coalesce(${alias}.cnpj_root, '') || '|' ||`,
-    `  coalesce(${alias}.partner_type_code, '') || '|' ||`,
-    `  coalesce(${alias}.partner_name, '') || '|' ||`,
-    `  coalesce(${alias}.partner_document, '') || '|' ||`,
-    `  coalesce(${alias}.partner_qualification_code, '') || '|' ||`,
-    `  coalesce((${alias}.entry_date - date '2000-01-01')::text, '') || '|' ||`,
-    `  coalesce(${alias}.country_code, '') || '|' ||`,
-    `  coalesce(${alias}.legal_representative_document, '') || '|' ||`,
-    `  coalesce(${alias}.legal_representative_name, '') || '|' ||`,
-    `  coalesce(${alias}.legal_representative_qualification_code, '') || '|' ||`,
-    `  coalesce(${alias}.age_group_code, '')`,
+    `  coalesce(${alias}.cnpj_basico, '') || '|' ||`,
+    `  coalesce(${alias}.identificador_socio, '') || '|' ||`,
+    `  coalesce(${alias}.nome_socio_razao_social, '') || '|' ||`,
+    `  coalesce(${alias}.cnpj_cpf_socio, '') || '|' ||`,
+    `  coalesce(${alias}.codigo_qualificacao_socio, '') || '|' ||`,
+    `  coalesce((${alias}.data_entrada_sociedade - date '2000-01-01')::text, '') || '|' ||`,
+    `  coalesce(${alias}.codigo_pais, '') || '|' ||`,
+    `  coalesce(${alias}.cpf_representante_legal, '') || '|' ||`,
+    `  coalesce(${alias}.nome_representante_legal, '') || '|' ||`,
+    `  coalesce(${alias}.codigo_qualificacao_representante_legal, '') || '|' ||`,
+    `  coalesce(${alias}.codigo_faixa_etaria, '')`,
     ")",
   ].join("\n");
 }
@@ -145,22 +146,22 @@ function materializeCompaniesSql(): string {
   const columns = companiesLayout.fields.map((field) => field.columnName);
 
   return [
-    echo("[materialize] Materializing companies..."),
+    echo("[materialize] Materializando empresas..."),
     "with source as (",
     "  select",
     `    ${columns.map((column) => `source.${column}`).join(",\n    ")},`,
-    "    row_number() over (partition by source.cnpj_root order by source.staging_id desc) as dedupe_rank",
-    "  from staging_companies source",
+    "    row_number() over (partition by source.cnpj_basico order by source.staging_id desc) as dedupe_rank",
+    "  from staging_empresas source",
     "),",
     "deduped as (",
     "  select * from source where dedupe_rank = 1",
     ")",
-    `insert into companies (${columns.join(", ")})`,
+    `insert into empresas (${columns.join(", ")})`,
     `select ${columns.join(", ")}`,
     "from deduped",
-    "on conflict (cnpj_root) do update set",
-    `  ${updateAssignments(columns, ["cnpj_root"])};`,
-    echo("[materialize] Companies materialization completed."),
+    "on conflict (cnpj_basico) do update set",
+    `  ${updateAssignments(columns, ["cnpj_basico"])};`,
+    echo("[materialize] Materialização de empresas concluída."),
   ].join("\n");
 }
 
@@ -168,97 +169,97 @@ function materializeEstablishmentsSql(): string {
   const baseColumns = establishmentsLayout.fields.map(
     (field) => field.columnName,
   );
-  const insertColumns = [...baseColumns, "cnpj_full"];
+  const insertColumns = [...baseColumns, "cnpj_completo"];
 
   return [
-    echo("[materialize] Materializing establishments..."),
+    echo("[materialize] Materializando estabelecimentos..."),
     "with source as (",
     "  select",
     `    ${baseColumns.map((column) => `source.${column}`).join(",\n    ")},`,
-    "    source.cnpj_root || source.cnpj_order || source.cnpj_check_digits as cnpj_full,",
-    "    row_number() over (partition by source.cnpj_root || source.cnpj_order || source.cnpj_check_digits order by source.staging_id desc) as dedupe_rank",
-    "  from staging_establishments source",
+    "    source.cnpj_basico || source.cnpj_ordem || source.cnpj_dv as cnpj_completo,",
+    "    row_number() over (partition by source.cnpj_basico || source.cnpj_ordem || source.cnpj_dv order by source.staging_id desc) as dedupe_rank",
+    "  from staging_estabelecimentos source",
     "),",
     "deduped as (",
     "  select * from source where dedupe_rank = 1",
     ")",
-    `insert into establishments (${insertColumns.join(", ")})`,
+    `insert into estabelecimentos (${insertColumns.join(", ")})`,
     `select ${insertColumns.join(", ")}`,
     "from deduped",
-    "on conflict (cnpj_full) do update set",
-    `  ${updateAssignments(insertColumns, ["cnpj_root", "cnpj_order", "cnpj_check_digits", "cnpj_full"])};`,
-    echo("[materialize] Establishments materialization completed."),
+    "on conflict (cnpj_completo) do update set",
+    `  ${updateAssignments(insertColumns, ["cnpj_basico", "cnpj_ordem", "cnpj_dv", "cnpj_completo"])};`,
+    echo("[materialize] Materialização de estabelecimentos concluída."),
   ].join("\n");
 }
 
 function materializeSecondaryCnaesSql(): string {
   return [
     echo(
-      "[materialize-secondary-cnaes] Materializing establishment secondary CNAEs...",
+      "[materialize-secondary-cnaes] Materializando CNAEs secundários dos estabelecimentos...",
     ),
     "with source as (",
     "  select",
-    "    staging.cnpj_root || staging.cnpj_order || staging.cnpj_check_digits as cnpj_full,",
-    "    staging.secondary_cnaes_raw,",
-    "    row_number() over (partition by staging.cnpj_root || staging.cnpj_order || staging.cnpj_check_digits order by staging.staging_id desc) as dedupe_rank",
-    "  from staging_establishments staging",
+    "    staging.cnpj_basico || staging.cnpj_ordem || staging.cnpj_dv as cnpj_completo,",
+    "    staging.cnae_fiscal_secundaria_raw,",
+    "    row_number() over (partition by staging.cnpj_basico || staging.cnpj_ordem || staging.cnpj_dv order by staging.staging_id desc) as dedupe_rank",
+    "  from staging_estabelecimentos staging",
     "),",
     "deduped as (",
     "  select * from source where dedupe_rank = 1",
     "),",
     "deleted_secondary_cnaes as (",
-    "  delete from establishment_secondary_cnaes target",
-    "  using (select cnpj_full from deduped) source_keys",
-    "  where target.cnpj_full = source_keys.cnpj_full",
+    "  delete from estabelecimento_cnaes_secundarios target",
+    "  using (select cnpj_completo from deduped) source_keys",
+    "  where target.cnpj_completo = source_keys.cnpj_completo",
     "  returning 1",
     "),",
     "secondary_cnaes_source as (",
     "  select distinct",
-    "    deduped.cnpj_full,",
-    "    btrim(cnae_code) as cnae_code",
+    "    deduped.cnpj_completo,",
+    "    btrim(codigo_cnae) as codigo_cnae",
     "  from deduped",
-    "  cross join lateral unnest(string_to_array(deduped.secondary_cnaes_raw, ',')) as cnae_code",
-    "  where deduped.secondary_cnaes_raw is not null",
-    "    and deduped.secondary_cnaes_raw <> ''",
-    "    and btrim(cnae_code) <> ''",
+    "  cross join lateral unnest(string_to_array(deduped.cnae_fiscal_secundaria_raw, ',')) as codigo_cnae",
+    "  where deduped.cnae_fiscal_secundaria_raw is not null",
+    "    and deduped.cnae_fiscal_secundaria_raw <> ''",
+    "    and btrim(codigo_cnae) <> ''",
     ")",
-    "insert into establishment_secondary_cnaes (cnpj_full, cnae_code)",
-    "select cnpj_full, cnae_code",
+    "insert into estabelecimento_cnaes_secundarios (cnpj_completo, codigo_cnae)",
+    "select cnpj_completo, codigo_cnae",
     "from secondary_cnaes_source",
-    "on conflict (cnpj_full, cnae_code) do nothing;",
+    "on conflict (cnpj_completo, codigo_cnae) do nothing;",
     echo(
-      "[materialize-secondary-cnaes] Secondary CNAEs materialization completed.",
+      "[materialize-secondary-cnaes] Materialização dos CNAEs secundários concluída.",
     ),
   ].join("\n");
 }
 
 function materializePartnersSql(): string {
   const baseColumns = partnersLayout.fields.map((field) => field.columnName);
-  const insertColumns = [...baseColumns, "partner_dedupe_key"];
+  const insertColumns = [...baseColumns, "chave_deduplicacao_socio"];
 
   return [
-    echo("[materialize] Materializing partners..."),
+    echo("[materialize] Materializando sócios..."),
     "with source as (",
     "  select",
     `    ${baseColumns.map((column) => `source.${column}`).join(",\n    ")},`,
-    `    ${partnerDedupeExpression("source")} as partner_dedupe_key`,
-    "  from staging_partners source",
+    `    ${partnerDedupeExpression("source")} as chave_deduplicacao_socio`,
+    "  from staging_socios source",
     "),",
     "ranked as (",
     "  select",
     "    source.*,",
-    "    row_number() over (partition by source.partner_dedupe_key order by source.cnpj_root asc) as dedupe_rank",
+    "    row_number() over (partition by source.chave_deduplicacao_socio order by source.cnpj_basico asc) as dedupe_rank",
     "  from source",
     "),",
     "deduped as (",
     "  select * from ranked where dedupe_rank = 1",
     ")",
-    `insert into partners (${insertColumns.join(", ")})`,
+    `insert into socios (${insertColumns.join(", ")})`,
     `select ${insertColumns.join(", ")}`,
     "from deduped",
-    "on conflict (partner_dedupe_key) do update set",
-    `  ${updateAssignments(insertColumns, ["partner_dedupe_key"])};`,
-    echo("[materialize] Partners materialization completed."),
+    "on conflict (chave_deduplicacao_socio) do update set",
+    `  ${updateAssignments(insertColumns, ["chave_deduplicacao_socio"])};`,
+    echo("[materialize] Materialização de sócios concluída."),
   ].join("\n");
 }
 
@@ -266,22 +267,22 @@ function materializeSimplesSql(): string {
   const columns = simplesLayout.fields.map((field) => field.columnName);
 
   return [
-    echo("[materialize] Materializing simples options..."),
+    echo("[materialize] Materializando opções do Simples..."),
     "with source as (",
     "  select",
     `    ${columns.map((column) => `source.${column}`).join(",\n    ")},`,
-    "    row_number() over (partition by source.cnpj_root order by source.staging_id desc) as dedupe_rank",
-    "  from staging_simples_options source",
+    "    row_number() over (partition by source.cnpj_basico order by source.staging_id desc) as dedupe_rank",
+    "  from staging_simples source",
     "),",
     "deduped as (",
     "  select * from source where dedupe_rank = 1",
     ")",
-    `insert into simples_options (${columns.join(", ")})`,
+    `insert into simples (${columns.join(", ")})`,
     `select ${columns.join(", ")}`,
     "from deduped",
-    "on conflict (cnpj_root) do update set",
-    `  ${updateAssignments(columns, ["cnpj_root"])};`,
-    echo("[materialize] Simples options materialization completed."),
+    "on conflict (cnpj_basico) do update set",
+    `  ${updateAssignments(columns, ["cnpj_basico"])};`,
+    echo("[materialize] Materialização das opções do Simples concluída."),
   ].join("\n");
 }
 
@@ -296,30 +297,30 @@ function copyDomainSql(
   const columns = datasetColumns(dataset);
   const tempTable = `tmp_hybrid_${dataset}`;
   const lines = [
-    echo(`[load-domains] Loading ${dataset} lookup data...`),
+    echo(`[load-domains] Carregando dados de domínio de ${dataset}...`),
     `drop table if exists ${tempTable};`,
-    `create temporary table ${tempTable} (code text, description text);`,
+    `create temporary table ${tempTable} (codigo text, descricao text);`,
   ];
 
   for (const [index, file] of files.entries()) {
     lines.push(
       echo(
-        `[load-domains] Loading ${dataset} file ${index + 1} of ${files.length}: ${file.relativePath}`,
+        `[load-domains] Carregando arquivo ${index + 1} de ${files.length} de ${dataset}: ${file.relativePath}`,
       ),
       csvCopyCommand(tempTable, columns, file.absolutePath),
       echo(
-        `[load-domains] Loaded ${dataset} file ${index + 1} of ${files.length}.`,
+        `[load-domains] Arquivo ${index + 1} de ${files.length} de ${dataset} carregado.`,
       ),
     );
   }
 
   lines.push(
-    `insert into ${dataset} (${columns.join(", ")})`,
-    `select distinct on (code) ${columns.join(", ")}`,
+    `insert into ${NOMES_TABELAS_DATASET[dataset]} (${columns.join(", ")})`,
+    `select distinct on (codigo) ${columns.join(", ")}`,
     `from ${tempTable}`,
-    "where code is not null and code <> ''",
-    "order by code",
-    "on conflict (code) do update set description = excluded.description;",
+    "where codigo is not null and codigo <> ''",
+    "order by codigo",
+    "on conflict (codigo) do update set descricao = excluded.descricao;",
   );
 
   return lines;
@@ -339,15 +340,19 @@ function copyStagingSql(
   }
 
   const columns = datasetColumns(dataset);
-  const lines = [echo(`[load-${dataset}] Loading ${dataset} staging data...`)];
+  const lines = [
+    echo(`[load-${dataset}] Carregando dados de staging de ${dataset}...`),
+  ];
 
   for (const [index, file] of files.entries()) {
     lines.push(
       echo(
-        `[load-${dataset}] Loading file ${index + 1} of ${files.length}: ${file.relativePath}`,
+        `[load-${dataset}] Carregando arquivo ${index + 1} de ${files.length}: ${file.relativePath}`,
       ),
       csvCopyCommand(tableName, columns, file.absolutePath),
-      echo(`[load-${dataset}] Loaded file ${index + 1} of ${files.length}.`),
+      echo(
+        `[load-${dataset}] Arquivo ${index + 1} de ${files.length} carregado.`,
+      ),
     );
   }
 
@@ -497,15 +502,18 @@ function fieldExpression(
 ): string {
   const column = field.columnName;
 
-  if (dataset === "companies" && column === "company_size_code") {
+  if (dataset === "companies" && column === "codigo_porte_empresa") {
     return `coalesce(${textExpression(alias, column)}, '00')`;
   }
 
-  if (dataset === "establishments" && column === "branch_type_code") {
+  if (
+    dataset === "establishments" &&
+    column === "identificador_matriz_filial"
+  ) {
     return `coalesce(${textExpression(alias, column)}, '1')`;
   }
 
-  if (dataset === "establishments" && column === "registration_status_code") {
+  if (dataset === "establishments" && column === "situacao_cadastral") {
     return `coalesce(${textExpression(alias, column)}, '01')`;
   }
 
@@ -536,9 +544,10 @@ function rawTrimExpression(alias: string, column: string): string {
 
 function hasDefaultValue(dataset: ImportDatasetType, column: string): boolean {
   return (
-    (dataset === "companies" && column === "company_size_code") ||
-    (dataset === "establishments" && column === "branch_type_code") ||
-    (dataset === "establishments" && column === "registration_status_code")
+    (dataset === "companies" && column === "codigo_porte_empresa") ||
+    (dataset === "establishments" &&
+      column === "identificador_matriz_filial") ||
+    (dataset === "establishments" && column === "situacao_cadastral")
   );
 }
 
@@ -591,7 +600,7 @@ function validationRules(
 
     if (
       dataset === "simples_options" &&
-      ["simples_option_flag", "mei_option_flag"].includes(field.columnName)
+      ["opcao_simples", "opcao_mei"].includes(field.columnName)
     ) {
       rules.push({
         condition: `${rawValue} <> '' and upper(${rawValue}) not in ('S', 'N')`,
@@ -634,8 +643,8 @@ function validationIssueExpression(
 function domainValidationIssueExpression(alias: string): string {
   return [
     "case",
-    `  when nullif(btrim(${alias}.code), '') is null then jsonb_build_object('code', 'HYBRID_REQUIRED_VALUE_MISSING', 'category', 'not_null_violation', 'message', 'Missing required value for code.')`,
-    `  when nullif(btrim(${alias}.description), '') is null then jsonb_build_object('code', 'HYBRID_REQUIRED_VALUE_MISSING', 'category', 'not_null_violation', 'message', 'Missing required value for description.')`,
+    `  when nullif(btrim(${alias}.codigo), '') is null then jsonb_build_object('code', 'HYBRID_REQUIRED_VALUE_MISSING', 'category', 'not_null_violation', 'message', 'Missing required value for codigo.')`,
+    `  when nullif(btrim(${alias}.descricao), '') is null then jsonb_build_object('code', 'HYBRID_REQUIRED_VALUE_MISSING', 'category', 'not_null_violation', 'message', 'Missing required value for descricao.')`,
     "  else null",
     "end",
   ].join("\n");
@@ -671,7 +680,7 @@ function hybridValidatedPath(input: SanitizedScriptGenerationInput): string {
 }
 
 function hybridPlanIdSql(sourceFingerprint: string): string {
-  return `(select id from import_plans where source_fingerprint = ${quoteSqlLiteral(sourceFingerprint)})`;
+  return `(select id from planos_importacao where impressao_digital_origem = ${quoteSqlLiteral(sourceFingerprint)})`;
 }
 
 function hybridPlanPhaseSql(
@@ -684,27 +693,27 @@ function hybridPlanPhaseSql(
   } = {},
 ): string {
   const assignments = [
-    `last_phase = ${quoteSqlLiteral(phase)}`,
-    "updated_at = now()",
-    "last_used_at = now()",
+    `ultima_fase = ${quoteSqlLiteral(phase)}`,
+    "atualizado_em = now()",
+    "ultimo_uso_em = now()",
   ];
 
   if (options.status) {
     assignments.push(`status = ${quoteSqlLiteral(options.status)}`);
   }
   if (options.loadStatus) {
-    assignments.push(`load_status = ${quoteSqlLiteral(options.loadStatus)}`);
+    assignments.push(`status_carga = ${quoteSqlLiteral(options.loadStatus)}`);
   }
   if (options.materializationStatus) {
     assignments.push(
-      `materialization_status = ${quoteSqlLiteral(options.materializationStatus)}`,
+      `status_materializacao = ${quoteSqlLiteral(options.materializationStatus)}`,
     );
   }
 
   return [
-    "update import_plans",
+    "update planos_importacao",
     `set ${assignments.join(",\n    ")}`,
-    `where source_fingerprint = ${quoteSqlLiteral(sourceFingerprint)};`,
+    `where impressao_digital_origem = ${quoteSqlLiteral(sourceFingerprint)};`,
   ].join("\n");
 }
 
@@ -718,27 +727,27 @@ function hybridPlanSetupSql(
   const planId = hybridPlanIdSql(sourceFingerprint);
   const lines = [
     echo(
-      "[setup] Registering hybrid import plan using the existing import control tables...",
+      "[setup] Registrando o plano de importação híbrido usando as tabelas de controle de importação existentes...",
     ),
-    `insert into import_plans (
-  source_fingerprint,
-  input_path,
-  validated_path,
-  batch_size,
-  target_database,
-  total_datasets,
-  total_files,
-  total_rows,
-  total_batches,
-  execution_order,
+    `insert into planos_importacao (
+  impressao_digital_origem,
+  caminho_entrada,
+  caminho_validado,
+  tamanho_lote,
+  banco_destino,
+  total_conjuntos,
+  total_arquivos,
+  total_linhas,
+  total_lotes,
+  ordem_execucao,
   status,
-  load_status,
-  materialization_status,
-  last_phase,
-  last_error,
-  created_at,
-  updated_at,
-  last_used_at
+  status_carga,
+  status_materializacao,
+  ultima_fase,
+  ultimo_erro,
+  criado_em,
+  atualizado_em,
+  ultimo_uso_em
 ) values (
   ${quoteSqlLiteral(sourceFingerprint)},
   ${quoteSqlLiteral(validatedPath)},
@@ -759,37 +768,37 @@ function hybridPlanSetupSql(
   now(),
   now()
 )
-on conflict (source_fingerprint)
+on conflict (impressao_digital_origem)
 do update set
-  input_path = excluded.input_path,
-  validated_path = excluded.validated_path,
-  target_database = excluded.target_database,
-  total_datasets = excluded.total_datasets,
-  total_files = excluded.total_files,
-  execution_order = excluded.execution_order,
+  caminho_entrada = excluded.caminho_entrada,
+  caminho_validado = excluded.caminho_validado,
+  banco_destino = excluded.banco_destino,
+  total_conjuntos = excluded.total_conjuntos,
+  total_arquivos = excluded.total_arquivos,
+  ordem_execucao = excluded.ordem_execucao,
   status = 'planned',
-  load_status = 'pending',
-  materialization_status = 'pending',
-  last_phase = 'postgres-direct-setup',
-  last_error = null,
-  updated_at = now(),
-  last_used_at = now();`,
+  status_carga = 'pending',
+  status_materializacao = 'pending',
+  ultima_fase = 'postgres-direct-setup',
+  ultimo_erro = null,
+  atualizado_em = now(),
+  ultimo_uso_em = now();`,
   ];
 
   for (const [fileIndex, file] of input.files.entries()) {
     const datasetIndex = datasets.indexOf(file.dataset) + 1;
     lines.push(
-      `insert into import_plan_files (
-  plan_id,
-  dataset,
-  dataset_index,
-  file_index,
-  file_path,
-  file_display_path,
-  file_size,
-  file_mtime,
-  total_rows,
-  total_batches
+      `insert into arquivos_plano_importacao (
+  plano_id,
+  conjunto,
+  indice_conjunto,
+  indice_arquivo,
+  caminho_arquivo,
+  caminho_exibicao_arquivo,
+  tamanho_arquivo,
+  modificado_em,
+  total_linhas,
+  total_lotes
 )
 select
   ${planId},
@@ -802,18 +811,18 @@ select
   ${quoteSqlLiteral(file.fileMtime)}::timestamptz,
   0,
   0
-on conflict (plan_id, file_path)
+on conflict (plano_id, caminho_arquivo)
 do update set
-  dataset = excluded.dataset,
-  dataset_index = excluded.dataset_index,
-  file_index = excluded.file_index,
-  file_display_path = excluded.file_display_path,
-  file_size = excluded.file_size,
-  file_mtime = excluded.file_mtime;`,
+  conjunto = excluded.conjunto,
+  indice_conjunto = excluded.indice_conjunto,
+  indice_arquivo = excluded.indice_arquivo,
+  caminho_exibicao_arquivo = excluded.caminho_exibicao_arquivo,
+  tamanho_arquivo = excluded.tamanho_arquivo,
+  modificado_em = excluded.modificado_em;`,
     );
   }
 
-  lines.push(echo("[setup] Hybrid import plan registered."));
+  lines.push(echo("[setup] Plano de importação híbrido registrado."));
   return lines;
 }
 
@@ -822,16 +831,16 @@ function importCheckpointStartSql(
   file: PostgresDirectSourceFile,
 ): string {
   const filePath = normalizePathForPsql(file.absolutePath);
-  return `insert into import_checkpoints (
-  dataset,
-  file_path,
-  file_size,
-  file_mtime,
-  byte_offset,
-  rows_committed,
+  return `insert into checkpoints_importacao (
+  conjunto,
+  caminho_arquivo,
+  tamanho_arquivo,
+  modificado_em,
+  deslocamento_bytes,
+  linhas_confirmadas,
   status,
-  last_error,
-  updated_at
+  ultimo_erro,
+  atualizado_em
 ) values (
   ${quoteSqlLiteral(dataset)},
   ${quoteSqlLiteral(filePath)},
@@ -843,15 +852,15 @@ function importCheckpointStartSql(
   null,
   now()
 )
-on conflict (dataset, file_path)
+on conflict (conjunto, caminho_arquivo)
 do update set
-  file_size = excluded.file_size,
-  file_mtime = excluded.file_mtime,
-  byte_offset = 0,
-  rows_committed = 0,
+  tamanho_arquivo = excluded.tamanho_arquivo,
+  modificado_em = excluded.modificado_em,
+  deslocamento_bytes = 0,
+  linhas_confirmadas = 0,
   status = 'in_progress',
-  last_error = null,
-  updated_at = now();`;
+  ultimo_erro = null,
+  atualizado_em = now();`;
 }
 
 function importCheckpointCompletedSql(
@@ -859,14 +868,14 @@ function importCheckpointCompletedSql(
   file: PostgresDirectSourceFile,
 ): string {
   const filePath = normalizePathForPsql(file.absolutePath);
-  return `update import_checkpoints
-set byte_offset = ${file.fileSize},
-    rows_committed = :hybrid_valid_rows,
+  return `update checkpoints_importacao
+set deslocamento_bytes = ${file.fileSize},
+    linhas_confirmadas = :hybrid_valid_rows,
     status = 'completed',
-    last_error = null,
-    updated_at = now()
-where dataset = ${quoteSqlLiteral(dataset)}
-  and file_path = ${quoteSqlLiteral(filePath)};`;
+    ultimo_erro = null,
+    atualizado_em = now()
+where conjunto = ${quoteSqlLiteral(dataset)}
+  and caminho_arquivo = ${quoteSqlLiteral(filePath)};`;
 }
 
 function quarantineAndCountSql(input: {
@@ -886,11 +895,11 @@ function quarantineAndCountSql(input: {
   count(*) filter (where (${issueExpression}) is not null) as hybrid_quarantined_rows
 from ${input.tableName} ${input.alias}
 \\gset`,
-    `\\echo '[${input.stepName}] Valid rows:' :hybrid_valid_rows '- quarantined rows:' :hybrid_quarantined_rows`,
-    `delete from import_quarantine
-where dataset = ${quoteSqlLiteral(input.dataset)}
-  and file_path = ${quoteSqlLiteral(filePath)}
-  and error_stage = 'postgres_direct_staging_validation';`,
+    `\\echo '[${input.stepName}] Linhas válidas:' :hybrid_valid_rows '- linhas em quarentena:' :hybrid_quarantined_rows`,
+    `delete from quarentena_importacao
+where conjunto = ${quoteSqlLiteral(input.dataset)}
+  and caminho_arquivo = ${quoteSqlLiteral(filePath)}
+  and etapa_erro = 'postgres_direct_staging_validation';`,
     `with invalid_rows as (
   select
     ${input.alias}.*,
@@ -898,21 +907,21 @@ where dataset = ${quoteSqlLiteral(input.dataset)}
     ${issueExpression} as __hybrid_issue
   from ${input.tableName} ${input.alias}
 )
-insert into import_quarantine (
-  dataset,
-  file_path,
-  row_number,
-  checkpoint_offset,
-  error_code,
-  error_category,
-  error_stage,
-  error_message,
-  raw_line,
-  parsed_payload,
-  sanitizations_applied,
-  retry_count,
-  can_retry_later,
-  created_at
+insert into quarentena_importacao (
+  conjunto,
+  caminho_arquivo,
+  numero_linha,
+  deslocamento_checkpoint,
+  codigo_erro,
+  categoria_erro,
+  etapa_erro,
+  mensagem_erro,
+  linha_bruta,
+  payload_parseado,
+  sanitizacoes_aplicadas,
+  total_tentativas,
+  pode_tentar_novamente,
+  criado_em
 )
 select
   ${quoteSqlLiteral(input.dataset)},
@@ -939,18 +948,18 @@ function materializationCheckpointStartSql(
   dataset: ImportDatasetType,
   targetTable: string,
 ): string {
-  return `insert into import_materialization_checkpoints (
-  plan_id,
-  dataset,
-  target_table,
+  return `insert into checkpoints_materializacao (
+  plano_id,
+  conjunto,
+  tabela_destino,
   status,
-  rows_materialized,
-  last_staging_id,
-  chunks_completed,
-  last_error,
-  started_at,
-  completed_at,
-  updated_at
+  linhas_materializadas,
+  ultimo_staging_id,
+  blocos_concluidos,
+  ultimo_erro,
+  iniciado_em,
+  concluido_em,
+  atualizado_em
 ) values (
   ${hybridPlanIdSql(sourceFingerprint)},
   ${quoteSqlLiteral(dataset)},
@@ -964,17 +973,17 @@ function materializationCheckpointStartSql(
   null,
   now()
 )
-on conflict (plan_id, dataset)
+on conflict (plano_id, conjunto)
 do update set
-  target_table = excluded.target_table,
+  tabela_destino = excluded.tabela_destino,
   status = 'in_progress',
-  rows_materialized = 0,
-  last_staging_id = 0,
-  chunks_completed = 0,
-  last_error = null,
-  started_at = now(),
-  completed_at = null,
-  updated_at = now();`;
+  linhas_materializadas = 0,
+  ultimo_staging_id = 0,
+  blocos_concluidos = 0,
+  ultimo_erro = null,
+  iniciado_em = now(),
+  concluido_em = null,
+  atualizado_em = now();`;
 }
 
 function materializationCheckpointCompletedSql(
@@ -982,37 +991,37 @@ function materializationCheckpointCompletedSql(
   dataset: ImportDatasetType,
   stagingTable: string,
 ): string {
-  return `update import_materialization_checkpoints
+  return `update checkpoints_materializacao
 set status = 'completed',
-    rows_materialized = (select coalesce(max(staging_id), 0) from ${stagingTable}),
-    last_staging_id = (select coalesce(max(staging_id), 0) from ${stagingTable}),
-    chunks_completed = 1,
-    last_error = null,
-    completed_at = now(),
-    updated_at = now()
-where plan_id = ${hybridPlanIdSql(sourceFingerprint)}
-  and dataset = ${quoteSqlLiteral(dataset)};`;
+    linhas_materializadas = (select coalesce(max(staging_id), 0) from ${stagingTable}),
+    ultimo_staging_id = (select coalesce(max(staging_id), 0) from ${stagingTable}),
+    blocos_concluidos = 1,
+    ultimo_erro = null,
+    concluido_em = now(),
+    atualizado_em = now()
+where plano_id = ${hybridPlanIdSql(sourceFingerprint)}
+  and conjunto = ${quoteSqlLiteral(dataset)};`;
 }
 
 function secondaryCnaesCheckpointStartSql(sourceFingerprint: string): string {
-  return `update import_materialization_checkpoints
-set lookup_reconciliation_status = 'in_progress',
-    lookup_reconciliation_completed_at = null,
-    updated_at = now()
-where plan_id = ${hybridPlanIdSql(sourceFingerprint)}
-  and dataset = 'establishments';`;
+  return `update checkpoints_materializacao
+set status_reconciliacao_dominio = 'in_progress',
+    reconciliacao_dominio_concluida_em = null,
+    atualizado_em = now()
+where plano_id = ${hybridPlanIdSql(sourceFingerprint)}
+  and conjunto = 'establishments';`;
 }
 
 function secondaryCnaesCheckpointCompletedSql(
   sourceFingerprint: string,
 ): string {
-  return `update import_materialization_checkpoints
-set lookup_reconciliation_status = 'completed',
-    lookup_reconciliation_max_staging_id_verified = (select coalesce(max(staging_id), 0) from staging_establishments),
-    lookup_reconciliation_completed_at = now(),
-    updated_at = now()
-where plan_id = ${hybridPlanIdSql(sourceFingerprint)}
-  and dataset = 'establishments';`;
+  return `update checkpoints_materializacao
+set status_reconciliacao_dominio = 'completed',
+    reconciliacao_dominio_max_staging_id_verificado = (select coalesce(max(staging_id), 0) from staging_estabelecimentos),
+    reconciliacao_dominio_concluida_em = now(),
+    atualizado_em = now()
+where plano_id = ${hybridPlanIdSql(sourceFingerprint)}
+  and conjunto = 'establishments';`;
 }
 
 function rawDomainSql(
@@ -1032,7 +1041,7 @@ function rawDomainSql(
   const stepName = "load-domains";
   const lines = [
     echo(
-      `[load-domains] Loading ${dataset} lookup data directly from sanitized Receita files...`,
+      `[load-domains] Carregando dados de domínio de ${dataset} diretamente dos arquivos sanitizados da Receita...`,
     ),
     hybridPlanPhaseSql(sourceFingerprint, `load-domains:${dataset}`, {
       status: "in_progress",
@@ -1046,11 +1055,11 @@ function rawDomainSql(
       `truncate table ${tableName};`,
       importCheckpointStartSql(dataset, file),
       echo(
-        `[load-domains] Loading ${dataset} file ${index + 1} of ${files.length}: ${file.relativePath}`,
+        `[load-domains] Carregando arquivo ${index + 1} de ${files.length} de ${dataset}: ${file.relativePath}`,
       ),
       receitaCopyCommand(tableName, columns, file.absolutePath),
       echo(
-        `[load-domains] Loaded ${dataset} file ${index + 1} of ${files.length}.`,
+        `[load-domains] Arquivo ${index + 1} de ${files.length} de ${dataset} carregado.`,
       ),
       ...quarantineAndCountSql({
         dataset,
@@ -1060,24 +1069,24 @@ function rawDomainSql(
         issueExpression,
         stepName,
       }),
-      `insert into ${dataset} (${columns.join(", ")})
-select distinct on (code)
-  nullif(btrim(code), '') as code,
-  nullif(btrim(description), '') as description
+      `insert into ${NOMES_TABELAS_DATASET[dataset]} (${columns.join(", ")})
+select distinct on (codigo)
+  nullif(btrim(codigo), '') as codigo,
+  nullif(btrim(descricao), '') as descricao
 from ${tableName} ${alias}
 where (${issueExpression}) is null
-order by code
-on conflict (code) do update set description = excluded.description;`,
+order by codigo
+on conflict (codigo) do update set descricao = excluded.descricao;`,
       importCheckpointCompletedSql(dataset, file),
       echo(
-        `[load-domains] Completed ${dataset} file ${index + 1} of ${files.length}.`,
+        `[load-domains] Arquivo ${index + 1} de ${files.length} de ${dataset} concluído.`,
       ),
     );
   }
 
   lines.push(
     hybridPlanPhaseSql(sourceFingerprint, `load-domains:${dataset}:completed`),
-    echo(`[load-domains] ${dataset} lookup data completed.`),
+    echo(`[load-domains] Dados de domínio de ${dataset} concluídos.`),
   );
 
   return lines;
@@ -1110,7 +1119,7 @@ function rawStagingSql(
 
   const lines = [
     echo(
-      `[${stepName}] Loading ${dataset} staging data directly from sanitized Receita files...`,
+      `[${stepName}] Carregando dados de staging de ${dataset} diretamente dos arquivos sanitizados da Receita...`,
     ),
     hybridPlanPhaseSql(sourceFingerprint, stepName, {
       status: "in_progress",
@@ -1126,10 +1135,10 @@ function rawStagingSql(
       `truncate table ${tableName};`,
       importCheckpointStartSql(dataset, file),
       echo(
-        `[${stepName}] Loading file ${index + 1} of ${files.length}: ${file.relativePath}`,
+        `[${stepName}] Carregando arquivo ${index + 1} de ${files.length}: ${file.relativePath}`,
       ),
       receitaCopyCommand(tableName, columns, file.absolutePath),
-      echo(`[${stepName}] Loaded file ${index + 1} of ${files.length}.`),
+      echo(`[${stepName}] Arquivo ${index + 1} de ${files.length} carregado.`),
       ...quarantineAndCountSql({
         dataset,
         file,
@@ -1139,7 +1148,7 @@ function rawStagingSql(
         stepName,
       }),
       echo(
-        `[${stepName}] Transforming valid ${dataset} rows from file ${index + 1} into ${targetTable}...`,
+        `[${stepName}] Transformando as linhas válidas de ${dataset} do arquivo ${index + 1} para ${targetTable}...`,
       ),
       `insert into ${targetTable} (${columns.join(", ")})
 select
@@ -1147,13 +1156,13 @@ ${expressions.join(",\n")}
 from ${tableName} ${alias}
 where (${issueExpression}) is null;`,
       importCheckpointCompletedSql(dataset, file),
-      echo(`[${stepName}] Completed file ${index + 1} of ${files.length}.`),
+      echo(`[${stepName}] Arquivo ${index + 1} de ${files.length} concluído.`),
     );
   }
 
   lines.push(
     hybridPlanPhaseSql(sourceFingerprint, `${stepName}:completed`),
-    echo(`[${stepName}] ${dataset} staging load completed.`),
+    echo(`[${stepName}] Carga de staging de ${dataset} concluída.`),
   );
 
   return lines;
@@ -1177,12 +1186,12 @@ function loadStepName(dataset: ImportDatasetType): string {
 function scriptHeader(title: string, sourceEncoding?: string): string[] {
   return [
     `-- ${title}`,
-    "-- Generated by cnpj-db-loader postgres generate-script.",
+    "-- Gerado por cnpj-db-loader postgres generate-script.",
     "\\set ON_ERROR_STOP on",
     ...(sourceEncoding
       ? [
           echo(
-            `Using source file encoding ${sourceEncoding} for psql copy operations...`,
+            `Usando o encoding de origem ${sourceEncoding} nas operações de copy do psql...`,
           ),
           `set client_encoding to ${quoteSqlLiteral(sourceEncoding)};`,
         ]
@@ -1248,7 +1257,7 @@ function materializeSql(
   sourceFingerprint: string,
 ): string[] {
   const lines = [
-    echo("[materialize] Starting final table materialization..."),
+    echo("[materialize] Iniciando a materialização das tabelas finais..."),
     hybridPlanPhaseSql(sourceFingerprint, "materialize", {
       status: "in_progress",
       loadStatus: "completed",
@@ -1267,7 +1276,7 @@ function materializeSql(
       materializationCheckpointCompletedSql(
         sourceFingerprint,
         "companies",
-        "staging_companies",
+        "staging_empresas",
       ),
       "",
     );
@@ -1284,7 +1293,7 @@ function materializeSql(
       materializationCheckpointCompletedSql(
         sourceFingerprint,
         "establishments",
-        "staging_establishments",
+        "staging_estabelecimentos",
       ),
       "",
     );
@@ -1301,7 +1310,7 @@ function materializeSql(
       materializationCheckpointCompletedSql(
         sourceFingerprint,
         "partners",
-        "staging_partners",
+        "staging_socios",
       ),
       "",
     );
@@ -1318,7 +1327,7 @@ function materializeSql(
       materializationCheckpointCompletedSql(
         sourceFingerprint,
         "simples_options",
-        "staging_simples_options",
+        "staging_simples",
       ),
       "",
     );
@@ -1328,7 +1337,7 @@ function materializeSql(
     hybridPlanPhaseSql(sourceFingerprint, "materialize:completed", {
       materializationStatus: "completed",
     }),
-    echo("[materialize] Final table materialization completed."),
+    echo("[materialize] Materialização das tabelas finais concluída."),
   );
 
   return lines;
@@ -1336,11 +1345,9 @@ function materializeSql(
 
 function indexesSql(): string[] {
   return [
-    echo(
-      "[indexes] No additional index operations are generated in this beta.",
-    ),
-    "-- Indexes are expected to be managed by the schema generated by cnpj-db-loader schema generate.",
-    "-- A future fast-rebuild mode may generate DROP/CREATE INDEX operations here.",
+    echo("[indexes] Nenhuma operação adicional de índice é gerada nesta beta."),
+    "-- Espera-se que os índices sejam gerenciados pelo schema gerado por cnpj-db-loader schema generate.",
+    "-- Um futuro modo de reconstrução rápida poderá gerar operações DROP/CREATE INDEX aqui.",
   ];
 }
 
@@ -1350,35 +1357,35 @@ function analyzeSql(
   const tables = new Set<string>();
 
   if (selected.has("companies")) {
-    tables.add("companies");
+    tables.add("empresas");
   }
 
   if (selected.has("establishments")) {
-    tables.add("establishments");
+    tables.add("estabelecimentos");
   }
 
   if (selected.has("secondary-cnaes")) {
-    tables.add("establishment_secondary_cnaes");
+    tables.add("estabelecimento_cnaes_secundarios");
   }
 
   if (selected.has("partners")) {
-    tables.add("partners");
+    tables.add("socios");
   }
 
   if (selected.has("simples")) {
-    tables.add("simples_options");
+    tables.add("simples");
   }
 
   if (selected.has("domains")) {
     for (const dataset of DOMAIN_DATASETS) {
-      tables.add(dataset);
+      tables.add(NOMES_TABELAS_DATASET[dataset]);
     }
   }
 
   return [
-    echo("[analyze] Refreshing planner statistics..."),
+    echo("[analyze] Atualizando as estatísticas do planejador..."),
     ...[...tables].map((table) => `analyze ${table};`),
-    echo("[analyze] Planner statistics refreshed."),
+    echo("[analyze] Estatísticas do planejador atualizadas."),
   ];
 }
 
@@ -1420,14 +1427,14 @@ export function generatePostgresDirectScriptFiles(
   steps.push(step("setup", "setup.sql", [], setupIncluded));
   scripts["setup.sql"] = [
     ...scriptHeader(
-      "CNPJ DB Loader PostgreSQL direct import setup",
+      "CNPJ DB Loader — setup da importação direta PostgreSQL",
       input.sourceEncoding,
     ),
-    echo("[setup] Preparing PostgreSQL direct import session..."),
+    echo("[setup] Preparando a sessão de importação direta do PostgreSQL..."),
     ...hybridPlanSetupSql(input, sourceFingerprint),
-    "-- The database schema must be applied before running these scripts.",
-    "-- This setup script configures the psql session used by the generated orchestrator.",
-    echo("[setup] Setup completed."),
+    "-- O schema do banco deve ser aplicado antes de executar estes scripts.",
+    "-- Este script de setup configura a sessão psql usada pelo orquestrador gerado.",
+    echo("[setup] Setup concluído."),
     "",
   ].join("\n");
 
@@ -1438,16 +1445,18 @@ export function generatePostgresDirectScriptFiles(
     step("load-domains", "load-domains.sql", ["setup"], domainsIncluded),
   );
   if (domainsIncluded) {
-    const lines = [echo("[load-domains] Starting domain tables load...")];
+    const lines = [
+      echo("[load-domains] Iniciando a carga das tabelas de domínio..."),
+    ];
     for (const dataset of DOMAIN_DATASETS) {
       lines.push(
         ...rawDomainSql(dataset, grouped[dataset] ?? [], sourceFingerprint),
         "",
       );
     }
-    lines.push(echo("[load-domains] Domain tables load completed."));
+    lines.push(echo("[load-domains] Carga das tabelas de domínio concluída."));
     scripts["load-domains.sql"] = buildStepScript(
-      "CNPJ DB Loader PostgreSQL direct import domains step",
+      "CNPJ DB Loader — etapa de domínios da importação direta PostgreSQL",
       lines,
       input,
       true,
@@ -1493,7 +1502,7 @@ export function generatePostgresDirectScriptFiles(
 
     if (included) {
       scripts[item.file] = buildStepScript(
-        `CNPJ DB Loader PostgreSQL direct import ${item.name} step`,
+        `CNPJ DB Loader — etapa ${item.name} da importação direta PostgreSQL`,
         rawStagingSql(item.dataset, files, sourceFingerprint),
         input,
         true,
@@ -1514,7 +1523,7 @@ export function generatePostgresDirectScriptFiles(
   );
   if (materializeIncluded) {
     scripts["materialize.sql"] = buildStepScript(
-      "CNPJ DB Loader PostgreSQL direct import materialization step",
+      "CNPJ DB Loader — etapa de materialização da importação direta PostgreSQL",
       materializeSql(selected, sourceFingerprint),
       input,
       true,
@@ -1533,7 +1542,7 @@ export function generatePostgresDirectScriptFiles(
   );
   if (secondaryIncluded) {
     scripts["materialize-secondary-cnaes.sql"] = buildStepScript(
-      "CNPJ DB Loader PostgreSQL direct import secondary CNAEs step",
+      "CNPJ DB Loader — etapa de CNAEs secundários da importação direta PostgreSQL",
       [
         secondaryCnaesCheckpointStartSql(sourceFingerprint),
         materializeSecondaryCnaesSql(),
@@ -1555,7 +1564,7 @@ export function generatePostgresDirectScriptFiles(
   );
   if (indexesIncluded) {
     scripts["indexes.sql"] = buildStepScript(
-      "CNPJ DB Loader PostgreSQL direct import indexes step",
+      "CNPJ DB Loader — etapa de índices da importação direta PostgreSQL",
       indexesSql(),
       input,
       true,
@@ -1578,7 +1587,7 @@ export function generatePostgresDirectScriptFiles(
   );
   if (analyzeIncluded) {
     scripts["analyze.sql"] = buildStepScript(
-      "CNPJ DB Loader PostgreSQL direct import analyze step",
+      "CNPJ DB Loader — etapa de analyze da importação direta PostgreSQL",
       analyzeSql(selected),
       input,
       true,
@@ -1586,18 +1595,18 @@ export function generatePostgresDirectScriptFiles(
   }
 
   const orchestratorLines = [
-    "-- CNPJ DB Loader direct PostgreSQL import orchestrator",
-    "-- Generated from sanitized Receita files by cnpj-db-loader postgres generate-script.",
-    "-- Execute with psql, for example:",
+    "-- Orquestrador de importação direta PostgreSQL do CNPJ DB Loader",
+    "-- Gerado a partir dos arquivos sanitizados da Receita por cnpj-db-loader postgres generate-script.",
+    "-- Execute com psql, por exemplo:",
     '--   psql -d "postgres://postgres:postgres@localhost:5432/cnpj" -f import-postgres-direct.sql',
     "",
     "\\set ON_ERROR_STOP on",
     echo(
-      `Using source file encoding ${input.sourceEncoding} for psql copy operations...`,
+      `Usando o encoding de origem ${input.sourceEncoding} nas operações de copy do psql...`,
     ),
     `set client_encoding to ${quoteSqlLiteral(input.sourceEncoding)};`,
     echo(
-      `Starting CNPJ DB Loader direct PostgreSQL import using transaction mode ${input.transactionMode}...`,
+      `Iniciando a importação direta PostgreSQL do CNPJ DB Loader no modo de transação ${input.transactionMode}...`,
     ),
     "",
     ...(input.transactionMode === "single" ? ["begin;", ""] : []),
@@ -1611,10 +1620,10 @@ export function generatePostgresDirectScriptFiles(
 
     orchestratorLines.push(
       echo(
-        `[orchestrator] Running ${currentStep.name} (${currentStep.file})...`,
+        `[orchestrator] Executando ${currentStep.name} (${currentStep.file})...`,
       ),
       `\\ir ${currentStep.file}`,
-      echo(`[orchestrator] Completed ${currentStep.name}.`),
+      echo(`[orchestrator] ${currentStep.name} concluído.`),
       "",
     );
   }
@@ -1626,7 +1635,7 @@ export function generatePostgresDirectScriptFiles(
       materializationStatus: materializeIncluded ? "completed" : "pending",
     }),
     ...(input.transactionMode === "single" ? ["commit;", ""] : []),
-    echo("CNPJ DB Loader hybrid PostgreSQL import completed."),
+    echo("Importação híbrida PostgreSQL do CNPJ DB Loader concluída."),
     "",
   );
 
@@ -1641,22 +1650,22 @@ export function generatePostgresDirectImportScript(
   const grouped = csvFilesByDataset(input.files);
 
   const lines = [
-    "-- CNPJ DB Loader hybrid PostgreSQL import script",
-    "-- Generated from PostgreSQL-ready CSV files exported by cnpj-db-loader postgres export-csv.",
-    "-- Execute with psql, for example:",
+    "-- Script de importação híbrida PostgreSQL do CNPJ DB Loader",
+    "-- Gerado a partir dos arquivos CSV prontos para o PostgreSQL exportados por cnpj-db-loader postgres export-csv.",
+    "-- Execute com psql, por exemplo:",
     '--   psql -d "postgres://postgres:postgres@localhost:5432/cnpj" -f import-postgres-direct.sql',
     "",
     "\\set ON_ERROR_STOP on",
-    echo("Starting CNPJ DB Loader hybrid PostgreSQL import..."),
+    echo("Iniciando a importação híbrida PostgreSQL do CNPJ DB Loader..."),
     "",
     "begin;",
     "",
-    "-- Keep the final schema and seed data managed by sql/schema.sql.",
-    "-- This script only resets staging tables and then upserts final data.",
-    "truncate table staging_companies restart identity;",
-    "truncate table staging_establishments restart identity;",
-    "truncate table staging_partners restart identity;",
-    "truncate table staging_simples_options restart identity;",
+    "-- O schema final e os dados de seed continuam gerenciados por sql/schema.sql.",
+    "-- Este script apenas reinicia as tabelas de staging e depois faz upsert dos dados finais.",
+    "truncate table staging_empresas restart identity;",
+    "truncate table staging_estabelecimentos restart identity;",
+    "truncate table staging_socios restart identity;",
+    "truncate table staging_simples restart identity;",
     "",
   ];
 
@@ -1711,22 +1720,22 @@ function materializationAndAnalyzeSql(): string[] {
     "",
     materializeSimplesSql(),
     "",
-    echo("Refreshing planner statistics..."),
-    "analyze companies;",
-    "analyze establishments;",
-    "analyze establishment_secondary_cnaes;",
-    "analyze partners;",
-    "analyze simples_options;",
+    echo("Atualizando as estatísticas do planejador..."),
+    "analyze empresas;",
+    "analyze estabelecimentos;",
+    "analyze estabelecimento_cnaes_secundarios;",
+    "analyze socios;",
+    "analyze simples;",
     "analyze cnaes;",
-    "analyze cities;",
-    "analyze countries;",
-    "analyze legal_natures;",
-    "analyze partner_qualifications;",
-    "analyze reasons;",
+    "analyze municipios;",
+    "analyze paises;",
+    "analyze naturezas_juridicas;",
+    "analyze qualificacoes_socios;",
+    "analyze motivos_situacao_cadastral;",
     "",
     "commit;",
     "",
-    echo("CNPJ DB Loader hybrid PostgreSQL import completed."),
+    echo("Importação híbrida PostgreSQL do CNPJ DB Loader concluída."),
     "",
   ];
 }

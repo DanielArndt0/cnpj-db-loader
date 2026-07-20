@@ -35,6 +35,6 @@ export function normalizeSchemaProfile(input?: string): SchemaProfile {
   }
 
   throw new ValidationError(
-    `Invalid schema profile "${input}". Expected one of: full, final, or staging. Aliases such as final-load, load, operational, and stage are also accepted.`,
+    `Perfil de schema inválido "${input}". Esperado um de: full, final ou staging. Aliases como final-load, load, operational e stage também são aceitos.`,
   );
 }

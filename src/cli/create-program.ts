@@ -24,7 +24,7 @@ export function buildProgram(): Command {
     .name(APP_CONFIG.appName)
     .description(APP_CONFIG.description)
     .version(APP_CONFIG.version)
-    .showHelpAfterError('(use "--help" for detailed usage)')
+    .showHelpAfterError('(use "--help" para ver o uso detalhado)')
     .showSuggestionAfterError(true)
     .addHelpText("after", rootFooter());
 

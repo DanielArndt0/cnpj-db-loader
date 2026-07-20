@@ -1,5 +1,16 @@
 import { Client } from "pg";
 
+import {
+  COLUNA_ATUALIZADO_EM,
+  COLUNA_CHAVE_DEDUPLICACAO_SOCIO,
+  COLUNA_CNPJ_BASICO,
+  COLUNA_CNPJ_COMPLETO,
+  COLUNA_CNPJ_DV,
+  COLUNA_CNPJ_ORDEM,
+  COLUNA_CODIGO,
+  COLUNA_CODIGO_CNAE,
+  COLUNA_DESCRICAO,
+} from "../schema/table-names.js";
 import { DATASET_LAYOUTS } from "./types.js";
 import type {
   ImportDatasetType,
@@ -21,14 +32,14 @@ export function getInsertColumns(
       dataset === "establishments" &&
       schemaCapabilities.includeEstablishmentCnpjFullInInsert
     ) {
-      return [...columns, "cnpj_full"];
+      return [...columns, COLUNA_CNPJ_COMPLETO];
     }
 
     if (
       dataset === "partners" &&
       schemaCapabilities.includePartnerDedupeKeyInInsert
     ) {
-      return [...columns, "partner_dedupe_key"];
+      return [...columns, COLUNA_CHAVE_DEDUPLICACAO_SOCIO];
     }
   }
 
@@ -47,50 +58,50 @@ export function getConflictClause(
     case "legal_natures":
     case "cnaes":
     case "reasons":
-      return "on conflict (code) do update set description = excluded.description";
+      return `on conflict (${COLUNA_CODIGO}) do update set ${COLUNA_DESCRICAO} = excluded.${COLUNA_DESCRICAO}`;
     case "companies": {
       const updateColumns = columns
-        .filter((column) => column !== "cnpj_root")
+        .filter((column) => column !== COLUNA_CNPJ_BASICO)
         .map((column) => `${column} = excluded.${column}`)
-        .concat(["updated_at = now()"])
+        .concat([`${COLUNA_ATUALIZADO_EM} = now()`])
         .join(", ");
-      return `on conflict (cnpj_root) do update set ${updateColumns}`;
+      return `on conflict (${COLUNA_CNPJ_BASICO}) do update set ${updateColumns}`;
     }
     case "establishments": {
       const updateColumns = columns
         .filter(
           (column) =>
             ![
-              "cnpj_root",
-              "cnpj_order",
-              "cnpj_check_digits",
-              "cnpj_full",
+              COLUNA_CNPJ_BASICO,
+              COLUNA_CNPJ_ORDEM,
+              COLUNA_CNPJ_DV,
+              COLUNA_CNPJ_COMPLETO,
             ].includes(column),
         )
         .map((column) => `${column} = excluded.${column}`)
-        .concat(["updated_at = now()"])
+        .concat([`${COLUNA_ATUALIZADO_EM} = now()`])
         .join(", ");
       const conflictTarget =
         schemaCapabilities?.includeEstablishmentCnpjFullInInsert
-          ? "cnpj_full"
-          : "cnpj_root, cnpj_order, cnpj_check_digits";
+          ? COLUNA_CNPJ_COMPLETO
+          : `${COLUNA_CNPJ_BASICO}, ${COLUNA_CNPJ_ORDEM}, ${COLUNA_CNPJ_DV}`;
       return `on conflict (${conflictTarget}) do update set ${updateColumns}`;
     }
     case "simples_options": {
       const updateColumns = columns
-        .filter((column) => column !== "cnpj_root")
+        .filter((column) => column !== COLUNA_CNPJ_BASICO)
         .map((column) => `${column} = excluded.${column}`)
-        .concat(["updated_at = now()"])
+        .concat([`${COLUNA_ATUALIZADO_EM} = now()`])
         .join(", ");
-      return `on conflict (cnpj_root) do update set ${updateColumns}`;
+      return `on conflict (${COLUNA_CNPJ_BASICO}) do update set ${updateColumns}`;
     }
     case "partners": {
       const updateColumns = columns
-        .filter((column) => column !== "partner_dedupe_key")
+        .filter((column) => column !== COLUNA_CHAVE_DEDUPLICACAO_SOCIO)
         .map((column) => `${column} = excluded.${column}`)
-        .concat(["updated_at = now()"])
+        .concat([`${COLUNA_ATUALIZADO_EM} = now()`])
         .join(", ");
-      return `on conflict (partner_dedupe_key) do update set ${updateColumns}`;
+      return `on conflict (${COLUNA_CHAVE_DEDUPLICACAO_SOCIO}) do update set ${updateColumns}`;
     }
     default:
       return "";
@@ -140,8 +151,8 @@ export function buildSecondaryInsertQuery(
 } {
   return buildInsertQuery(
     tableName,
-    ["establishment_cnpj_full", "cnae_code", "source_order"],
-    rows,
+    [COLUNA_CNPJ_COMPLETO, COLUNA_CODIGO_CNAE],
+    rows.map((row) => [row[0], row[1]]),
     conflictClause,
   );
 }

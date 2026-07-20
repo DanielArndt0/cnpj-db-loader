@@ -6,21 +6,21 @@ import { resolveInputMode } from "../../services/input-mode.service.js";
 export function registerUpdateCommands(program: Command): void {
   const update = program
     .command("update")
-    .description("Run monthly update workflows.");
+    .description("Executa fluxos de atualização mensal.");
 
   update
     .command("data")
-    .requiredOption("--input <path>", "Path to the update directory.")
-    .option("--db-url <url>", "Override the default PostgreSQL connection URL.")
-    .option("--already-extracted", "Read an already extracted dataset tree.")
-    .option("--unzip", "Extract the zip archives before the update flow.")
+    .requiredOption("--input <path>", "Caminho do diretório de atualização.")
+    .option("--db-url <url>", "Sobrescreve a URL de conexão PostgreSQL padrão.")
+    .option("--already-extracted", "Lê uma árvore de dataset já extraída.")
+    .option("--unzip", "Extrai os arquivos zip antes do fluxo de atualização.")
     .option(
       "--output <path>",
-      'Optional extracted output directory. Defaults to "<input>/extracted" when using --unzip.',
+      'Diretório de saída da extração (opcional). Padrão: "<input>/extracted" ao usar --unzip.',
     )
-    .option("-f, --force", "Skip the confirmation prompt.")
+    .option("-f, --force", "Pula a confirmação interativa.")
     .description(
-      "Reserved command for future dataset updates and reprocessing.",
+      "Comando reservado para futuras atualizações e reprocessamentos de dataset.",
     )
     .action(
       async (options: {
@@ -35,16 +35,16 @@ export function registerUpdateCommands(program: Command): void {
 
         if (!options.force) {
           const confirmed = await confirm(
-            `Start the update workflow for ${options.input} in ${mode} mode?`,
+            `Iniciar o fluxo de atualização para ${options.input} no modo ${mode}?`,
           );
           if (!confirmed) {
-            console.log("Update cancelled.");
+            console.log("Atualização cancelada.");
             return;
           }
         }
 
         console.log(
-          `Update scaffold ready. Future implementation will process ${options.input} in ${mode} mode${options.output ? ` using ${options.output} as extraction output` : ""} and use ${options.dbUrl ?? "the configured default database"}.`,
+          `Estrutura de atualização pronta. A implementação futura processará ${options.input} no modo ${mode}${options.output ? ` usando ${options.output} como saída de extração` : ""} e usará ${options.dbUrl ?? "o banco padrão configurado"}.`,
         );
       },
     );

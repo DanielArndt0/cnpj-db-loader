@@ -284,7 +284,7 @@ async function prepareExecutionForMaterialization(
 
   if (!savedPlan) {
     throw new ValidationError(
-      'No saved import plan was found for this validated input path. Run "cnpj-db-loader import load" or "cnpj-db-loader import" first.',
+      'Nenhum plano de importação salvo foi encontrado para este caminho de entrada validado. Execute "cnpj-db-loader import load" ou "cnpj-db-loader import" primeiro.',
     );
   }
 
@@ -296,7 +296,7 @@ async function prepareExecutionForMaterialization(
 
   if (filteredDatasets.length === 0) {
     throw new ValidationError(
-      "No datasets from the requested selection are available in the saved import plan.",
+      "Nenhum dataset da seleção solicitada está disponível no plano de importação salvo.",
     );
   }
 
@@ -570,7 +570,7 @@ async function runMaterializationStage(
 ): Promise<void> {
   if (execution.planId === null) {
     throw new ValidationError(
-      "The materialization stage requires a persisted import plan.",
+      "A etapa de materialização exige um plano de importação persistido.",
     );
   }
 
